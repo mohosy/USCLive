@@ -296,7 +296,7 @@ export default function App() {
           {state && view === "3d" && (
             <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
               <Google3DView
-                events={layers.events ? mapEvents : []}
+                events={chips.events ? mapEvents : []}
                 buildings={state.buildings}
                 me={loc}
                 selectedEventId={selEvent}
@@ -309,6 +309,11 @@ export default function App() {
                 onCamera={(c) => { camera.current = c; }}
                 walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
                 onWalkEnd={() => { setWalk(null); setAsk(""); }}
+                callouts={walk ? [] : callouts}
+                alerts={chips.safety ? state.alerts : []}
+                hotspots={state.hotspots}
+                showHeat={layers.hotspots}
+                onCallout={onCallout}
               />
             </div>
           )}
@@ -326,19 +331,19 @@ export default function App() {
           </div>
 
           <div className="absolute right-3 top-3 z-10 flex rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
-            {([["map", "Map"], ["3d", "3D"]] as const).map(([k, l]) => (
+            {([["map", "Explore"], ["3d", "Satellite"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => switchView(k)} className={cx("rounded-md px-3 py-1 font-medium", view === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
             ))}
           </div>
 
-          {view === "map" && (
+          {!(view === "3d" && !threeReady) && (
             <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5">
               {([["games", "Live games"], ["busy", "Busy spots"], ["safety", "Safety"], ["schedule", "My schedule"], ["events", "Events"], ["webcams", "Webcams"]] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
                   className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-sm transition-colors", chips[k] ? "bg-cardinal text-white" : "border border-line bg-white text-foreground hover:bg-surface")}>{l}</button>
               ))}
               <span className="mx-1 h-5 w-px bg-black/10" />
-              {([["hotspots", "Heat"], ["places", "Places"]] as const).map(([k, l]) => (
+              {(view === "map" ? ([["hotspots", "Heat"], ["places", "Places"]] as const) : ([["hotspots", "Heat"]] as const)).map(([k, l]) => (
                 <button key={k} onClick={() => setLayers((x) => ({ ...x, [k]: !x[k] }))}
                   className={cx("whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-sm", layers[k] ? "bg-foreground text-white" : "border border-line bg-white text-muted hover:bg-surface")}>{l}</button>
               ))}

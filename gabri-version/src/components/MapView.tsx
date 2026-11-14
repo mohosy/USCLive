@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import type { Callout } from "@/lib/callouts";
 import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
-import { gameState } from "@/lib/games";
+import { calloutHTML } from "@/lib/calloutHtml";
 import { LEVEL_COLOR } from "./ui";
 import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
@@ -113,25 +113,6 @@ function alertGeo(alerts: SafetyAlert[]): FC {
     type: "FeatureCollection",
     features: alerts.map((a) => ({ type: "Feature", properties: { id: a.id }, geometry: { type: "Polygon", coordinates: [circlePolygon(a.lng, a.lat, a.radiusM, 40)] } })),
   };
-}
-
-const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-
-/** Inner HTML of a callout bubble. Games get their score/clock filled in separately every second. */
-function calloutHTML(c: Callout, now: Date) {
-  let title = esc(c.title);
-  let meta = c.meta ? esc(c.meta) : "";
-  if (c.game) {
-    const g = gameState(c.game.info, c.game.start, now);
-    title = `${esc(c.game.info.home)} <b>${g.home}</b><span class="co-dash">–</span><b>${g.away}</b> ${esc(c.game.info.away)}`;
-    meta = `${g.period}${g.clock ? ` · ${g.clock}` : ""}`;
-  }
-  const dot = c.kind === "busy" ? "#ea580c" : c.kind === "quiet" ? "#16a34a" : c.kind === "alert" || c.kind === "game" ? "#dc2626" : "";
-  return `<div class="co-card">
-    <div class="co-eyebrow">${dot ? `<i style="background:${dot}" class="${c.kind === "game" || c.kind === "alert" ? "co-blink" : ""}"></i>` : ""}${esc(c.eyebrow)}</div>
-    <div class="co-title">${title}${meta && (c.kind === "busy" || c.kind === "quiet") ? ` <span class="co-meta">· ${meta}</span>` : ""}</div>
-    ${meta && c.kind !== "busy" && c.kind !== "quiet" ? `<div class="co-meta">${meta}</div>` : ""}
-  </div><div class="co-stem"></div><div class="co-foot"></div>`;
 }
 
 /** Events as GeoJSON points. Several events in one building fan out in a small ring. */
