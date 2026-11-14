@@ -10,7 +10,7 @@ import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
 import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
-import type { MapLayers } from "./MapView";
+import type { MapLayers, MapStyle } from "./MapView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
 import { Avatar, Button, LEVEL_COLOR, cx } from "./ui";
@@ -28,6 +28,7 @@ export default function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false });
+  const [mapStyle, setMapStyle] = useState<MapStyle>("map");
   const [selEvent, setSelEvent] = useState<string | null>(null);
   const [selBuilding, setSelBuilding] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number; key: number } | null>(null);
@@ -41,6 +42,7 @@ export default function App() {
   const [askBusy, setAskBusy] = useState(false);
   const [tick, setTick] = useState(0);
   const seenNotifs = useRef<Set<string> | null>(null);
+  const focusSeq = useRef(0); // makes every fly-to a new object, even to the same spot
 
   const refresh = useCallback(async () => {
     try { setState(await api<AppState>("/api/state")); setTick((t) => t + 1); } catch { /* keep last state */ }
@@ -78,12 +80,12 @@ export default function App() {
   const openEvent = (id: string) => {
     const e = state?.events.find((x) => x.id === id);
     setSelBuilding(null); setSelEvent(id);
-    if (e?.lat != null && e.lng != null) setFocus({ lat: e.lat, lng: e.lng, key: Date.now() });
+    if (e?.lat != null && e.lng != null) setFocus({ lat: e.lat, lng: e.lng, key: ++focusSeq.current });
   };
   const openBuilding = (id: string) => {
     const b = BUILDING_BY_ID[id];
     setSelEvent(null); setSelBuilding(id);
-    if (b) setFocus({ lat: b.lat, lng: b.lng, key: Date.now() });
+    if (b) setFocus({ lat: b.lat, lng: b.lng, key: ++focusSeq.current });
   };
   const closeDetail = () => { setSelEvent(null); setSelBuilding(null); };
 
@@ -104,7 +106,7 @@ export default function App() {
       const r = await api<AskRes>("/api/ai/ask", { json: { question: q, lat: loc.lat, lng: loc.lng } });
       setAskRes(r);
       const b = r.focusBuildingId !== "none" ? BUILDING_BY_ID[r.focusBuildingId] : r.buildingIds[0] ? BUILDING_BY_ID[r.buildingIds[0]] : null;
-      if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 16.6, key: Date.now() });
+      if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 16.6, key: ++focusSeq.current });
     } catch (e) { setAskRes({ answer: (e as Error).message, eventIds: [], buildingIds: [], focusBuildingId: "none", ai: false }); }
     setAskBusy(false);
   }
@@ -224,6 +226,7 @@ export default function App() {
               buildings={state.buildings}
               me={loc}
               layers={layers}
+              mapStyle={mapStyle}
               selectedEventId={selEvent}
               highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
               focus={focus}
@@ -234,11 +237,17 @@ export default function App() {
 
           <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
             <span className="px-1.5 text-muted">You are at</span>
-            <select className="rounded-md bg-surface px-2 py-1 font-medium outline-none" value={loc.buildingId ?? ""} onChange={(e) => { const b = BUILDING_BY_ID[e.target.value]; setLoc({ lat: b.lat, lng: b.lng, label: b.name, buildingId: b.id }); setFocus({ lat: b.lat, lng: b.lng, zoom: 16.5, key: Date.now() }); }}>
+            <select className="rounded-md bg-surface px-2 py-1 font-medium outline-none" value={loc.buildingId ?? ""} onChange={(e) => { const b = BUILDING_BY_ID[e.target.value]; setLoc({ lat: b.lat, lng: b.lng, label: b.name, buildingId: b.id }); setFocus({ lat: b.lat, lng: b.lng, zoom: 16.5, key: ++focusSeq.current }); }}>
               {!loc.buildingId && <option value="">{loc.label}</option>}
               {BUILDINGS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
             <button onClick={useGps} className="rounded-md p-1 text-muted hover:bg-surface hover:text-foreground" title="Use my location"><LocateFixed size={14} /></button>
+          </div>
+
+          <div className="absolute right-3 top-3 z-10 flex rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
+            {([["map", "Map"], ["satellite", "Satellite"]] as const).map(([k, l]) => (
+              <button key={k} onClick={() => setMapStyle(k)} className={cx("rounded-md px-3 py-1 font-medium", mapStyle === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
+            ))}
           </div>
 
           <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
