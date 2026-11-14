@@ -7,6 +7,7 @@ import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import type { Callout } from "@/lib/callouts";
 import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
 import { calloutHTML } from "@/lib/calloutHtml";
+import { declutter } from "@/lib/declutter";
 import { LEVEL_COLOR } from "./ui";
 import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
@@ -158,6 +159,13 @@ export default function MapView(props: Props) {
   const walkRef = useRef<WalkGuide | null>(null);
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
 
+  /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
+  function tidyBubbles() {
+    const m = map.current;
+    if (!m) return;
+    declutter([...bubbles.current.values()].map((b) => { const p = m.project(b.m.getLngLat()); return { el: b.el, kind: b.c.kind, x: p.x, y: p.y }; }));
+  }
+
   function setSource(id: string, fc: FC) {
     (map.current?.getSource(id) as mapboxgl.GeoJSONSource | undefined)?.setData(fc);
   }
@@ -295,6 +303,7 @@ export default function MapView(props: Props) {
       cb.current.onCamera?.({ longitude: c.lng, latitude: c.lat, zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() });
     };
     m.on("move", emit);
+    m.on("move", tidyBubbles);
     emit();
 
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
@@ -381,6 +390,7 @@ export default function MapView(props: Props) {
       if (c.intensity != null) b.el.style.setProperty("--intensity", String(c.intensity));
     }
     for (const [id, b] of bubbles.current) if (!keep.has(id)) { b.m.remove(); bubbles.current.delete(id); }
+    tidyBubbles();
   }, [props.callouts]);
 
   // tick live game clocks every second; flash the bubble when the score changes

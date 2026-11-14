@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Inbox, LocateFixed, Plus, Search, X } from "lucide-react";
+import { Bell, Inbox, LocateFixed, Menu, Plus, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +16,8 @@ import { BuildingDetail, EventDetail } from "./Drawers";
 import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
 import type { Camera, MapLayers } from "./MapView";
+import MenuPanel from "./MenuPanel";
+import SignIn, { clearSession, loadSession, signIn } from "./SignIn";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
@@ -24,14 +26,18 @@ import { Avatar, Button, cx } from "./ui";
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 
-type Tab = "now" | "events" | "study";
+type Tab = "menu" | "now" | "events" | "study";
 const START_LOC: Loc = { lat: BUILDING_BY_ID.gin.lat, lng: BUILDING_BY_ID.gin.lng, label: "Ginsburg Hall", buildingId: "gin" };
 
 interface AskRes { answer: string; eventIds: string[]; buildingIds: string[]; focusBuildingId: string; ai: boolean }
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null);
-  const [tab, setTab] = useState<Tab>("now");
+  const [tab, setTab] = useState<Tab>("menu");
+  const [menuOpen, setMenuOpen] = useState(false); // the side panel: pushes the map on desktop, bottom sheet on phones
+  const [signedIn, setSignedIn] = useState<boolean | null>(null); // null while the saved session is being checked
+  const [accountOpen, setAccountOpen] = useState(false);
+  const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
@@ -96,6 +102,18 @@ export default function App() {
     } catch { /* ignore */ }
   }, [refresh]);
 
+  // restore a saved sign-in (the demo store forgets it when the server restarts, so it is re-applied)
+  useEffect(() => {
+    const saved = loadSession();
+    const t = setTimeout(() => { if (!saved) setSignedIn(false); else signIn(saved).then(() => { setSignedIn(true); refresh(); }, () => setSignedIn(false)); }, 0);
+    return () => clearTimeout(t);
+  }, [refresh]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenuOpen(false); setAccountOpen(false); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   useEffect(() => {
     const first = setTimeout(() => { refresh(); pollNotifs(); }, 0);
     const a = setInterval(refresh, 20_000);
@@ -112,12 +130,12 @@ export default function App() {
 
   const openEvent = (id: string) => {
     const e = state?.events.find((x) => x.id === id);
-    setSelBuilding(null); setSelEvent(id);
+    setSelBuilding(null); setSelEvent(id); setMenuOpen(true); // details show in the side panel
     if (e?.lat != null && e.lng != null) setFocus({ lat: e.lat, lng: e.lng, key: ++focusSeq.current });
   };
   const openBuilding = (id: string) => {
     const b = BUILDING_BY_ID[id];
-    setSelEvent(null); setSelBuilding(id);
+    setSelEvent(null); setSelBuilding(id); setMenuOpen(true);
     if (b) setFocus({ lat: b.lat, lng: b.lng, key: ++focusSeq.current });
   };
   const closeDetail = () => { setSelEvent(null); setSelBuilding(null); setSelAlert(null); };
@@ -125,7 +143,7 @@ export default function App() {
     const [kind, id] = c.id.split(":");
     if (kind === "ev") openEvent(id);
     else if (kind === "b") openBuilding(id);
-    else if (kind === "al") { setSelEvent(null); setSelBuilding(null); setSelAlert(id); setFocus({ lat: c.lat, lng: c.lng, zoom: 17.2, key: ++focusSeq.current }); }
+    else if (kind === "al") { setSelEvent(null); setSelBuilding(null); setSelAlert(id); setMenuOpen(true); setFocus({ lat: c.lat, lng: c.lng, zoom: 17.2, key: ++focusSeq.current }); }
     else if (kind === "cam") setCam(WEBCAMS.find((w) => w.id === id) ?? null);
   }
 
@@ -181,8 +199,9 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-white">
       {/* Header */}
-      <header className="z-30 flex h-14 shrink-0 items-center gap-4 border-b border-line px-4">
-        <Link href="/" className="w-[340px] shrink-0 text-[17px] font-semibold tracking-tight">
+      <header className="z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line px-3 md:gap-4 md:px-4">
+        <button onClick={() => setMenuOpen((o) => !o)} className="rounded-lg p-2 hover:bg-surface" aria-label="Menu" aria-expanded={menuOpen}><Menu size={20} /></button>
+        <Link href="/" className="hidden w-[292px] shrink-0 text-[17px] font-semibold tracking-tight md:block">
           USC<span className="text-cardinal">Live</span>
         </Link>
 
@@ -207,15 +226,15 @@ export default function App() {
         </form>
 
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" onClick={() => setInboxOpen(true)}><Inbox size={16} /> Inbox</Button>
-          <Link href="/dashboard" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-surface">Organizers</Link>
+          <Button variant="ghost" className="max-md:hidden" onClick={() => setInboxOpen(true)}><Inbox size={16} /> Inbox</Button>
+          <Link href="/dashboard" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>
           <div className="relative">
             <button onClick={() => setNotifOpen((o) => !o)} className="relative rounded-lg p-2 hover:bg-surface" aria-label="Notifications">
               <Bell size={18} />
               {unread > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-cardinal" />}
             </button>
             {notifOpen && (
-              <div className="fade-in absolute right-0 top-11 z-40 w-96 overflow-hidden rounded-lg border border-line bg-white shadow-lg">
+              <div className="fade-in absolute right-0 top-11 z-40 w-96 max-w-[calc(100vw-24px)] overflow-hidden rounded-lg border border-line bg-white shadow-lg">
                 <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
                   <span className="text-sm font-semibold">Notifications</span>
                   <button onClick={markAllRead} className="text-xs text-muted hover:text-foreground">Mark all read</button>
@@ -235,18 +254,34 @@ export default function App() {
               </div>
             )}
           </div>
-          {state && <div className="ml-2" title={`${state.me.name}, ${state.me.major}`}><Avatar initials={state.me.avatar} size={30} /></div>}
+          {state && (
+            <div className="relative ml-2">
+              <button onClick={() => setAccountOpen((o) => !o)} title={`${state.me.name}, ${state.me.major}`} aria-label="Account" aria-expanded={accountOpen}><Avatar initials={state.me.avatar} size={30} /></button>
+              {accountOpen && (
+                <div className="fade-in absolute right-0 top-10 z-40 w-64 rounded-lg border border-line bg-white p-3 text-sm shadow-lg">
+                  <div className="font-semibold">{state.me.name}</div>
+                  <div className="text-xs text-muted">{state.me.major}</div>
+                  <button className="mt-2 w-full rounded-md border border-line px-2 py-1.5 text-left text-sm hover:bg-surface" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}>Sign out</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {/* Sidebar */}
-        <aside className="flex w-[372px] shrink-0 flex-col border-r border-line bg-white">
+        {/* Menu panel (see .side in globals.css): opened by the menu button, pushes the map on desktop, bottom sheet on phones */}
+        <aside className={cx("side", menuOpen && "side-open")} aria-hidden={!menuOpen}>
+          <div className="side-inner">
+          <button className="side-grip" aria-label="Close menu" onClick={() => setMenuOpen(false)}
+            onPointerDown={(e) => { grip.current = e.clientY; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerUp={(e) => { if (grip.current != null && e.clientY - grip.current > 50) setMenuOpen(false); grip.current = null; }} />
           {!detailOpen && (
-            <nav className="flex gap-4 border-b border-line px-4">
-              {([["now", "For you"], ["events", "Events"], ["study", "Study spots"]] as const).map(([t, l]) => (
+            <nav className="flex items-center gap-4 border-b border-line px-4">
+              {([["menu", "Overview"], ["now", "For you"], ["events", "Events"], ["study", "Study spots"]] as const).map(([t, l]) => (
                 <button key={t} onClick={() => setTab(t)} className={cx("-mb-px border-b-2 py-3 text-sm font-medium", tab === t ? "border-cardinal text-foreground" : "border-transparent text-muted hover:text-foreground")}>{l}</button>
               ))}
+              <button onClick={() => setMenuOpen(false)} className="ml-auto rounded-md p-1 text-muted hover:bg-surface hover:text-foreground" aria-label="Close menu"><X size={16} /></button>
             </nav>
           )}
           <div className={cx("min-h-0 flex-1 p-4", !detailOpen && tab === "events" ? "overflow-hidden" : "scroll-thin overflow-y-auto")}>
@@ -258,6 +293,8 @@ export default function App() {
               <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onOpenBuilding={openBuilding} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
+            ) : tab === "menu" ? (
+              <MenuPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={() => setAddOpen(true)} onStudy={() => setTab("study")} />
             ) : tab === "now" ? (
               <NowPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
             ) : tab === "events" ? (
@@ -268,6 +305,7 @@ export default function App() {
           </div>
           <div className="border-t border-line p-3">
             <Button className="w-full" onClick={() => setAddOpen(true)}><Plus size={16} /> Add event</Button>
+          </div>
           </div>
         </aside>
 
@@ -326,7 +364,7 @@ export default function App() {
 
           <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
             <span className="px-1.5 text-muted">You are at</span>
-            <select className="rounded-md bg-surface px-2 py-1 font-medium outline-none" value={loc.buildingId ?? ""} onChange={(e) => { const b = BUILDING_BY_ID[e.target.value]; setLoc({ lat: b.lat, lng: b.lng, label: b.name, buildingId: b.id }); setFocus({ lat: b.lat, lng: b.lng, zoom: 16.5, key: ++focusSeq.current }); }}>
+            <select className="max-w-[150px] rounded-md bg-surface px-2 py-1 font-medium outline-none md:max-w-[220px]" value={loc.buildingId ?? ""} onChange={(e) => { const b = BUILDING_BY_ID[e.target.value]; setLoc({ lat: b.lat, lng: b.lng, label: b.name, buildingId: b.id }); setFocus({ lat: b.lat, lng: b.lng, zoom: 16.5, key: ++focusSeq.current }); }}>
               {!loc.buildingId && <option value="">{loc.label}</option>}
               {BUILDINGS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -339,9 +377,17 @@ export default function App() {
             ))}
           </div>
 
+          {/* Layer chips under the search bar */}
+          <div className="chip-row absolute left-3 right-3 top-[52px] z-10 flex gap-1.5 overflow-x-auto pb-1">
+            {([["games", "Games"], ["busy", "Busy spots"], ["schedule", "My schedule"], ["events", "Events"]] as const).map(([k, l]) => (
+              <button key={k} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))} aria-pressed={chips[k]}
+                className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-semibold shadow-sm transition-colors", chips[k] ? "bg-cardinal text-white" : "bg-white text-foreground hover:bg-surface")}>{l}</button>
+            ))}
+          </div>
+
           {!(view === "3d" && !threeReady) && (
             <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5">
-              {([["games", "Live games"], ["busy", "Busy spots"], ["safety", "Safety"], ["schedule", "My schedule"], ["events", "Events"], ["webcams", "Webcams"]] as const).map(([k, l]) => (
+              {([["safety", "Safety"], ["webcams", "Webcams"]] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
                   className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-sm transition-colors", chips[k] ? "bg-cardinal text-white" : "border border-line bg-white text-foreground hover:bg-surface")}>{l}</button>
               ))}
@@ -368,6 +414,7 @@ export default function App() {
       {cam && <WebcamViewer key={cam.id} cam={cam} onClose={() => setCam(null)} />}
       {state && <AddEventModal open={addOpen} onClose={() => setAddOpen(false)} state={state} onCreated={(e) => { refresh(); setTimeout(() => openEvent(e.id), 300); }} />}
       <InboxModal open={inboxOpen} onClose={() => setInboxOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} />
+      {signedIn === false && <SignIn onDone={() => { setSignedIn(true); refresh(); }} />}
     </div>
   );
 }

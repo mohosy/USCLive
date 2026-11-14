@@ -76,49 +76,53 @@ html, body {
 /* ---------- Map callouts ("bubbles") ---------- */
 .co { display: flex; flex-direction: column; align-items: center; cursor: pointer; font-family: var(--font-geist-sans), system-ui, sans-serif; }
 .co-card {
-  background: #fff; border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 10px; padding: 6px 10px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14); white-space: nowrap; transition: transform 0.15s ease;
+  background: #fff; border: 2px solid #fff; border-radius: 14px; padding: 7px 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.12); white-space: nowrap; transition: transform 0.15s ease;
 }
 .co:hover .co-card { transform: translateY(-2px); }
-.co-eyebrow { display: flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6b7280; }
-.co-eyebrow i { width: 6px; height: 6px; border-radius: 99px; display: inline-block; }
+.co-eyebrow { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #6b6b6b; }
+.co-eyebrow i { width: 7px; height: 7px; border-radius: 99px; display: inline-block; }
 .co-title { font-size: 13px; font-weight: 600; color: #16181d; line-height: 1.25; }
 .co-meta { font-size: 11px; font-weight: 500; color: #6b7280; }
-.co-stem { width: 1.5px; height: 18px; background: rgba(22, 24, 29, 0.35); }
-.co-foot { width: 8px; height: 8px; border-radius: 99px; background: #fff; border: 2px solid #16181d; position: relative; }
+/* A pointer tail in the bubble's edge colour (no vertical line); the foot is just the anchor for the rings. */
+.co-stem { width: 0; height: 0; margin-top: -1px; border: 7px solid transparent; border-bottom: 0; border-top-color: var(--co-edge, #fff); }
+.co-foot { width: 0; height: 0; position: relative; }
+/* a bubble that lost a collision with a more important one (see lib/declutter.ts) */
+.co-hidden { visibility: hidden; pointer-events: none; }
 .co-foot::after { content: ""; position: absolute; left: 50%; top: 50%; border-radius: 99px; transform: translate(-50%, -50%); pointer-events: none; }
 
 /* live game: gold border, big score, gold ring pulsing from the venue */
-.co-game .co-card { border: 2px solid var(--gold); padding: 6px 11px; }
-.co-game .co-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.co-game { --co-edge: var(--gold); }
+.co-game .co-card { border-color: var(--gold); }
+.co-game .co-title { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
 .co-game .co-title b { font-weight: 800; }
 .co-game .co-dash { margin: 0 3px; color: #9ca3af; }
-.co-game .co-foot { border-color: var(--gold); }
 .co-game .co-foot::after { width: 90px; height: 90px; border: 2px solid var(--gold); animation: co-ring 2.4s ease-out infinite; }
 .co-bump .co-card { animation: co-bump 0.7s ease; }
 @keyframes co-bump { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.9) } 35% { transform: scale(1.12); background: #fff7cc } 100% { transform: scale(1); box-shadow: 0 0 0 14px rgba(255, 204, 0, 0) } }
 
 /* busy: orange ring breathing, faster when busier */
-.co-busy .co-foot { border-color: #ea580c; }
 .co-busy .co-foot::after { width: 70px; height: 70px; border: 2px solid rgba(234, 88, 12, 0.55); animation: co-breathe calc(3s - var(--intensity, 0.5) * 1.6s) ease-in-out infinite; }
-.co-quiet .co-foot { border-color: #16a34a; }
 
 /* DPS alert: red card, red pulse */
-.co-alert .co-card { background: #9f1239; background: #991b1b; border-color: #7f1d1d; }
+.co-alert { --co-edge: #991b1b; }
+.co-alert .co-card { background: #991b1b; border-color: #991b1b; }
 .co-alert .co-eyebrow, .co-alert .co-meta { color: #fecaca; }
 .co-alert .co-title { color: #fff; }
-.co-alert .co-stem { background: #991b1b; }
-.co-alert .co-foot { border-color: #991b1b; background: #fecaca; }
 .co-alert .co-foot::after { width: 120px; height: 120px; background: rgba(220, 38, 38, 0.12); border: 2px solid rgba(220, 38, 38, 0.6); animation: co-ring 2s ease-out infinite; }
 
-.co-schedule .co-foot { border-color: #2563eb; }
+/* next class / office hours: cardinal border */
+.co-schedule { --co-edge: var(--cardinal); }
+.co-schedule .co-card { border-color: var(--cardinal); }
+.co-schedule .co-eyebrow { color: var(--cardinal); }
 
 /* webcam: compact dark pill */
+.co-webcam { --co-edge: #16181d; }
 .co-webcam .co-card { background: #16181d; border-color: #16181d; padding: 4px 8px; }
 .co-webcam .co-eyebrow { color: #f87171; }
 .co-webcam .co-eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 99px; background: #ef4444; animation: co-blink 1.2s steps(2) infinite; }
 .co-webcam .co-title { color: #fff; font-size: 11px; font-weight: 500; }
-.co-webcam .co-stem { height: 10px; }
+.co-webcam .co-stem { border-width: 5px; border-bottom: 0; }
 
 .co-blink { animation: co-blink 1.2s steps(2) infinite; }
 @keyframes co-blink { 50% { opacity: 0.2 } }
@@ -134,8 +138,26 @@ html, body {
 @keyframes cam-zoom { 0% { transform: scale(0.6) translateY(40px); opacity: 0; filter: blur(8px) } 100% { transform: none; opacity: 1; filter: none } }
 
 /* compact DPS tag for older crime-log incidents */
+.co-alertmini { --co-edge: #dc2626; }
 .co-alertmini .co-card { background: #fff; border: 1.5px solid #dc2626; padding: 2px 7px; border-radius: 7px; }
 .co-alertmini .co-eyebrow { color: #b91c1c; font-size: 8px; }
 .co-alertmini .co-title { font-size: 11px; font-weight: 600; color: #7f1d1d; }
-.co-alertmini .co-stem { height: 8px; background: #dc2626; }
-.co-alertmini .co-foot { width: 6px; height: 6px; border-color: #dc2626; }
+.co-alertmini .co-stem { border-width: 5px; border-bottom: 0; }
+
+/* ---------- Menu panel ---------- */
+/* Desktop: opening it takes 360px on the left and the map shrinks to fit, still draggable. */
+.side { width: 0; flex-shrink: 0; overflow: hidden; transition: width 0.25s ease; }
+.side-open { width: 360px; }
+.side-inner { display: flex; flex-direction: column; width: 360px; height: 100%; background: #fff; border-right: 1px solid var(--line); }
+.side-grip { display: none; }
+.chip-row { scrollbar-width: none; }
+.chip-row::-webkit-scrollbar { display: none; }
+/* Phones: the same panel is a bottom sheet with a drag handle; the map above it stays usable. */
+@media (max-width: 900px) {
+  .side { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; width: auto; height: 60dvh; border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18); transform: translateY(104%); transition: transform 0.25s ease; }
+  .side-open { width: auto; transform: none; }
+  .side-inner { width: 100%; border-right: 0; }
+  .side-grip { display: block; flex-shrink: 0; width: 100%; height: 22px; touch-action: none; cursor: grab; }
+  .side-grip::before { content: ""; display: block; width: 36px; height: 5px; margin: 0 auto; border-radius: 3px; background: #d6d3cc; }
+}

@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { calloutHTML } from "@/lib/calloutHtml";
 import type { Callout } from "@/lib/callouts";
+import { declutter } from "@/lib/declutter";
 import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
 import { bearing as bearingTo, fetchWalkRoute, Path, type Step } from "@/lib/walkRoute";
 import type { Camera } from "./MapView";
@@ -444,13 +445,16 @@ export default function Google3DView(props: Props) {
   function positionBubbles() {
     const vp = viewport();
     if (!vp) return;
+    const shown = [];
     for (const b of bubbles.current.values()) {
       const z = zAt.current.get(b.c.id) ?? groundZ.current ?? GROUND_Z;
       const [x, y] = vp.project([b.c.lng, b.c.lat, z]);
       const off = x < -50 || y < -50 || x > vp.width + 50 || y > vp.height + 50;
       b.el.style.display = off ? "none" : "";
       b.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+      if (!off) shown.push({ el: b.el, kind: b.c.kind, x, y });
     }
+    declutter(shown); // no overlaps: the more important bubble wins
   }
 
   function markReady() {
@@ -601,7 +605,7 @@ export default function Google3DView(props: Props) {
         <button onClick={resetNorth} className="border-y border-line p-2 text-foreground hover:bg-surface" title="Reset view"><Compass size={16} /></button>
         <button onClick={() => rotate(45)} className="p-2 text-foreground hover:bg-surface" title="Rotate right"><RotateCw size={16} /></button>
       </div>
-      <div className="pointer-events-none absolute left-3 top-14 z-10 rounded-md bg-white/85 px-2 py-1 text-[11px] text-gray-700">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
+      <div className="pointer-events-none absolute left-3 top-[92px] z-10 rounded-md bg-white/85 px-2 py-1 text-[11px] text-gray-700 max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}
