@@ -5,9 +5,19 @@ import { useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { api } from "@/lib/client-types";
 import { INTERESTS, type DirectoryEntry } from "@/lib/directory";
+import { ORGS } from "@/lib/seed";
 import { Button, cx, inputCls } from "./ui";
 
-export interface Session { email: string; interests: string[] }
+export type AccountType = "student" | "creator";
+export interface SavedProfile { name?: string; pronouns?: string; bio?: string; photo?: string | null }
+export interface Session {
+  email: string;
+  interests: string[];
+  accountType?: AccountType;
+  creatorOrgId?: string | null;
+  /** edits made in Settings, re-applied on reload because the demo server forgets them on restart */
+  profile?: SavedProfile;
+}
 const KEY = "usclive.session";
 
 export function loadSession(): Session | null {
@@ -16,10 +26,54 @@ export function loadSession(): Session | null {
 export function clearSession() {
   try { sessionStorage.removeItem(KEY); } catch { /* private mode */ }
 }
+function saveSession(s: Session) {
+  try { sessionStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private mode or photo too large */ }
+}
 /** Apply a session on the server (also used on reload, because the demo store resets when the server restarts). */
 export async function signIn(s: Session) {
   await api("/api/session", { json: { action: "signin", ...s } });
-  try { sessionStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private mode */ }
+  saveSession(s);
+}
+/** Merge Settings changes into the saved session so they survive a reload. */
+export function updateSavedSession(patch: Partial<Session>) {
+  const s = loadSession();
+  if (!s) return;
+  saveSession({ ...s, ...patch, profile: { ...s.profile, ...patch.profile } });
+}
+
+export const ACCOUNT_TYPES: { id: AccountType; title: string; desc: string }[] = [
+  { id: "student", title: "Student", desc: "Find events, RSVP and join open invites." },
+  { id: "creator", title: "Student Creator", desc: "Everything students get, plus post events for your club or org." },
+];
+
+/** Student / Student Creator picker (+ which org a creator posts for). Shared by sign-up and Settings. */
+export function AccountTypePicker({ type, orgId, onType, onOrg }: { type: AccountType; orgId: string; onType: (t: AccountType) => void; onOrg: (id: string) => void }) {
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        {ACCOUNT_TYPES.map((t) => {
+          const on = type === t.id;
+          return (
+            <button key={t.id} type="button" aria-pressed={on} onClick={() => onType(t.id)}
+              className={cx("rounded-xl border p-3 text-left transition-colors", on ? "border-cardinal bg-cardinal/5 ring-1 ring-cardinal" : "border-line bg-white hover:bg-surface")}>
+              <div className="flex items-center gap-1.5 text-sm font-semibold">{t.id === "creator" && <span className="text-amber-600">✦</span>}{t.title}</div>
+              <div className="mt-0.5 text-[11.5px] leading-snug text-muted">{t.desc}</div>
+            </button>
+          );
+        })}
+      </div>
+      {type === "creator" && (
+        <label className="mt-2.5 block">
+          <div className="mb-1 text-xs font-medium text-muted">Posting for</div>
+          <select className={inputCls} value={orgId} onChange={(e) => onOrg(e.target.value)}>
+            <option value="">Myself (independent creator)</option>
+            {ORGS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+          <p className="mt-1 text-[11px] text-muted">In the real app, Student Government verifies creator accounts before they can post.</p>
+        </label>
+      )}
+    </div>
+  );
 }
 
 /** A field the student cannot edit: it comes from the USC directory. */
@@ -35,11 +89,13 @@ function Locked({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Sign-in gate: usc.edu email only. School and major come from the (mock) USC directory; interests are yours to pick. */
+/** Sign-in gate: usc.edu email only. School and major come from the (mock) USC directory; interests and account type are yours to pick. */
 export default function SignIn({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState("");
   const [profile, setProfile] = useState<DirectoryEntry | null>(null);
   const [interests, setInterests] = useState<string[]>([]);
+  const [accountType, setAccountType] = useState<AccountType>("student");
+  const [orgId, setOrgId] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -52,14 +108,14 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
   async function finish() {
     if (!profile) return;
     setBusy(true); setErr(null);
-    try { await signIn({ email: profile.email, interests }); onDone(); }
+    try { await signIn({ email: profile.email, interests, accountType, creatorOrgId: accountType === "creator" ? orgId || null : null }); onDone(); }
     catch (e) { setErr((e as Error).message); setBusy(false); }
   }
   const school = SCHOOLS.find((s) => s.id === profile?.school)?.name ?? "";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-white/70 p-5 backdrop-blur-md">
-      <div className="fade-in w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-xl">
+      <div className="fade-in my-auto w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-xl">
         <div className="text-[22px] font-semibold tracking-tight">USC<span className="text-cardinal">Live</span></div>
         {!profile ? (
           <form className="mt-1" onSubmit={(e) => { e.preventDefault(); lookup(email); }}>
@@ -77,6 +133,10 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
             <p className="text-sm text-muted">Welcome, {profile.name}. Your school and major come from the USC directory.</p>
             <Locked label="School" value={school} />
             <Locked label="Major" value={`${profile.major} · ${profile.year}`} />
+            <div>
+              <div className="mb-1.5 text-xs font-medium text-muted">Account type</div>
+              <AccountTypePicker type={accountType} orgId={orgId} onType={setAccountType} onOrg={setOrgId} />
+            </div>
             <div>
               <div className="mb-1.5 text-xs font-medium text-muted">Interests</div>
               <div className="flex flex-wrap gap-1.5">

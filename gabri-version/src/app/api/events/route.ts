@@ -30,6 +30,8 @@ export async function POST(req: Request) {
   if (!parsed.ok) return parsed.res;
   const input = parsed.data;
   const me = getMe();
+  if (me.accountType !== "creator")
+    return Response.json({ error: "Only Student Creator accounts can post events. You can switch your account type in Settings." }, { status: 403 });
   const start = toIso(input.start);
   const end = toIso(input.end);
   if (!start || !end || +new Date(end) <= +new Date(start)) return Response.json({ error: "Invalid start/end time" }, { status: 400 });

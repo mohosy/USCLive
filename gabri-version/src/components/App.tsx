@@ -1,8 +1,9 @@
 "use client";
 
-import { Bell, Inbox, Menu, Navigation, Plus, Search, X } from "lucide-react";
+import { Bell, Inbox, LogOut, Menu, Navigation, Plus, Search, Settings, UserRound, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
@@ -21,7 +22,7 @@ import SignIn, { clearSession, loadSession, signIn } from "./SignIn";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
-import { Avatar, Button, cx } from "./ui";
+import { AccountBadge, Avatar, Button, cx } from "./ui";
 
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
@@ -149,6 +150,26 @@ export default function App() {
     if (b) setFocus({ lat: b.lat, lng: b.lng, key: ++focusSeq.current });
   };
   const closeDetail = () => { setSelEvent(null); setSelBuilding(null); setSelAlert(null); };
+
+  // Only Student Creator accounts can post; students are pointed to Settings to switch.
+  const router = useRouter();
+  const isCreator = state?.me.accountType === "creator";
+  const requestAddEvent = () => (isCreator ? setAddOpen(true) : router.push("/settings?section=account&reason=post"));
+
+  // "/?event=<id>" (from the profile page) opens that event once the data is in
+  const pendingEvent = useRef<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("event");
+    if (id) { pendingEvent.current = id; window.history.replaceState(null, "", "/"); }
+  }, []);
+  useEffect(() => {
+    const id = pendingEvent.current;
+    if (!state || !id || !state.events.some((e) => e.id === id)) return;
+    pendingEvent.current = null;
+    const t = setTimeout(() => openEvent(id), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
   function onCallout(c: Callout) {
     const [kind, id] = c.id.split(":");
     if (kind === "ev") openEvent(id);
@@ -244,7 +265,7 @@ export default function App() {
 
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" className="max-md:hidden" onClick={() => setInboxOpen(true)}><Inbox size={16} /> Inbox</Button>
-          <Link href="/dashboard" className="rounded-full px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>
+          {isCreator && <Link href="/dashboard" className="rounded-full px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>}
           <div className="relative">
             <button onClick={() => setNotifOpen((o) => !o)} className="relative rounded-full p-2 hover:bg-surface" aria-label="Notifications">
               <Bell size={18} />
@@ -273,12 +294,22 @@ export default function App() {
           </div>
           {state && (
             <div className="relative ml-2">
-              <button onClick={() => setAccountOpen((o) => !o)} title={`${state.me.name}, ${state.me.major}`} aria-label="Account" aria-expanded={accountOpen}><Avatar initials={state.me.avatar} size={30} /></button>
+              <button onClick={() => setAccountOpen((o) => !o)} title={`${state.me.name}, ${state.me.major}`} aria-label="Account" aria-expanded={accountOpen} className="rounded-full transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={30} /></button>
               {accountOpen && (
-                <div className="glass glass-strong fade-in absolute right-0 top-11 z-40 w-64 rounded-2xl p-3 text-sm">
-                  <div className="font-semibold">{state.me.name}</div>
-                  <div className="text-xs text-muted">{state.me.major}</div>
-                  <button className="mt-2 w-full rounded-md border border-line px-2 py-1.5 text-left text-sm hover:bg-surface" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}>Sign out</button>
+                <div className="glass glass-strong fade-in absolute right-0 top-11 z-40 w-72 rounded-2xl p-3 text-sm">
+                  <div className="flex items-center gap-3 px-1 pb-3 pt-1">
+                    <Avatar initials={state.me.avatar} photo={state.me.photo} size={44} />
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">{state.me.name}{state.me.pronouns && <span className="ml-1.5 text-xs font-normal text-muted">({state.me.pronouns})</span>}</div>
+                      <div className="truncate text-xs text-muted">{state.me.major}</div>
+                      <AccountBadge type={state.me.accountType} className="mt-1" />
+                    </div>
+                  </div>
+                  <Link href="/profile" onClick={() => setAccountOpen(false)} className="flex w-full items-center justify-center gap-2 rounded-full bg-cardinal px-3 py-2 text-sm font-medium text-white hover:bg-cardinal-hover"><UserRound size={15} /> View profile</Link>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                    <Link href="/settings" onClick={() => setAccountOpen(false)} className="flex items-center justify-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm hover:bg-surface"><Settings size={14} /> Settings</Link>
+                    <button className="flex items-center justify-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm hover:bg-surface" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={14} /> Sign out</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -313,7 +344,7 @@ export default function App() {
             ) : tab === "menu" ? (
               <>
                 <NowPanel compact state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
-                <div className="mt-4"><MenuPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={() => setAddOpen(true)} onStudy={() => setTab("study")} /></div>
+                <div className="mt-4"><MenuPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
               </>
             ) : tab === "events" ? (
               <EventsPanel events={visible} filters={filters} setFilters={setFilters} loc={loc} onOpen={openEvent} now={now} />
@@ -322,7 +353,11 @@ export default function App() {
             )}
           </div>
           <div className="border-t border-line p-3">
-            <Button className="w-full !rounded-full" onClick={() => setAddOpen(true)}><Plus size={16} /> Add event</Button>
+            {isCreator ? (
+              <Button className="w-full !rounded-full" onClick={requestAddEvent}><Plus size={16} /> Add event</Button>
+            ) : (
+              <Button variant="secondary" className="w-full !rounded-full" onClick={requestAddEvent} title="Only Student Creator accounts can post events">✦ Become a creator to post events</Button>
+            )}
           </div>
           </div>
         </aside>

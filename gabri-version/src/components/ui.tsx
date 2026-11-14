@@ -90,11 +90,23 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-export function Avatar({ initials, size = 24 }: { initials: string; size?: number }) {
+export function Avatar({ initials, size = 24, photo }: { initials: string; size?: number; photo?: string | null }) {
+  if (photo)
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={photo} alt="" width={size} height={size} className="shrink-0 rounded-full object-cover ring-2 ring-white" style={{ width: size, height: size }} />;
   return (
     <span className="inline-flex shrink-0 items-center justify-center rounded-full bg-surface font-semibold text-foreground ring-2 ring-white" style={{ width: size, height: size, fontSize: size * 0.4 }}>
       {initials}
     </span>
+  );
+}
+
+/** "Student" / "Student Creator" pill. */
+export function AccountBadge({ type, className }: { type?: "student" | "creator"; className?: string }) {
+  return type === "creator" ? (
+    <span className={cx("inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900", className)}>✦ Student Creator</span>
+  ) : (
+    <span className={cx("inline-flex items-center rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-muted", className)}>Student</span>
   );
 }
 

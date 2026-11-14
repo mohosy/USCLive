@@ -5,13 +5,15 @@ process.env.TZ = "America/Los_Angeles";
  * is generated relative to "now" so a restart keeps it fresh). Swap for Postgres/Supabase later.
  */
 import { BUILDING_BY_ID } from "./campus";
-import { ME, ORGS, seedAlerts, seedEvents, seedInbox, seedNotifications, seedUsers } from "./seed";
+import { ME, ORGS, seedAlerts, seedEvents, seedHistory, seedInbox, seedNotifications, seedUsers } from "./seed";
 import type { CampusEvent, InboxItem, Notification, SafetyAlert, User } from "./types";
 
 interface DB {
   seededAt: number;
   users: User[];
   events: CampusEvent[];
+  /** past events (for profiles); kept apart so the map, crowds and AI only see current ones */
+  history: CampusEvent[];
   inbox: InboxItem[];
   scannedInbox: string[];
   notifications: Notification[];
@@ -25,10 +27,14 @@ const g = globalThis as unknown as { __usclive?: DB };
 
 function fresh(): DB {
   const now = new Date();
+  const events = seedEvents(now);
+  // the demo student is already registered for a couple of upcoming events (shows on their profile)
+  for (const e of events) if (/Thornton Jazz Night|Volleyball vs\. UCLA/.test(e.title) && !e.attendees.includes(ME)) e.attendees.push(ME);
   return {
     seededAt: +now,
     users: seedUsers(now),
-    events: seedEvents(now),
+    events,
+    history: seedHistory(now),
     inbox: seedInbox(now),
     scannedInbox: [],
     notifications: seedNotifications(now),
@@ -44,6 +50,7 @@ export function db(): DB {
   // fill fields added after the store was created (hot reload keeps the old object around)
   const d = g.__usclive;
   d.alerts ??= seedAlerts(new Date());
+  d.history ??= seedHistory(new Date());
   d.dps ??= { lastSync: 0, lastUrl: null, error: null, syncing: false };
   return d;
 }

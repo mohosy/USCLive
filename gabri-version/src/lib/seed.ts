@@ -177,6 +177,38 @@ export function seedEvents(now: Date): CampusEvent[] {
   }));
 }
 
+/** Events the demo student went to in the past few weeks (shown under "Past" on their profile). */
+export function seedHistory(now: Date): CampusEvent[] {
+  const past: (Seed & { daysAgo: number; h: number; m?: number; durMin: number })[] = [
+    { daysAgo: 2, h: 18, durMin: 120, title: "Startup Garage weekly build night", description: "Heads-down build session with mentors and pizza.", category: "club", buildingId: "rth", room: "RTH 526",
+      start: "", end: "", host: { kind: "org", name: "Viterbi Startup Garage", id: "org_startup" }, visibility: "public", freeFood: true, foodDetail: "Pizza", attendees: crowd(34, "h1") },
+    { daysAgo: 4, h: 17, durMin: 90, title: "CSCI 104 TA review: linked lists & recursion", description: "TA-led review before HW4.", category: "academic", buildingId: "sal", room: "SAL 101",
+      start: "", end: "", host: { kind: "usc", name: "CSCI 104 course staff" }, visibility: "school", schools: ["viterbi"], course: "CSCI 104", freeFood: false, attendees: crowd(48, "h2") },
+    { daysAgo: 6, h: 12, durMin: 240, title: "Fall Career Fair: Tech & Engineering", description: "120+ employers hiring for internships and full-time.", category: "career", buildingId: "gal",
+      start: "", end: "", host: { kind: "org", name: "Career Center", id: "org_career" }, visibility: "public", freeFood: false, attendees: crowd(410, "h3") },
+    { daysAgo: 9, h: 20, durMin: 120, title: "Boba & board games", description: "Catan, Codenames and 40+ other games.", category: "social", buildingId: "tcc",
+      start: "", end: "", host: { kind: "org", name: "Trojan Boba Society", id: "org_boba" }, visibility: "public", freeFood: true, foodDetail: "Free boba", attendees: crowd(57, "h4") },
+    { daysAgo: 13, h: 7, m: 30, durMin: 60, title: "Sunrise run club: 5K around Expo Park", description: "Easy pace, coffee after.", category: "sports", buildingId: "tommy",
+      start: "", end: "", host: { kind: "user", name: "Jordan Lee", id: "u_jordan" }, visibility: "open", freeFood: false, attendees: ["u_jordan", ...crowd(14, "h5")] },
+  ];
+  return past.map(({ daysAgo, h, m, durMin, ...s }, i) => {
+    const start = dayAt(now, -daysAgo, h, m ?? 0);
+    return {
+      id: `hist_${String(i + 1).padStart(3, "0")}`,
+      invitees: [],
+      tags: [],
+      schools: ["all"],
+      source: "seed",
+      moderation: ok,
+      createdAt: new Date(start.getTime() - 5 * 24 * 60 * MIN).toISOString(),
+      ...s,
+      start: start.toISOString(),
+      end: new Date(start.getTime() + durMin * MIN).toISOString(),
+      attendees: [...(s.attendees ?? []), ME],
+    };
+  });
+}
+
 export function seedInbox(now: Date): InboxItem[] {
   const ago = (m: number) => new Date(now.getTime() - m * MIN).toISOString();
   return [

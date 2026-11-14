@@ -17,6 +17,12 @@ export interface MeView {
   today: { kind: "class" | "office_hours"; code: string; title: string; buildingId: string; room: string; start: string; end: string }[];
   freeMinutes: number;
   freeUntil: string | null;
+  email?: string;
+  accountType?: "student" | "creator";
+  creatorOrgId?: string;
+  pronouns?: string;
+  bio?: string;
+  photo?: string;
 }
 
 export interface AppState {

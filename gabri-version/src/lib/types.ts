@@ -102,10 +102,13 @@ export interface ClassMeeting {
   officeHours?: { who: string; buildingId: string; room: string; days: number[]; start: string; end: string };
 }
 
+/** student: browse, RSVP, join. creator: everything a student can do, plus post events. */
+export type AccountType = "student" | "creator";
+
 export interface User {
   id: string;
   name: string;
-  avatar: string; // emoji
+  avatar: string; // initials
   school: SchoolId;
   year: string;
   major: string;
@@ -113,6 +116,15 @@ export interface User {
   classes: ClassMeeting[];
   interests: string[];
   orgs: string[];
+  // account + profile (set at sign-in / in Settings)
+  email?: string;
+  accountType?: AccountType;
+  /** org a creator posts for (one of ORGS), or undefined = posts as themselves */
+  creatorOrgId?: string;
+  pronouns?: string;
+  bio?: string;
+  /** small square JPEG/PNG/WebP data URL */
+  photo?: string;
 }
 
 export interface InboxItem {
