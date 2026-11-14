@@ -125,11 +125,17 @@ export default function App() {
 
   const now = useMemo(() => new Date(state?.now ?? 0), [state?.now]);
   const visible = useMemo(() => (state ? applyFilters(state.events, filters, now) : []), [state, filters, now]);
-  const mapEvents = askRes ? state?.events.filter((e) => askRes.eventIds.includes(e.id) || visible.some((v) => v.id === e.id)) ?? [] : visible;
+  // everything the maps receive is memoized: unrelated re-renders (typing, polls, toasts) never re-send map data
+  const mapEvents = useMemo(() => (askRes ? state?.events.filter((e) => askRes.eventIds.includes(e.id) || visible.some((v) => v.id === e.id)) ?? [] : visible), [askRes, state, visible]);
+  const shownEvents = useMemo(() => (chipState.events ? mapEvents : []), [chipState.events, mapEvents]);
+  const highlight = useMemo(() => (askRes && askRes.eventIds.length ? askRes.eventIds : null), [askRes]);
+  const shownAlerts = useMemo(() => (chipState.safety && state ? state.alerts : []), [chipState.safety, state]);
   const event = state?.events.find((e) => e.id === selEvent) ?? null;
   const openAlert = state?.alerts.find((a) => a.id === selAlert) ?? null;
   const chips = useMemo(() => ({ ...chipState, food: filters.freeFood }), [chipState, filters.freeFood]);
   const callouts = useMemo(() => (state ? buildCallouts(state, chips, now) : []), [state, chips, now]);
+  const mapLayers = useMemo(() => ({ ...layers, hotspots: chips.crowds, places: false }), [layers, chips.crowds]);
+  const noCallouts = useMemo(() => [], []);
 
   const openEvent = (id: string) => {
     const e = state?.events.find((x) => x.id === id);
@@ -272,7 +278,7 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         {/* Sidebar */}
         {/* Menu panel (see .side in globals.css): opened by the menu button, pushes the map on desktop, bottom sheet on phones */}
         <aside className={cx("side", menuOpen && "side-open")} aria-hidden={!menuOpen}>
@@ -314,23 +320,24 @@ export default function App() {
         </aside>
 
         {/* Map */}
-        <main className="relative min-w-0 flex-1">
+        <main className={cx("relative min-w-0 flex-1", menuOpen && "side-on")}>
           {/* Flat map. In 3D mode it shows satellite as a placeholder until the 3D campus has loaded. */}
           {state && (view === "map" || !flatGone) && (
             <MapView
-              events={chips.events ? mapEvents : []}
+              events={shownEvents}
               hotspots={state.hotspots}
               buildings={state.buildings}
               me={loc}
-              layers={{ ...layers, hotspots: chips.crowds, places: false }}
+              layers={mapLayers}
+              leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 360 : 0}
               mapStyle="map"
               selectedEventId={selEvent}
-              highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
+              highlightIds={highlight}
               focus={focus}
               onSelectEvent={openEvent}
               onSelectBuilding={openBuilding}
-              callouts={walk || intro ? [] : callouts}
-              alerts={chips.safety ? state.alerts : []}
+              callouts={walk || intro ? noCallouts : callouts}
+              alerts={shownAlerts}
               onCallout={onCallout}
               initialCamera={startCam}
               onCamera={onFlatCamera}
@@ -343,11 +350,11 @@ export default function App() {
           {state && (view === "3d" || warmSat) && (
             <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
               <Google3DView
-                events={chips.events ? mapEvents : []}
+                events={shownEvents}
                 buildings={state.buildings}
                 me={loc}
                 selectedEventId={selEvent}
-                highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
+                highlightIds={highlight}
                 focus={focus}
                 onSelectEvent={openEvent}
                 initialCamera={startCam}
@@ -356,8 +363,8 @@ export default function App() {
                 onCamera={(c) => { camera.current = c; }}
                 walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
                 onWalkEnd={() => { setWalk(null); setAsk(""); }}
-                callouts={walk ? [] : callouts}
-                alerts={chips.safety ? state.alerts : []}
+                callouts={walk ? noCallouts : callouts}
+                alerts={shownAlerts}
                 hotspots={state.hotspots}
                 showHeat={chips.crowds}
                 onCallout={onCallout}
@@ -368,7 +375,7 @@ export default function App() {
             <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-line bg-white px-3 py-1 text-xs text-muted shadow-sm">Loading 3D campus…</div>
           )}
 
-          <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
+          <div className="side-shift absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
             <span className="px-1.5 text-muted">You are at</span>
             <select className="max-w-[150px] rounded-md bg-surface px-2 py-1 font-medium outline-none md:max-w-[220px]" value={loc.buildingId ?? ""} onChange={(e) => { const b = BUILDING_BY_ID[e.target.value]; setLoc({ lat: b.lat, lng: b.lng, label: b.name, buildingId: b.id }); setFocus({ lat: b.lat, lng: b.lng, zoom: 16.5, key: ++focusSeq.current }); }}>
               {!loc.buildingId && <option value="">{loc.label}</option>}
@@ -384,7 +391,7 @@ export default function App() {
           </div>
 
           {/* One filter row: each chip is a layer on the map (and its legend) */}
-          <div className="chip-row absolute left-3 right-3 top-[52px] z-10 flex gap-1.5 overflow-x-auto pb-1">
+          <div className="side-shift chip-row absolute left-3 right-3 top-[52px] z-10 flex gap-1.5 overflow-x-auto pb-1">
             {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
               <button key={k} aria-pressed={chips[k]}
                 onClick={() => (k === "food" ? setFilters((f) => ({ ...f, freeFood: !f.freeFood })) : setChips((c) => ({ ...c, [k]: !c[k] })))}

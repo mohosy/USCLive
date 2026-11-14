@@ -59,6 +59,8 @@ interface Props {
   alerts: SafetyAlert[];
   onCallout: (c: Callout) => void;
   initialCamera?: Camera | null;
+  /** pixels covered by the side panel on the left; the map keeps its focus in the visible part */
+  leftInset?: number;
   /** play the globe-to-campus intro flight (first load only) */
   intro?: boolean;
   onIntroDone?: () => void;
@@ -299,6 +301,7 @@ export default function MapView(props: Props) {
       maxPitch: 72,
       bearing: intro ? 10 : props.initialCamera?.bearing ?? -20,
       antialias: true, // smooth edges on 3D buildings and the walking character
+      performanceMetricsCollection: false,
     });
     map.current = m;
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
@@ -447,6 +450,11 @@ export default function MapView(props: Props) {
       meMarker.current = new mapboxgl.Marker({ element: d }).setLngLat([props.me.lng, props.me.lat]).addTo(m);
     } else meMarker.current.setLngLat([props.me.lng, props.me.lat]);
   }, [props.me]);
+
+  // side panel opened/closed: shift the visible center with padding (no canvas resize, no re-render)
+  useEffect(() => {
+    map.current?.easeTo({ padding: { left: props.leftInset ?? 0, right: 0, top: 0, bottom: 0 }, duration: 280 });
+  }, [props.leftInset]);
 
   useEffect(() => {
     if (!props.focus || !map.current) return;
