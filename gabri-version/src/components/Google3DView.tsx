@@ -54,6 +54,8 @@ const GROUND_Z = -30;
 const hex = (h: string, a = 255): [number, number, number, number] => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
 interface Props {
+  /** false while it pre-loads hidden behind Explore: no ground measuring */
+  active?: boolean;
   events: EventView[];
   buildings: Building[];
   me: Loc;
@@ -278,14 +280,22 @@ export default function Google3DView(props: Props) {
 
   // the photoreal tile layer is created once and reused (rebuilding it on every hover was wasted work)
   const tiles = useRef<Tile3DLayer | null>(null);
+  const tileGen = useRef(0); // bumps when a tile loads
+  const measuredGen = useRef(-1);
+  const lastReset = useRef(0);
+  const groundDirty = useRef(true);
+  const settled = useRef(new Set<string>()); // bubble ids whose ground height is known
+  const activeRef = useRef(props.active !== false); // false while pre-loading behind Explore
+  useEffect(() => { activeRef.current = props.active !== false; }, [props.active]);
   function tileLayer() {
     tiles.current ??= new Tile3DLayer({
         id: "google-3d",
         pickable: true, // lets us measure the ground height under the bubbles
         data: TILESET,
         // maximumScreenSpaceError 24 (default 16): a bit less detail -> far fewer tiles, sharp much sooner
-        loadOptions: { fetch: { headers: { "X-GOOG-API-KEY": KEY } }, tileset: { maximumScreenSpaceError: 24 } },
+        loadOptions: { fetch: { headers: { "X-GOOG-API-KEY": KEY } }, tileset: { maximumScreenSpaceError: 24, maximumMemoryUsage: 256, memoryAdjustedScreenSpaceError: true } },
         operation: "terrain+draw",
+        onTileLoad: () => { tileGen.current++; },
         onTileError: () => setError("Google 3D tiles failed to load. Check that the Map Tiles API is enabled for this key."),
         onTilesetLoad: (tileset: Tileset3D) => {
           // Google requires showing the data providers for the tiles on screen
@@ -463,12 +473,29 @@ export default function Google3DView(props: Props) {
     return z;
   }
 
-  /** Re-measure the ground under every visible bubble (a few picks each, once a second). */
+  /**
+   * Measure the ground under bubbles. Every pick re-renders the whole 3D scene, so we only measure a spot
+   * until its height settles, and again only after sharper tiles have streamed in. Idle = zero picks.
+   */
   function measureBubbles() {
+    if (document.hidden || !activeRef.current) return;
+    if (tileGen.current !== measuredGen.current && performance.now() - lastReset.current > 3000) {
+      settled.current.clear(); // new detail loaded: heights may have changed
+      measuredGen.current = tileGen.current;
+      lastReset.current = performance.now();
+      groundDirty.current = true;
+    }
+    if (groundDirty.current) { sampleGround(); groundDirty.current = false; }
+    let picks = 0;
     for (const b of bubbles.current.values()) {
-      if (b.el.style.display === "none") continue;
-      const z = surfaceZ(b.c.lng, b.c.lat, zAt.current.get(b.c.id) ?? groundZ.current ?? GROUND_Z);
-      if (z != null) zAt.current.set(b.c.id, z);
+      if (picks >= 4) break; // spread the work over several ticks
+      if (b.el.style.display === "none" || settled.current.has(b.c.id)) continue;
+      const prev = zAt.current.get(b.c.id);
+      const z = surfaceZ(b.c.lng, b.c.lat, prev ?? groundZ.current ?? GROUND_Z);
+      picks++;
+      if (z == null) continue; // off screen: try again when it's in view
+      zAt.current.set(b.c.id, z);
+      if (prev != null && Math.abs(prev - z) < 0.5) settled.current.add(b.c.id);
     }
   }
 
@@ -517,10 +544,8 @@ export default function Google3DView(props: Props) {
     const fn = (c: Camera) => { if (!ready.current) setView({ ...viewState.current, ...c }); };
     bus?.listeners?.add(fn);
     const t = setTimeout(markReady, 15_000);
-    // measure the ground a few times while tiles stream in
-    const g = setInterval(sampleGround, 2500);
     const mb = setInterval(measureBubbles, 1000);
-    return () => { bus?.listeners?.delete(fn); clearTimeout(t); clearInterval(g); clearInterval(mb); };
+    return () => { bus?.listeners?.delete(fn); clearTimeout(t); clearInterval(mb); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.follow]);
 

@@ -48,7 +48,8 @@ export default function App() {
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
   const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
-  const [warmSat, setWarmSat] = useState(false);
+  const [warmSat, setWarmSat] = useState(false); // Satellite pre-loads while you hover its button
+  const coolSat = useRef<ReturnType<typeof setTimeout>>(undefined); // ...and unloads 5s after you move away
   const [intro, setIntro] = useState(true); // campus glide on first load (bubbles wait for it)
   useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
   const threeReady = view === "3d" && satLoaded;
@@ -76,6 +77,7 @@ export default function App() {
     if (v === view) return;
     setStartCam(camera.current);
     setFlatGone(false);
+    clearTimeout(coolSat.current);
     if (v === "map") { setSatLoaded(false); setWarmSat(false); } // free the GPU when leaving Satellite
     else if (satLoaded) setTimeout(() => setFlatGone(true), 800); // pre-warmed: fade straight in
     setView(v);
@@ -120,8 +122,9 @@ export default function App() {
 
   useEffect(() => {
     const first = setTimeout(() => { refresh(); pollNotifs(); }, 0);
-    const a = setInterval(refresh, 20_000);
-    const b = setInterval(pollNotifs, 8_000);
+    // no polling while the tab is in the background
+    const a = setInterval(() => { if (!document.hidden) refresh(); }, 20_000);
+    const b = setInterval(() => { if (!document.hidden) pollNotifs(); }, 8_000);
     return () => { clearTimeout(first); clearInterval(a); clearInterval(b); };
   }, [refresh, pollNotifs]);
 
@@ -397,6 +400,7 @@ export default function App() {
           {state && (view === "3d" || warmSat) && (
             <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
               <Google3DView
+                active={view === "3d"}
                 events={shownEvents}
                 buildings={state.buildings}
                 me={loc}
@@ -426,7 +430,8 @@ export default function App() {
           <div className="absolute right-3 top-[80px] z-10 flex items-center gap-2">
             <div className="glass flex rounded-full p-1 text-xs">
               {([["map", "Explore"], ["3d", "Satellite"]] as const).map(([k, l]) => (
-                <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") setWarmSat(true); }} className={cx("rounded-full px-3.5 py-1.5 font-medium", view === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>{l}</button>
+                <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
+                  onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }} className={cx("rounded-full px-3.5 py-1.5 font-medium", view === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>{l}</button>
               ))}
             </div>
             {/* Maps-style locate button: centers on you, asks for location the first time */}
