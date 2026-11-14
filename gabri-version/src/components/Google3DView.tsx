@@ -6,8 +6,8 @@
  */
 import { Deck, FlyToInterpolator, type MapViewState, type PickingInfo } from "@deck.gl/core";
 import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
-import { Tile3DLayer } from "@deck.gl/geo-layers";
-import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { Tile3DLayer, TileLayer } from "@deck.gl/geo-layers";
+import { BitmapLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
 import { RotateCcw, RotateCw, Compass } from "lucide-react";
@@ -27,6 +27,20 @@ export interface CameraBus { listeners: Set<(c: Camera) => void> }
 
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
 const TILESET = "https://tile.googleapis.com/v1/3dtiles/root.json";
+
+/** Google 2D satellite tiles need a session token (Map Tiles API, same key). Fetched once per page. */
+let sessionPromise: Promise<string | null> | null = null;
+function satelliteSession() {
+  sessionPromise ??= fetch(`https://tile.googleapis.com/v1/createSession?key=${KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mapType: "satellite", language: "en-US", region: "US" }),
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d: { session?: string } | null) => d?.session ?? null)
+    .catch(() => null);
+  return sessionPromise;
+}
 const BOUNDS = { west: -118.2995, south: 34.0115, east: -118.2715, north: 34.0305 };
 
 /** Walker avatar clips (from the procedural Trojan, exported to .glb at runtime). */
@@ -113,6 +127,7 @@ export default function Google3DView(props: Props) {
   const ZOOM_LABELS = 18.2;
   const zoomedIn = useRef((props.initialCamera?.zoom ?? 16.6) >= ZOOM_LABELS);
   const [credits, setCredits] = useState("");
+  const session = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cb = useRef(props);
   useEffect(() => { cb.current = props; });
@@ -153,6 +168,22 @@ export default function Google3DView(props: Props) {
     const w = walk.current;
     const walkLayers = w ? walkLayersFor(w, terrain) : [];
     return [
+      // flat Google satellite underneath: loads in a second, then the 3D campus streams in on top of it
+      ...(session.current ? [new TileLayer<ImageBitmap>({
+        id: "google-2d",
+        data: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${session.current}&key=${KEY}`,
+        minZoom: 0,
+        maxZoom: 19,
+        tileSize: 256,
+        maxRequests: 16,
+        onViewportLoad: () => markReady(),
+        renderSubLayers: (sp) => {
+          const [[w, so], [e, n]] = sp.tile.boundingBox;
+          const z = gz - 2; // just under the 3D surface so the 3D mesh wins wherever it has loaded
+          return new BitmapLayer({ id: sp.id, image: sp.data, bounds: [[w, so, z], [w, n, z], [e, n, z], [e, so, z]] });
+        },
+        updateTriggers: { renderSubLayers: Math.round(gz) },
+      })] : []),
       tileLayer(),
       // invisible hover targets, one per building
       new ScatterplotLayer<Building>({
@@ -514,6 +545,7 @@ export default function Google3DView(props: Props) {
       },
       layers: layers(),
     });
+    satelliteSession().then((sess) => { session.current = sess; created?.setProps({ layers: layers() }); });
     }, 0);
     return () => {
       clearTimeout(t);

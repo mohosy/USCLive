@@ -282,7 +282,7 @@ export default function App() {
               buildings={state.buildings}
               me={loc}
               layers={layers}
-              mapStyle={view === "3d" ? "satellite" : "map"}
+              mapStyle="map"
               selectedEventId={selEvent}
               highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
               focus={focus}
