@@ -17,7 +17,7 @@ const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }>
     url: "mapbox://styles/mapbox/standard",
     config: { lightPreset: "day", show3dObjects: true, show3dBuildings: true, show3dLandmarks: true, show3dTrees: true, showTransitLabels: false, showRoadLabels: true },
   },
-  // Aerial imagery; we extrude real building heights on top of it for a 3D campus
+  // Aerial imagery: shown as the placeholder while the photoreal 3D view loads
   satellite: {
     url: "mapbox://styles/mapbox/standard-satellite",
     config: { lightPreset: "day", showTransitLabels: false, showRoadLabels: true },
@@ -34,6 +34,8 @@ function placeConfig(style: MapStyle, on: boolean): Record<string, boolean> {
 // Keep the camera on USC University Park Campus (plus a little margin).
 const USC_BOUNDS: [[number, number], [number, number]] = [[-118.2995, 34.0115], [-118.2715, 34.0305]];
 
+export interface Camera { longitude: number; latitude: number; zoom: number; pitch: number; bearing: number }
+
 export interface MapLayers { events: boolean; hotspots: boolean; columns: boolean; places: boolean }
 
 interface Props {
@@ -48,6 +50,8 @@ interface Props {
   focus: { lat: number; lng: number; zoom?: number; key: number } | null;
   onSelectEvent: (id: string) => void;
   onSelectBuilding: (id: string) => void;
+  initialCamera?: Camera | null;
+  onCamera?: (c: Camera) => void;
 }
 
 type FC = FeatureCollection;
@@ -161,20 +165,6 @@ export default function MapView(props: Props) {
     m.addSource("hot-columns", { type: "geojson", data: data.current.columns });
     m.addSource("building-labels", { type: "geojson", data: data.current.buildings });
 
-    if (sat) {
-      // 3D campus over the aerial photo: real building footprints and heights from Mapbox Streets
-      m.addLayer({
-        id: "sat-3d", type: "fill-extrusion", source: "composite", "source-layer": "building", slot: "middle", minzoom: 14,
-        filter: ["==", ["get", "extrude"], "true"],
-        paint: {
-          "fill-extrusion-color": "#ece6da",
-          "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 14, 0, 15.5, ["get", "height"]],
-          "fill-extrusion-base": ["get", "min_height"],
-          "fill-extrusion-opacity": 0.82,
-          "fill-extrusion-vertical-gradient": true,
-        },
-      });
-    }
 
     m.addLayer({
       id: "hot-heat", type: "heatmap", source: "hot-points", slot: "middle",
@@ -260,18 +250,26 @@ export default function MapView(props: Props) {
       accessToken: TOKEN,
       style: s.url,
       config: { basemap: { ...s.config, ...placeConfig(styleRef.current, props.layers.places) } },
-      center: USC_CENTER,
-      zoom: 16.4,
+      center: props.initialCamera ? [props.initialCamera.longitude, props.initialCamera.latitude] : USC_CENTER,
+      zoom: props.initialCamera?.zoom ?? 16.4,
       minZoom: 15,
       maxZoom: 19.5,
       maxBounds: USC_BOUNDS,
-      pitch: 60,
+      pitch: props.initialCamera?.pitch ?? 60,
       maxPitch: 72,
-      bearing: -20,
+      bearing: props.initialCamera?.bearing ?? -20,
     });
     map.current = m;
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
     m.on("style.load", install);
+    // trackpad two-finger click = right click: rotate the map instead of opening the browser menu
+    el.current.addEventListener("contextmenu", (e) => e.preventDefault());
+    const emit = () => {
+      const c = m.getCenter();
+      cb.current.onCamera?.({ longitude: c.lng, latitude: c.lat, zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() });
+    };
+    m.on("move", emit);
+    emit();
 
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
     m.on("mouseenter", "ev-pins", () => (m.getCanvas().style.cursor = "pointer"));

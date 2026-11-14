@@ -10,7 +10,8 @@ import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
 import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
-import type { MapLayers, MapStyle } from "./MapView";
+import type { Camera, MapLayers } from "./MapView";
+import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
 import { Avatar, Button, LEVEL_COLOR, cx } from "./ui";
@@ -29,7 +30,12 @@ export default function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
-  const [mapStyle, setMapStyle] = useState<MapStyle | "3d">("map");
+  const [view, setView] = useState<"map" | "3d">("map");
+  const [threeReady, setThreeReady] = useState(false); // 3D tiles loaded enough to show
+  const [flatGone, setFlatGone] = useState(false); // flat satellite placeholder removed after the fade
+  const camera = useRef<Camera | null>(null); // shared so switching views keeps the same spot
+  const [camBus] = useState<CameraBus>(() => ({ listeners: new Set() }));
+  const [startCam, setStartCam] = useState<Camera | null>(null); // camera snapshot taken when switching views
   const [selEvent, setSelEvent] = useState<string | null>(null);
   const [selBuilding, setSelBuilding] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number; key: number } | null>(null);
@@ -44,6 +50,18 @@ export default function App() {
   const [tick, setTick] = useState(0);
   const seenNotifs = useRef<Set<string> | null>(null);
   const focusSeq = useRef(0); // makes every fly-to a new object, even to the same spot
+
+  function switchView(v: "map" | "3d") {
+    if (v === view) return;
+    setStartCam(camera.current);
+    setThreeReady(false);
+    setFlatGone(false);
+    setView(v);
+  }
+  const onFlatCamera = (c: Camera) => {
+    camera.current = c;
+    camBus.listeners.forEach((fn) => fn(c));
+  };
 
   const refresh = useCallback(async () => {
     try { setState(await api<AppState>("/api/state")); setTick((t) => t + 1); } catch { /* keep last state */ }
@@ -220,31 +238,43 @@ export default function App() {
 
         {/* Map */}
         <main className="relative min-w-0 flex-1">
-          {state && mapStyle === "3d" && (
-            <Google3DView
-              events={layers.events ? mapEvents : []}
-              buildings={state.buildings}
-              me={loc}
-              selectedEventId={selEvent}
-              highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
-              focus={focus}
-              onSelectEvent={openEvent}
-            />
-          )}
-          {state && mapStyle !== "3d" && (
+          {/* Flat map. In 3D mode it shows satellite as a placeholder until the 3D campus has loaded. */}
+          {state && (view === "map" || !flatGone) && (
             <MapView
               events={layers.events ? mapEvents : []}
               hotspots={state.hotspots}
               buildings={state.buildings}
               me={loc}
               layers={layers}
-              mapStyle={mapStyle as MapStyle}
+              mapStyle={view === "3d" ? "satellite" : "map"}
               selectedEventId={selEvent}
               highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
               focus={focus}
               onSelectEvent={openEvent}
               onSelectBuilding={openBuilding}
+              initialCamera={startCam}
+              onCamera={onFlatCamera}
             />
+          )}
+          {state && view === "3d" && (
+            <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
+              <Google3DView
+                events={layers.events ? mapEvents : []}
+                buildings={state.buildings}
+                me={loc}
+                selectedEventId={selEvent}
+                highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
+                focus={focus}
+                onSelectEvent={openEvent}
+                initialCamera={startCam}
+                follow={camBus}
+                onReady={() => { setThreeReady(true); setTimeout(() => setFlatGone(true), 800); }}
+                onCamera={(c) => { camera.current = c; }}
+              />
+            </div>
+          )}
+          {view === "3d" && !threeReady && (
+            <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-line bg-white px-3 py-1 text-xs text-muted shadow-sm">Loading 3D campus…</div>
           )}
 
           <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
@@ -257,12 +287,12 @@ export default function App() {
           </div>
 
           <div className="absolute right-3 top-3 z-10 flex rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
-            {([["map", "Map"], ["satellite", "Satellite"], ["3d", "3D"]] as const).map(([k, l]) => (
-              <button key={k} onClick={() => setMapStyle(k)} className={cx("rounded-md px-3 py-1 font-medium", mapStyle === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
+            {([["map", "Map"], ["3d", "3D"]] as const).map(([k, l]) => (
+              <button key={k} onClick={() => switchView(k)} className={cx("rounded-md px-3 py-1 font-medium", view === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
             ))}
           </div>
 
-          {mapStyle !== "3d" && <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
+          {view === "map" && <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
             {([["events", "Events"], ["hotspots", "Crowds"], ["columns", "3D crowds"], ["places", "Places"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => setLayers((x) => ({ ...x, [k]: !x[k] }))} className={cx("rounded-md px-2.5 py-1 font-medium", layers[k] ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
             ))}
