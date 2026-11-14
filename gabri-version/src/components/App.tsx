@@ -15,6 +15,7 @@ import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
 import { Avatar, Button, LEVEL_COLOR, cx } from "./ui";
 
+const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 
 type Tab = "now" | "events" | "study";
@@ -28,7 +29,7 @@ export default function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
-  const [mapStyle, setMapStyle] = useState<MapStyle>("map");
+  const [mapStyle, setMapStyle] = useState<MapStyle | "3d">("map");
   const [selEvent, setSelEvent] = useState<string | null>(null);
   const [selBuilding, setSelBuilding] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number; key: number } | null>(null);
@@ -219,14 +220,25 @@ export default function App() {
 
         {/* Map */}
         <main className="relative min-w-0 flex-1">
-          {state && (
+          {state && mapStyle === "3d" && (
+            <Google3DView
+              events={layers.events ? mapEvents : []}
+              buildings={state.buildings}
+              me={loc}
+              selectedEventId={selEvent}
+              highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
+              focus={focus}
+              onSelectEvent={openEvent}
+            />
+          )}
+          {state && mapStyle !== "3d" && (
             <MapView
               events={layers.events ? mapEvents : []}
               hotspots={state.hotspots}
               buildings={state.buildings}
               me={loc}
               layers={layers}
-              mapStyle={mapStyle}
+              mapStyle={mapStyle as MapStyle}
               selectedEventId={selEvent}
               highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
               focus={focus}
@@ -245,12 +257,12 @@ export default function App() {
           </div>
 
           <div className="absolute right-3 top-3 z-10 flex rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
-            {([["map", "Map"], ["satellite", "Satellite"]] as const).map(([k, l]) => (
+            {([["map", "Map"], ["satellite", "Satellite"], ["3d", "3D"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => setMapStyle(k)} className={cx("rounded-md px-3 py-1 font-medium", mapStyle === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
             ))}
           </div>
 
-          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
+          {mapStyle !== "3d" && <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
             {([["events", "Events"], ["hotspots", "Crowds"], ["columns", "3D crowds"], ["places", "Places"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => setLayers((x) => ({ ...x, [k]: !x[k] }))} className={cx("rounded-md px-2.5 py-1 font-medium", layers[k] ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
             ))}
@@ -259,7 +271,7 @@ export default function App() {
                 {Object.entries(LEVEL_COLOR).map(([l, c]) => <span key={l} className="flex items-center gap-1 capitalize"><span className="h-2 w-2 rounded-full" style={{ background: c }} />{l}</span>)}
               </div>
             )}
-          </div>
+          </div>}
 
           <div className="pointer-events-none absolute bottom-12 right-14 z-20 flex w-80 flex-col gap-2">
             {toasts.map((n) => (

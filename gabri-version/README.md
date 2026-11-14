@@ -23,6 +23,7 @@ Without an API key everything still works in **offline mode** (heuristics). With
 | Feature | Where |
 |---|---|
 | 3D campus map (Mapbox Standard: 3D buildings, landmarks, trees; needs `NEXT_PUBLIC_MAPBOX_TOKEN`), event pins sized by attendance | `src/components/MapView.tsx` |
+| Map / Satellite / **3D** switch. 3D = Google Photorealistic 3D Tiles via deck.gl (needs `NEXT_PUBLIC_GOOGLE_MAPS_KEY` with Map Tiles API) | `src/components/Google3DView.tsx` |
 | Hotspots: heatmap + 3D "crowd columns" vs. normal level for that hour, k-anonymity (<5 people hidden) | `src/lib/hotspots.ts` |
 | **"What should I do now?"** — free time before next class, walk times, friends, free food → 3 ranked suggestions | `src/app/api/ai/now`, `NowPanel.tsx` |
 | Ask the map (natural language → answer + highlighted pins + fly-to) | `src/app/api/ai/ask` |
