@@ -1133,16 +1133,16 @@ function build3d() {
   // Stepped seating tiers. The outer edge follows the real footprint (OSM building outline: 321 m by 232 m, centred 5 m east of the field).
   const N = 10, ring = f => ell(74 + 87 * f, 44 + 72 * f).map(([x, y]) => [x + 5.5 * f / mx, y - 2 * f / my]);
   for (let i = 0; i < N; i++) { const top = i === N - 1;
-    box(ring((i + 1) / N), 3 + 2.3 * (i + 1) + (top ? 1.5 : 0), 0, top ? '#e6dccb' : i % 2 ? '#c9b89c' : '#b9a688', [ring(i / N).reverse()]); }
+    box(ring((i + 1) / N), 4 + 3.9 * (i + 1) + (top ? 3 : 0), 0, top ? '#e6dccb' : i % 2 ? '#cdbb9d' : '#a8946f', [ring(i / N).reverse()]); }   // each tier rises 3.9 m, so the inner seating walls show; the rim tops out at 46 m
   box(ell(74, 44), .3, 0, '#7fb069');                                           // the arena floor, the field and its white lines
   box(rect(0, 0, 109.7, 48.8), .5, 0, '#5f9c4a');
   for (let i = 0; i <= 10; i++) box(rect(-45.72 + i * 9.144, 0, .7, 48.8), .7, 0, '#ffffff');
   for (const y of [-24.4, 24.4]) box(rect(0, y, 109.7, .7), .7, 0, '#ffffff');
   for (const x of [-54.85, 54.85]) box(rect(x, 0, .7, 48.8), .7, 0, '#ffffff');
   // The peristyle: a row of piers under a lintel with a taller centre arch. It stands at the east end, where the real one is.
-  for (let i = -4; i <= 4; i++) if (i) box(rect(172, i * 12.5 - 2, 7, 5), 19, 0, '#d8c9ad');
-  box(rect(172, -2, 8, 112), 24, 19, '#e3d6bd'); box(rect(172, -17, 8, 6), 31, 0, '#d8c9ad'); box(rect(172, 13, 8, 6), 31, 0, '#d8c9ad'); box(rect(172, -2, 9, 36), 35, 28, '#e3d6bd');
-  for (const [x, y] of [[-126, -104], [136, -104], [-126, 100], [136, 100]]) { box(rect(x, y, 2.6, 2.6), 42, 0, '#8d8d8d'); box(rect(x, y, 10, 4), 47, 42, '#fff8d8'); }   // four light towers
+  for (let i = -4; i <= 4; i++) if (i) box(rect(172, i * 12.5 - 2, 7, 5), 30, 0, '#d8c9ad');
+  box(rect(172, -2, 8, 112), 38, 30, '#e3d6bd'); box(rect(172, -17, 8, 6), 46, 0, '#d8c9ad'); box(rect(172, 13, 8, 6), 46, 0, '#d8c9ad'); box(rect(172, -2, 9, 36), 54, 42, '#e3d6bd');
+  for (const [x, y] of [[-126, -104], [136, -104], [-126, 100], [136, 100]]) { box(rect(x, y, 2.6, 2.6), 62, 0, '#8d8d8d'); box(rect(x, y, 10, 4), 68, 62, '#fff8d8'); }   // four light towers
   // Campus buildings, from their own OSM footprints, sit just over the base map's beige blocks: terracotta, with about a quarter off-white.
   const TONE = ['#b9573a', '#c4653f', '#ad4f35', '#ecebe6', '#c9cdd2'], dec = f => { const o = []; for (let i = 0; i < f.length; i += 2) o.push([-118.2920 + f[i] / 1e6, 34.0180 + f[i + 1] / 1e6]); return o; };
   for (const [h, b, t, ...rs] of BLD) box(dec(rs[0]), h, b, TONE[t], rs.slice(1).map(dec));
@@ -1150,7 +1150,8 @@ function build3d() {
   const GREEN = ['#5e8f47', '#6f9e52', '#4f7f3d'];
   TREES.forEach(([lng, lat, r, h], i) => { const kx = 111320 * Math.cos(lat * RAD), ring = n => { const o = []; for (let j = 0; j <= 8; j++) { const a = j / 8 * 2 * Math.PI; o.push([lng + n * Math.cos(a) / kx, lat + n * Math.sin(a) / 110540]); } return o; };
     box(ring(.45), 3, 0, '#7a6248'); box(ring(r), h * .72, 2.6, GREEN[i % 3]); box(ring(r * .62), h, h * .72, GREEN[(i + 1) % 3]); });
-  return { type: 'FeatureCollection', features: solid };
+  const shadow = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ell(172, 126).map(([x, y]) => [x + 26 / mx, y - 20 / my])] } };   // a soft shadow on the ground, down-light of the bowl
+  return { solid: { type: 'FeatureCollection', features: solid }, shadow };
 }
 const ringPx = p => ['interpolate', ['exponential', 2], ['zoom'], 10, ['*', ['get', 'r'], ['+', .45, ['*', 1.15, p]], 1024 / 64876], 22, ['*', ['get', 'r'], ['+', .45, ['*', 1.15, p]], 4194304 / 64876]];
 
@@ -1179,6 +1180,14 @@ const GMap = {
       m.on('moveend', () => this.soft());
       const el = m.getCanvasContainer();
       for (const ev of ['mousedown', 'touchstart', 'wheel', 'keydown']) el.addEventListener(ev, () => this.hands(), { passive: true, capture: true });
+      // Trackpads. Safari reports a two-finger twist and pinch as gesture events: the twist rotates, the pinch zooms.
+      let g0 = null;
+      el.addEventListener('gesturestart', e => { e.preventDefault(); g0 = { b: m.getBearing(), z: m.getZoom() }; }, { passive: false });
+      el.addEventListener('gesturechange', e => { e.preventDefault(); if (g0) m.jumpTo({ bearing: g0.b - e.rotation, zoom: Math.max(CAM.minZoom, Math.min(CAM.maxZoom, g0.z + Math.log2(e.scale || 1))) }); }, { passive: false });
+      el.addEventListener('gestureend', () => { g0 = null; });
+      // Chrome does not report the twist, so Option + two-finger swipe rotates (left/right) and tilts (up/down). Phones twist natively.
+      el.addEventListener('wheel', e => { if (!e.altKey) return; e.preventDefault(); e.stopPropagation();
+        m.jumpTo({ bearing: m.getBearing() + e.deltaX * .18, pitch: Math.max(0, Math.min(CAM.maxPitch, m.getPitch() - e.deltaY * .1)) }); }, { passive: false, capture: true });
       // Shift + drag tilts the camera (box zoom is off). Right-drag and Ctrl + drag already rotate and tilt.
       el.addEventListener('mousedown', e => { if (!e.shiftKey || e.button !== 0) return; const y0 = e.clientY, p0 = m.getPitch(); m.dragPan.disable();
         const mv = v => m.setPitch(Math.max(0, Math.min(CAM.maxPitch, p0 + (y0 - v.clientY) * .35))), up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); m.dragPan.enable(); };
@@ -1221,7 +1230,9 @@ const GMap = {
   },
   add3d() {
     const m = this.map; if (m.getSource('tm-3d')) return;
-    m.addSource('tm-3d', { type: 'geojson', data: build3d() });
+    const d = build3d();
+    m.addSource('tm-shadow', { type: 'geojson', data: d.shadow }); m.addSource('tm-3d', { type: 'geojson', data: d.solid });
+    m.addLayer({ id: 'tm-shadow', type: 'fill', source: 'tm-shadow', paint: { 'fill-color': '#2b2418', 'fill-opacity': .2 } }, m.getLayer('building-3d') ? 'building-3d' : undefined);
     m.addLayer({ id: 'tm-3d', type: 'fill-extrusion', source: 'tm-3d', paint: { 'fill-extrusion-color': ['get', 'c'], 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-base': ['get', 'b'], 'fill-extrusion-vertical-gradient': true } });
     // The base map draws the Coliseum as one solid 35 m block. Flatten that one building so our bowl shows instead.
     if (m.getLayer('building-3d')) m.setPaintProperty('building-3d', 'fill-extrusion-height', ['case', ['boolean', ['feature-state', 'flat'], false], 0, ['get', 'render_height']]);
@@ -1238,7 +1249,7 @@ const GMap = {
     const m = this.map; this.sat = name === 'satellite'; this.root.classList.toggle('sat', this.sat);
     if (this.kind === 'mapbox') return m.setStyle(STYLES[name], { config: { basemap: BASEMAP } });   // 'style.load' then calls onStyle()
     const vis = (id, on) => { if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
-    vis('sat', this.sat); for (const id of ['building', 'tm-3d']) vis(id, !this.sat);
+    vis('sat', this.sat); for (const id of ['building', 'tm-3d', 'tm-shadow']) vis(id, !this.sat);
     if (m.getLayer('building-3d')) m.setPaintProperty('building-3d', 'fill-extrusion-opacity', this.sat ? .45 : 1);
     this.clear(); renderMap();
   },
@@ -1329,7 +1340,8 @@ const GMap = {
       back: 1.5 * el.clientHeight * 78271.517 * Math.cos(c.lat * RAD) / 2 ** z * Math.sin(m.getPitch() * RAD) };
   },
   project(lat, lng) { const p = this.map.project([lng, lat]); return [p.x, p.y]; },
-  fly(lat, lng, zoom) { const m = this.map; this.hands(); m.flyTo({ center: [lng, lat], zoom: Math.max(m.getZoom(), zoom || 17), padding: this.pad(), duration: 1500 }); },
+  fly(lat, lng, zoom, pitch) { const m = this.map; this.hands();   // with a pitch it is a tilted close-up at exactly that zoom
+    m.flyTo({ center: [lng, lat], zoom: pitch != null ? zoom : Math.max(m.getZoom(), zoom || 17), ...(pitch != null ? { pitch } : {}), padding: this.pad(), duration: 1600 }); },
   home() { this.locate(); },
 };
 setInterval(() => { GMap.flatten(); GMap.breathe(); }, 1600);   // the rings repaint every frame, so the map never goes idle: poll instead
@@ -1760,7 +1772,8 @@ function doAct(act) {
     case 'reset': closePops(); seed(); load(); S.dismissed = []; SS.set('dismissed', []); S.syl = { text: '', result: null }; S.evForm = null; S.sel = null; toast('Demo data reset'); break;
     case 'signout': SS.del('user'); S.user = null; closePops(); closeDrawer(); $('#demo').hidden = true; Bubbles.queue(); return renderAuth();
     case 'jump': setClock(+arg); S.dismissed = []; toast('Demo clock set to ' + fmt(+arg)); break;
-    case 'place': { const p = place(arg); S.detail = arg; S.sel = 'place:' + arg; S._scrollTop = true; if (S.sheet === 'peek') S.sheet = 'half'; closePops(); $('#q').value = ''; renderAll(); return Mx.fly(p.lat, p.lng); }
+    case 'place': { const p = place(arg); S.detail = arg; S.sel = 'place:' + arg; S._scrollTop = true; if (S.sheet === 'peek') S.sheet = 'half'; closePops(); $('#q').value = ''; renderAll();
+      return arg === 'coliseum' ? Mx.fly(p.lat, p.lng, 16.6, 66) : Mx.fly(p.lat, p.lng); }   // the football bubble flies to a tilted close-up of the stadium
     case 'event': { const e = DB.events.find(x => x.id === arg); if (!e) return;
       if (S.sel === 'event:' + arg && S.tab === 'events' && !S.detail && S.sheet !== 'peek') { S.sel = null; break; }
       S.sel = 'event:' + arg; S.layers.events = 1; S.evCat = 'all'; closePops(); $('#q').value = ''; openTab('events'); S._scrollTop = false; renderAll(); Mx.fly(e.lat, e.lng); return reveal('#ev-' + arg); }
