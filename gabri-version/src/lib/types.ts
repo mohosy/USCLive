@@ -41,7 +41,8 @@ export type BuildingKind =
   | "student_center"
   | "housing"
   | "arena"
-  | "outdoor";
+  | "outdoor"
+  | "parking";
 
 export interface Building {
   id: string;
@@ -52,6 +53,8 @@ export interface Building {
   kind: BuildingKind;
   /** Typical headcount when "normal-busy". Used to scale hotspot counts. */
   capacity: number;
+  /** extra buildings from OpenStreetMap: labeled and taggable, but no crowd tracking */
+  minor?: boolean;
   studySpot?: { quiet: boolean; outlets: boolean; openLate: boolean; note: string };
 }
 
@@ -85,6 +88,7 @@ export interface CampusEvent {
   moderation: Moderation;
   expectedTurnout?: number;
   createdAt: string;
+  game?: GameInfo;
 }
 
 export interface ClassMeeting {
@@ -122,13 +126,14 @@ export interface InboxItem {
 
 export interface Notification {
   id: string;
-  kind: "event" | "deadline" | "invite" | "hotspot" | "friend" | "food" | "system";
+  kind: "event" | "deadline" | "invite" | "hotspot" | "friend" | "food" | "system" | "safety";
   title: string;
   body: string;
   createdAt: string;
   read: boolean;
   eventId?: string;
   buildingId?: string;
+  alertId?: string;
   source?: InboxItem["source"] | "live";
   dueAt?: string;
 }
@@ -141,6 +146,33 @@ export interface Hotspot {
   level: "quiet" | "normal" | "busy" | "packed";
   trend: "rising" | "falling" | "steady";
   suppressed: boolean; // k-anonymity: too few people to show
+}
+
+/** Live score for a game happening on/near campus (demo: simulated from the start time). */
+export interface GameInfo {
+  sport: "football" | "basketball" | "volleyball";
+  home: string;
+  away: string;
+  /** points scored per minute of game clock, used to simulate a live score */
+  homeRate: number;
+  awayRate: number;
+}
+
+/** A DPS (Department of Public Safety) alert shown on the map until it expires or is resolved. */
+export interface SafetyAlert {
+  id: string;
+  kind: "crime" | "suspicious" | "hazard" | "police_activity";
+  severity: "high" | "medium" | "low";
+  title: string; // e.g. "Suspicious activity reported"
+  advice: string; // e.g. "Avoid Figueroa & 37th"
+  locationText: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+  createdAt: string;
+  expiresAt: string;
+  source: "dps" | "dps_email";
+  resolved: boolean;
 }
 
 export interface Org {

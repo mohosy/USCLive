@@ -1,9 +1,12 @@
 import type { Building, SchoolId } from "./types";
+// Every other named building on/around campus, from OpenStreetMap (© OpenStreetMap contributors, ODbL)
+import OSM_BUILDINGS from "./campus-buildings.osm.json";
 
 /** USC University Park Campus. Coordinates come from Mapbox place search, so pins line up with the map's labels. */
 export const USC_CENTER: [number, number] = [-118.2851, 34.0208]; // [lng, lat]
 
-export const BUILDINGS: Building[] = [
+/** Core buildings: hand-tuned capacity/kind, used for crowds, study spots and the demo data. */
+export const CORE_BUILDINGS: Building[] = [
   { id: "lvl", code: "LVL", name: "Leavey Library", lat: 34.021848, lng: -118.282864, kind: "library", capacity: 450,
     studySpot: { quiet: false, outlets: true, openLate: true, note: "24/7 during the semester, group rooms on the lower level" } },
   { id: "dml", code: "DML", name: "Doheny Memorial Library", lat: 34.020216, lng: -118.283729, kind: "library", capacity: 350,
@@ -38,7 +41,20 @@ export const BUILDINGS: Building[] = [
   { id: "evk", code: "EVK", name: "Everybody's Kitchen", lat: 34.021384, lng: -118.282125, kind: "dining", capacity: 350 },
   { id: "sci", code: "SCI", name: "Cinematic Arts Complex", lat: 34.023380, lng: -118.286155, kind: "classroom", capacity: 300,
     studySpot: { quiet: true, outlets: true, openLate: false, note: "Courtyard tables, film-school calm" } },
+  { id: "col", code: "COL", name: "LA Memorial Coliseum", lat: 34.013980, lng: -118.287851, kind: "arena", capacity: 4000 },
   { id: "mus", code: "MUS", name: "Thornton School of Music", lat: 34.022731, lng: -118.285254, kind: "classroom", capacity: 200 },
+];
+
+/** All buildings: core + every other named building, so any place can be tagged and pinned exactly. */
+export const BUILDINGS: Building[] = [...CORE_BUILDINGS, ...(OSM_BUILDINGS as Building[])];
+
+/** Street corners around campus, so off-campus DPS alerts can be placed exactly. */
+export const INTERSECTIONS: { id: string; name: string; lat: number; lng: number }[] = [
+  { id: "fig_37th", name: "Figueroa St & 37th St", lat: 34.017971, lng: -118.280087 },
+  { id: "fig_jefferson", name: "Figueroa St & Jefferson Blvd", lat: 34.02219, lng: -118.280392 },
+  { id: "hoover_jefferson", name: "Hoover St & Jefferson Blvd", lat: 34.023284, lng: -118.28325 },
+  { id: "vermont_jefferson", name: "Vermont Ave & Jefferson Blvd", lat: 34.025415, lng: -118.291185 },
+  { id: "vermont_exposition", name: "Vermont Ave & Exposition Blvd", lat: 34.018585, lng: -118.291698 },
 ];
 
 export const BUILDING_BY_ID: Record<string, Building> = Object.fromEntries(BUILDINGS.map((b) => [b.id, b]));

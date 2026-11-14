@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { askMap, nowContext, type AskT } from "@/lib/ai";
-import { BUILDINGS } from "@/lib/campus";
+import { CORE_BUILDINGS } from "@/lib/campus";
 import { computeHotspots } from "@/lib/hotspots";
 import { body } from "@/lib/http";
 import { candidateEvents, freeWindow, hotspotLabel, studySpots, todaysClasses } from "@/lib/planner";
@@ -25,7 +25,7 @@ STUDENT: ${me.name}, ${me.major}. Classes today: ${todaysClasses(me, now).map((c
 EVENTS (next 7 days):
 ${events.map((e) => `${e.id} | ${e.title} | ${e.category} | ${e.buildingName} (${e.buildingId}) | ${fmt(e.start)}-${fmt(e.end)} | ${e.walkMin} min walk | ${e.visibility}${e.course ? ` | course ${e.course}` : ""}${e.freeFood ? ` | FREE FOOD: ${e.foodDetail}` : ""}${e.friendsGoing.length ? ` | friends: ${e.friendsGoing.map((f) => f.name).join(", ")}` : ""} | ${e.attendeeCount} going`).join("\n")}
 CROWDS NOW (building id | name | level):
-${BUILDINGS.map((b) => `${b.id} | ${b.name} | ${hotspotLabel(hs.find((h) => h.buildingId === b.id)!)}`).join("\n")}
+${CORE_BUILDINGS.map((b) => `${b.id} | ${b.name} | ${hotspotLabel(hs.find((h) => h.buildingId === b.id)!)}`).join("\n")}
 STUDY SPOTS (best first): ${studySpots(loc, now).slice(0, 5).map((s) => `${s.building.name} (${s.fill}% full, ${s.walk} min)`).join("; ")}`;
 
   const fallback = (): AskT => {

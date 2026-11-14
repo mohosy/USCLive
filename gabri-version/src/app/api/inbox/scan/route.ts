@@ -1,5 +1,5 @@
 import { scanInbox } from "@/lib/ai";
-import { BUILDING_BY_ID } from "@/lib/campus";
+import { BUILDING_BY_ID, INTERSECTIONS } from "@/lib/campus";
 import { toIso } from "@/lib/http";
 import { addNotification, db, getMe, newId } from "@/lib/store";
 import type { CampusEvent, Notification } from "@/lib/types";
@@ -23,6 +23,22 @@ export async function POST() {
 
     if (r.kind === "phishing") {
       created.push(addNotification({ kind: "system", title: " Phishing email detected", body: `"${item.subject}" from ${item.from} — don't click or enter your password.`, source: src }));
+      continue;
+    }
+    if (r.kind === "safety" && r.safety) {
+      const spot = INTERSECTIONS.find((x) => x.id === r.safety!.intersectionId) ?? (r.buildingId !== "unknown" ? BUILDING_BY_ID[r.buildingId] : undefined);
+      if (spot) {
+        const now = Date.now();
+        const alert = {
+          id: newId("al"), kind: "crime" as const, severity: "high" as const, title: r.safety.title, advice: r.safety.advice,
+          locationText: "name" in spot ? spot.name : "", lat: spot.lat, lng: spot.lng, radiusM: 100,
+          createdAt: new Date(now).toISOString(), expiresAt: new Date(now + 90 * 60_000).toISOString(), source: "dps_email" as const, resolved: false,
+        };
+        d.alerts.push(alert);
+        created.push(addNotification({ kind: "safety", title: `DPS: ${alert.title}`, body: `${alert.locationText} · ${alert.advice}`, alertId: alert.id, source: src }));
+      } else {
+        created.push(addNotification({ kind: "safety", title: `DPS: ${r.safety.title}`, body: r.safety.advice, source: src }));
+      }
       continue;
     }
     if (r.kind === "deadline") {

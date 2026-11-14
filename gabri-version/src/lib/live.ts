@@ -2,7 +2,7 @@
  * Demo"live campus" simulator: every ~35s something happens (a friend posts a pickup game,
  * a hotspot surges, free food appears). Drives the live notification feed during the demo.
  */
-import { BUILDING_BY_ID } from "./campus";
+import { BUILDING_BY_ID, INTERSECTIONS } from "./campus";
 import { computeHotspots } from "./hotspots";
 import { addNotification, db, getMe, newId } from "./store";
 import type { CampusEvent } from "./types";
@@ -27,6 +27,17 @@ function addLiveEvent(e: Omit<CampusEvent, "id" |"createdAt" |"moderation" |"sou
 }
 
 const SCRIPT: (() => void)[] = [
+  () => {
+    const at = INTERSECTIONS.find((i) => i.id === "hoover_jefferson")!;
+    const now = Date.now();
+    const alert = {
+      id: newId("al"), kind: "police_activity" as const, severity: "medium" as const, title: "Police activity", advice: "Expect delays on Hoover St",
+      locationText: at.name, lat: at.lat, lng: at.lng, radiusM: 70, createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 45 * MIN).toISOString(), source: "dps" as const, resolved: false,
+    };
+    db().alerts.push(alert);
+    addNotification({ kind: "safety", title: "DPS: Police activity", body: `${at.name} · ${alert.advice}`, alertId: alert.id, source: "live" });
+  },
   () => {
     const now = Date.now();
     const ev = addLiveEvent({

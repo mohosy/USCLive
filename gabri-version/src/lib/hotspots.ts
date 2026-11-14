@@ -5,7 +5,7 @@
  * Buildings with fewer than K people are suppressed so nobody can be singled out.
  * In this MVP the counts are simulated deterministically.
  */
-import { BUILDINGS } from "./campus";
+import { CORE_BUILDINGS } from "./campus";
 import type { Building, BuildingKind, CampusEvent, Hotspot } from "./types";
 
 export const K_ANON = 5;
@@ -20,6 +20,7 @@ const CURVES: Record<BuildingKind, number[]> = {
   student_center: [.05,.02,0,0,0,0,.05,.2,.4,.5,.6,.8,.9,.8,.6,.55,.55,.6,.55,.45,.35,.25,.15,.08],
   housing:        [.6,.5,.4,.4,.4,.4,.45,.5,.4,.3,.25,.25,.3,.3,.3,.35,.4,.5,.55,.6,.65,.7,.7,.65],
   arena:          [0,0,0,0,0,0,0,.02,.05,.05,.05,.05,.05,.05,.05,.05,.08,.1,.15,.15,.12,.05,.02,0],
+  parking:        [.1,.05,.02,.02,.02,.05,.2,.5,.8,.9,.9,.85,.8,.8,.75,.7,.6,.45,.3,.2,.15,.12,.1,.1],
   outdoor:        [.02,.01,0,0,0,0,.05,.2,.4,.45,.6,.75,.85,.7,.6,.55,.5,.45,.35,.25,.15,.1,.05,.03],
 };
 
@@ -76,7 +77,7 @@ function levelFor(ratio: number, count: number, capacity: number): Hotspot["leve
 
 export function computeHotspots(events: CampusEvent[], now = new Date()): Hotspot[] {
   const before = new Date(+now - 15 * 60_000);
-  return BUILDINGS.map((b) => {
+  return CORE_BUILDINGS.map((b) => {
     const count = countAt(b, now, events);
     const prev = countAt(b, before, events);
     const baseline = baselineAt(b, now);

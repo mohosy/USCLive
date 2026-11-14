@@ -17,7 +17,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import { BUILDINGS, matchBuilding } from "./campus";
+import { BUILDINGS, INTERSECTIONS, matchBuilding } from "./campus";
 import type { Category, InboxItem, SchoolId } from "./types";
 
 export const CLAUDE_MODEL = "claude-opus-5-5";
@@ -302,7 +302,7 @@ ${SAFETY}`;
 const ScanResult = z.object({
   items: z.array(z.object({
     inboxId: z.string(),
-    kind: z.enum(["event", "deadline", "invite", "announcement", "phishing", "ignore"]),
+    kind: z.enum(["event", "deadline", "invite", "announcement", "safety", "phishing", "ignore"]),
     title: z.string(),
     summary: z.string().describe("one short line for a push notification"),
     start: z.string().nullable().describe("YYYY-MM-DDTHH:mm local, for events/invites"),
@@ -314,12 +314,18 @@ const ScanResult = z.object({
     freeFood: z.boolean(),
     foodDetail: z.string().nullable(),
     urgency: z.enum(["low", "medium", "high"]),
+    safety: z.object({
+      title: z.string().describe("short, e.g. 'Robbery reported'"),
+      advice: z.string().describe("short, e.g. 'Avoid Vermont & Jefferson'"),
+      intersectionId: z.enum([...INTERSECTIONS.map((i) => i.id), "none"] as unknown as [string, ...string[]]),
+    }).nullable().describe("only for kind=safety (official USC DPS / Trojans Alert messages)"),
   })),
 });
 export type ScanT = z.infer<typeof ScanResult>;
 
 export async function scanInbox(items: InboxItem[], now = new Date()) {
-  const system = `You scan a USC student's email, Brightspace announcements and calendar invites and pull out anything that belongs on their campus map or needs a reminder: events, homework/exam deadlines, invites. Mark phishing (fake USC IT, credential requests, suspicious domains) as "phishing" so we can warn the student. Newsletters with nothing actionable are "ignore".
+  const system = `You scan a USC student's email, Brightspace announcements and calendar invites and pull out anything that belongs on their campus map or needs a reminder: events, homework/exam deadlines, invites. Official USC Department of Public Safety / "Trojans Alert" messages about crimes or police activity are "safety": fill the safety object and pick the closest intersection (or buildingId if it is on campus). Mark phishing (fake USC IT, credential requests, suspicious domains) as "phishing" so we can warn the student.
+Intersections: ${INTERSECTIONS.map((i) => `${i.id}: ${i.name}`).join("; ")} Newsletters with nothing actionable are "ignore".
 ${nowContext(now)}
 Building ids:
 ${BUILDING_LIST}
@@ -337,13 +343,19 @@ function heuristicScan(items: InboxItem[], now: Date): ScanT {
       const lower = t.toLowerCase();
       const food = detectFoodHeuristic(t);
       const phishing = ruleModeration(t).riskScore >= 0.9 || /suspend|verify.*password/i.test(t);
-      const kind = phishing ? "phishing" : /due|deadline|submit/.test(lower) ? "deadline" : i.source === "gcal" || /invite|wanna come/.test(lower) ? "invite" : /review|session|fair|giving out|event/.test(lower) ? "event" : "ignore";
+      const isDps = /public safety|trojans alert|\bDPS\b/i.test(i.from + " " + t);
+      const kind = phishing ? "phishing" : isDps ? "safety" : /due|deadline|submit/.test(lower) ? "deadline" : i.source === "gcal" || /invite|wanna come/.test(lower) ? "invite" : /review|session|fair|giving out|event/.test(lower) ? "event" : "ignore";
       const ex = heuristicExtract(t, now);
       return {
         inboxId: i.id, kind, title: i.subject, summary: i.body.slice(0, 90),
         start: kind === "event" || kind === "invite" ? ex.start : null, end: kind === "event" || kind === "invite" ? ex.end : null,
         dueAt: kind === "deadline" ? ex.start : null, buildingId: ex.buildingId, room: ex.room, course: ex.course,
-        ...food, urgency: kind === "phishing" || kind === "deadline" ? "high" : "medium",
+        ...food, urgency: kind === "phishing" || kind === "deadline" || kind === "safety" ? "high" : "medium",
+        safety: kind === "safety" ? {
+          title: (i.subject.split(":").pop() ?? i.subject).trim().split(/ near | at /i)[0],
+          advice: "Avoid the area and walk with others",
+          intersectionId: (INTERSECTIONS.find((x) => x.name.split(" & ").every((part) => t.toLowerCase().includes(part.split(" ")[0].toLowerCase())))?.id ?? "none"),
+        } : null,
       } as ScanT["items"][number];
     }),
   };

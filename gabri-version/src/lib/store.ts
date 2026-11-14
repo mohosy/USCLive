@@ -5,8 +5,8 @@ process.env.TZ = "America/Los_Angeles";
  * is generated relative to "now" so a restart keeps it fresh). Swap for Postgres/Supabase later.
  */
 import { BUILDING_BY_ID } from "./campus";
-import { ME, ORGS, seedEvents, seedInbox, seedNotifications, seedUsers } from "./seed";
-import type { CampusEvent, InboxItem, Notification, User } from "./types";
+import { ME, ORGS, seedAlerts, seedEvents, seedInbox, seedNotifications, seedUsers } from "./seed";
+import type { CampusEvent, InboxItem, Notification, SafetyAlert, User } from "./types";
 
 interface DB {
   seededAt: number;
@@ -15,6 +15,7 @@ interface DB {
   inbox: InboxItem[];
   scannedInbox: string[];
   notifications: Notification[];
+  alerts: SafetyAlert[];
   lastLiveTick: number;
   liveScriptIndex: number;
 }
@@ -30,6 +31,7 @@ function fresh(): DB {
     inbox: seedInbox(now),
     scannedInbox: [],
     notifications: seedNotifications(now),
+    alerts: seedAlerts(now),
     lastLiveTick: +now,
     liveScriptIndex: 0,
   };
@@ -44,6 +46,9 @@ export function resetDb() {
   g.__usclive = fresh();
   return g.__usclive;
 }
+
+/** DPS alerts still on the map: not resolved and not expired. */
+export const activeAlerts = (now = new Date()) => db().alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now);
 
 export const currentUserId = () => ME;
 export const getUser = (id: string) => db().users.find((u) => u.id === id);

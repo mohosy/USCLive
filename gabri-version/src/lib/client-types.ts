@@ -1,4 +1,4 @@
-import type { Building, Category, ClassMeeting, Hotspot, Notification, Org, SchoolId } from "./types";
+import type { Building, Category, ClassMeeting, Hotspot, Notification, Org, SafetyAlert, SchoolId } from "./types";
 import type { PublicEvent } from "./store";
 
 export type EventView = PublicEvent;
@@ -25,12 +25,13 @@ export interface AppState {
   me: MeView;
   events: EventView[];
   hotspots: Hotspot[];
+  alerts: SafetyAlert[];
   buildings: Building[];
   orgs: Org[];
   unread: number;
 }
 
-export type { Building, Category, Hotspot, Notification, Org };
+export type { Building, Category, Hotspot, Notification, Org, SafetyAlert };
 
 export interface Loc { lat: number; lng: number; label: string; buildingId?: string }
 

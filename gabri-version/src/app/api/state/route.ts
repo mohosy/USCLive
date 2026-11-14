@@ -3,7 +3,7 @@ import { aiEnabled } from "@/lib/ai";
 import { BUILDINGS } from "@/lib/campus";
 import { computeHotspots } from "@/lib/hotspots";
 import { freeWindow, todaysClasses } from "@/lib/planner";
-import { canSee, db, getMe, getUser, orgs, publicEvent } from "@/lib/store";
+import { activeAlerts, canSee, db, getMe, getUser, orgs, publicEvent } from "@/lib/store";
 
 
 export async function GET() {
@@ -31,6 +31,7 @@ export async function GET() {
     },
     events,
     hotspots: computeHotspots(d.events, now),
+    alerts: activeAlerts(now),
     buildings: BUILDINGS,
     orgs: orgs(),
     unread: d.notifications.filter((n) => !n.read).length,

@@ -2,7 +2,8 @@
  * DEMO DATA. Everything is generated relative to"now" so the map always looks live
  * during a demo. Orgs, people and events are fictional.
  */
-import type { CampusEvent, ClassMeeting, InboxItem, Notification, Org, User } from "./types";
+import { INTERSECTIONS } from "./campus";
+import type { CampusEvent, ClassMeeting, InboxItem, Notification, Org, SafetyAlert, User } from "./types";
 
 const MIN = 60_000;
 
@@ -143,6 +144,15 @@ export function seedEvents(now: Date): CampusEvent[] {
     e({ title: "Boba & board games", description: "Monthly social, all welcome.", category: "social", buildingId: "vil",
       start: dayAt(now, -6, 19).toISOString(), end: dayAt(now, -6, 21).toISOString(), host: { kind: "org", name: "Trojan Boba Society", id: "org_boba" },
       visibility: "public", capacity: 120, freeFood: true, foodDetail: "Free boba", attendees: crowd(96), tags: [], expectedTurnout: 80 }),
+    // Live games (scores simulated from the start time, see lib/games.ts)
+    e({ title: "Football: USC vs UCLA", description: "Rivalry game at the Coliseum. Student section opens 90 min before kickoff.", category: "sports", buildingId: "col",
+      start: inMin(now, -110).toISOString(), end: inMin(now, 90).toISOString(), host: { kind: "usc", name: "USC Athletics" },
+      visibility: "public", capacity: 77500, freeFood: false, attendees: crowd(3200), tags: ["athletics", "rivalry", "live-game"], expectedTurnout: 3000,
+      game: { sport: "football", home: "USC", away: "UCLA", homeRate: 0.3, awayRate: 0.22 } }),
+    e({ title: "Men's Basketball: USC vs Oregon", description: "Conference game at Galen Center.", category: "sports", buildingId: "gal",
+      start: inMin(now, -60).toISOString(), end: inMin(now, 30).toISOString(), host: { kind: "usc", name: "USC Athletics" },
+      visibility: "public", capacity: 10258, freeFood: false, attendees: crowd(820), tags: ["athletics", "live-game"], expectedTurnout: 900,
+      game: { sport: "basketball", home: "USC", away: "ORE", homeRate: 1.75, awayRate: 1.65 } }),
     // Moderation queue examples (never shown on the public map)
     e({ title: "FREE AIRPODS for USC students!!! claim now", description: "Just DM @trojan_giveawayz and send your USC login to verify you're a student", category: "social", buildingId: "tommy",
       start: inMin(now, 60).toISOString(), end: inMin(now, 120).toISOString(), host: { kind: "user", name: "trojan_giveawayz" },
@@ -188,9 +198,24 @@ export function seedInbox(now: Date): InboxItem[] {
     { id: "in_6", source: "gcal", from: "Maya Chen", receivedAt: ago(500),
       subject: "Invitation: Maya's birthday dinner",
       body: "Maya Chen invited you to 'Maya's birthday dinner' at USC Village, today. RSVP yes/no/maybe." },
+    { id: "in_8", source: "gmail", from: "USC Department of Public Safety", receivedAt: ago(6),
+      subject: "Trojans Alert: Robbery near Vermont Ave & Jefferson Blvd",
+      body: "DPS is investigating a robbery reported at 2:40 PM near Vermont Ave and Jefferson Blvd. The suspect fled northbound. Avoid the area and walk with others. Call DPS at 213-740-4321 for an escort." },
     { id: "in_7", source: "gmail", from: "Career Center", receivedAt: ago(700),
       subject: "Engineering Career Fair next Wednesday",
       body: "120+ employers at the Galen Center next Wednesday 11am-4pm. Upload your resume to the career portal first. Free professional headshots at the entrance." },
+  ];
+}
+
+export function seedAlerts(now: Date): SafetyAlert[] {
+  const at = (id: string) => INTERSECTIONS.find((i) => i.id === id)!;
+  const ago = (m: number) => new Date(now.getTime() - m * MIN).toISOString();
+  const inn = (m: number) => new Date(now.getTime() + m * MIN).toISOString();
+  return [
+    { id: "al_1", kind: "suspicious", severity: "medium", title: "Suspicious activity reported", advice: "Avoid Figueroa & 37th", locationText: at("fig_37th").name,
+      lat: at("fig_37th").lat, lng: at("fig_37th").lng, radiusM: 90, createdAt: ago(2), expiresAt: inn(88), source: "dps", resolved: false },
+    { id: "al_2", kind: "crime", severity: "low", title: "Bike theft reported", advice: "Lock bikes with a U-lock near Leavey", locationText: "Leavey Library bike racks",
+      lat: 34.02205, lng: -118.28262, radiusM: 50, createdAt: ago(41), expiresAt: inn(49), source: "dps", resolved: false },
   ];
 }
 
