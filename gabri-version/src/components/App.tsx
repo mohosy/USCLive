@@ -27,7 +27,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("now");
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
-  const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false });
+  const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [mapStyle, setMapStyle] = useState<MapStyle>("map");
   const [selEvent, setSelEvent] = useState<string | null>(null);
   const [selBuilding, setSelBuilding] = useState<string | null>(null);
@@ -251,7 +251,7 @@ export default function App() {
           </div>
 
           <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
-            {([["events", "Events"], ["hotspots", "Crowds"], ["columns", "3D crowds"]] as const).map(([k, l]) => (
+            {([["events", "Events"], ["hotspots", "Crowds"], ["columns", "3D crowds"], ["places", "Places"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => setLayers((x) => ({ ...x, [k]: !x[k] }))} className={cx("rounded-md px-2.5 py-1 font-medium", layers[k] ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
             ))}
             {layers.hotspots && (

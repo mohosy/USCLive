@@ -12,15 +12,29 @@ const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 export type MapStyle = "map" | "satellite";
 const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }> = {
   // Mapbox Standard: 3D buildings, landmark models, trees, lighting
-  map: { url: "mapbox://styles/mapbox/standard", config: { lightPreset: "day", show3dObjects: true, showPointOfInterestLabels: true, showTransitLabels: false } },
-  // Aerial imagery with labels and terrain
-  satellite: { url: "mapbox://styles/mapbox/standard-satellite", config: { lightPreset: "day", showPointOfInterestLabels: true, showTransitLabels: false } },
+  // Mapbox's own POIs, landmark icons and place names are off: every label on the map is ours.
+  map: {
+    url: "mapbox://styles/mapbox/standard",
+    config: { lightPreset: "day", show3dObjects: true, show3dBuildings: true, show3dLandmarks: true, show3dTrees: true, showTransitLabels: false, showRoadLabels: true },
+  },
+  // Aerial imagery; we extrude real building heights on top of it for a 3D campus
+  satellite: {
+    url: "mapbox://styles/mapbox/standard-satellite",
+    config: { lightPreset: "day", showTransitLabels: false, showRoadLabels: true },
+  },
 };
+
+/** Mapbox's own POI / landmark / place labels, toggled by the "Places" button. */
+function placeConfig(style: MapStyle, on: boolean): Record<string, boolean> {
+  const c: Record<string, boolean> = { showPointOfInterestLabels: on, showPlaceLabels: on };
+  if (style === "map") Object.assign(c, { showLandmarkIcons: on, showLandmarkIconLabels: on });
+  return c;
+}
 
 // Keep the camera on USC University Park Campus (plus a little margin).
 const USC_BOUNDS: [[number, number], [number, number]] = [[-118.2995, 34.0115], [-118.2715, 34.0305]];
 
-export interface MapLayers { events: boolean; hotspots: boolean; columns: boolean }
+export interface MapLayers { events: boolean; hotspots: boolean; columns: boolean; places: boolean }
 
 interface Props {
   events: EventView[];
@@ -73,6 +87,13 @@ function hotspotGeo(hotspots: Hotspot[], buildings: Building[]): { points: FC; c
   };
 }
 
+function buildingLabelGeo(buildings: Building[]): FC {
+  return {
+    type: "FeatureCollection",
+    features: buildings.map((b) => ({ type: "Feature", properties: { id: b.id, name: b.name }, geometry: { type: "Point", coordinates: [b.lng, b.lat] } })),
+  };
+}
+
 /** Events as GeoJSON points. Several events in one building fan out in a small ring. */
 function eventGeo(events: EventView[], selectedId: string | null, highlight: string[] | null): FC {
   const perBuilding = new Map<string, number>();
@@ -109,7 +130,7 @@ export default function MapView(props: Props) {
   const ready = useRef(false);
   const styleRef = useRef<MapStyle>(props.mapStyle);
   const meMarker = useRef<mapboxgl.Marker | null>(null);
-  const data = useRef<{ events: FC; points: FC; columns: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY });
+  const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings) });
   const cb = useRef(props);
   useEffect(() => { cb.current = props; });
 
@@ -126,6 +147,9 @@ export default function MapView(props: Props) {
     m.setLayoutProperty("hot-heat", "visibility", vis(hotspots));
     m.setLayoutProperty("hot-hit", "visibility", vis(hotspots));
     m.setLayoutProperty("hot-columns", "visibility", vis(columns));
+    for (const [k, v] of Object.entries(placeConfig(styleRef.current, cb.current.layers.places))) {
+      if (m.getConfigProperty("basemap", k) !== v) m.setConfigProperty("basemap", k, v);
+    }
   }
 
   /** (Re)create our sources and layers. Runs on first load and after every style switch. */
@@ -135,6 +159,22 @@ export default function MapView(props: Props) {
     m.addSource("events", { type: "geojson", data: data.current.events });
     m.addSource("hot-points", { type: "geojson", data: data.current.points });
     m.addSource("hot-columns", { type: "geojson", data: data.current.columns });
+    m.addSource("building-labels", { type: "geojson", data: data.current.buildings });
+
+    if (sat) {
+      // 3D campus over the aerial photo: real building footprints and heights from Mapbox Streets
+      m.addLayer({
+        id: "sat-3d", type: "fill-extrusion", source: "composite", "source-layer": "building", slot: "middle", minzoom: 14,
+        filter: ["==", ["get", "extrude"], "true"],
+        paint: {
+          "fill-extrusion-color": "#ece6da",
+          "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 14, 0, 15.5, ["get", "height"]],
+          "fill-extrusion-base": ["get", "min_height"],
+          "fill-extrusion-opacity": 0.82,
+          "fill-extrusion-vertical-gradient": true,
+        },
+      });
+    }
 
     m.addLayer({
       id: "hot-heat", type: "heatmap", source: "hot-points", slot: "middle",
@@ -152,6 +192,18 @@ export default function MapView(props: Props) {
     });
     // invisible hit area for crowd hover/click
     m.addLayer({ id: "hot-hit", type: "circle", source: "hot-points", slot: "top", paint: { "circle-radius": 18, "circle-opacity": 0 } });
+
+    // our own building names (Mapbox POI labels are turned off)
+    m.addLayer({
+      id: "building-names", type: "symbol", source: "building-labels", slot: "top", minzoom: 16,
+      layout: { "text-field": ["get", "name"], "text-size": ["interpolate", ["linear"], ["zoom"], 16, 10, 18, 12], "text-max-width": 8, "text-padding": 4, "text-anchor": "bottom", "text-offset": [0, -1.1] },
+      paint: {
+        "text-color": sat ? "#ffffff" : "#57534e",
+        "text-halo-color": sat ? "rgba(0,0,0,.7)" : "rgba(255,255,255,.9)",
+        "text-halo-width": 1.2,
+        "text-emissive-strength": 1,
+      },
+    });
 
     const dimmed = ["case", ["get", "dim"], 0.25, 1] as unknown as number;
     m.addLayer({
@@ -207,7 +259,7 @@ export default function MapView(props: Props) {
       container: el.current,
       accessToken: TOKEN,
       style: s.url,
-      config: { basemap: s.config },
+      config: { basemap: { ...s.config, ...placeConfig(styleRef.current, props.layers.places) } },
       center: USC_CENTER,
       zoom: 16.4,
       minZoom: 15,
@@ -252,7 +304,7 @@ export default function MapView(props: Props) {
     styleRef.current = props.mapStyle;
     ready.current = false;
     const s = STYLES[props.mapStyle];
-    m.setStyle(s.url, { config: { basemap: s.config } } as unknown as Parameters<mapboxgl.Map["setStyle"]>[1]);
+    m.setStyle(s.url, { config: { basemap: { ...s.config, ...placeConfig(props.mapStyle, cb.current.layers.places) } } } as unknown as Parameters<mapboxgl.Map["setStyle"]>[1]);
   }, [props.mapStyle]);
 
   // data -> sources (only touch the GPU when something actually changed)
