@@ -40,7 +40,8 @@ export default function App() {
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
   const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
-  const [warmSat, setWarmSat] = useState(false); // start loading Satellite in the background (on hover)
+  const [warmSat, setWarmSat] = useState(false);
+  const [intro, setIntro] = useState(true); // globe-to-campus flight on first load // start loading Satellite in the background (on hover)
   const threeReady = view === "3d" && satLoaded;
   const [flatGone, setFlatGone] = useState(false); // flat satellite placeholder removed after the fade
   const camera = useRef<Camera | null>(null); // shared so switching views keeps the same spot
@@ -287,11 +288,13 @@ export default function App() {
               focus={focus}
               onSelectEvent={openEvent}
               onSelectBuilding={openBuilding}
-              callouts={walk ? [] : callouts}
+              callouts={walk || intro ? [] : callouts}
               alerts={chips.safety ? state.alerts : []}
               onCallout={onCallout}
               initialCamera={startCam}
               onCamera={onFlatCamera}
+              intro={intro}
+              onIntroDone={() => setIntro(false)}
               walk={view === "map" && walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
               onWalkEnd={() => { setWalk(null); setAsk(""); }}
             />

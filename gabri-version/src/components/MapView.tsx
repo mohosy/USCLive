@@ -58,6 +58,9 @@ interface Props {
   alerts: SafetyAlert[];
   onCallout: (c: Callout) => void;
   initialCamera?: Camera | null;
+  /** play the globe-to-campus intro flight (first load only) */
+  intro?: boolean;
+  onIntroDone?: () => void;
   onCamera?: (c: Camera) => void;
   /** "How do I get to THH" — animated 3D walk from `me` to this building. */
   walk: { to: Building; key: number } | null;
@@ -270,24 +273,42 @@ export default function MapView(props: Props) {
   useEffect(() => {
     if (!el.current || map.current || !TOKEN) return;
     const s = STYLES[styleRef.current];
+    // Intro: start a little zoomed out over campus (top-down), then glide in and tilt onto you. Skipped when coming back from
+    // Satellite (initialCamera set) or when the user prefers reduced motion.
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const intro = !!props.intro && !props.initialCamera && !reduceMotion;
     const m = new mapboxgl.Map({
       container: el.current,
       accessToken: TOKEN,
       style: s.url,
       config: { basemap: { ...s.config, ...placeConfig(styleRef.current, props.layers.places) } },
-      center: props.initialCamera ? [props.initialCamera.longitude, props.initialCamera.latitude] : USC_CENTER,
-      zoom: props.initialCamera?.zoom ?? 16.4,
-      minZoom: 15,
+      projection: "globe",
+      center: intro ? [props.me.lng, props.me.lat] : props.initialCamera ? [props.initialCamera.longitude, props.initialCamera.latitude] : USC_CENTER,
+      zoom: intro ? 14.6 : props.initialCamera?.zoom ?? 16.4,
+      minZoom: intro ? 14 : 15,
       maxZoom: 19.5,
-      maxBounds: USC_BOUNDS,
-      pitch: props.initialCamera?.pitch ?? 60,
+      maxBounds: intro ? undefined : USC_BOUNDS,
+      pitch: intro ? 0 : props.initialCamera?.pitch ?? 60,
       maxPitch: 72,
-      bearing: props.initialCamera?.bearing ?? -20,
+      bearing: intro ? 10 : props.initialCamera?.bearing ?? -20,
       antialias: true, // smooth edges on 3D buildings and the walking character
     });
     map.current = m;
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
     m.on("style.load", install);
+    if (intro) {
+      // a gentle glide: zoom in, tilt into 3D and turn slightly, landing on where you are
+      m.once("load", () => setTimeout(() => {
+        const me = cb.current.me;
+        m.easeTo({ center: [me.lng, me.lat], zoom: 16.6, pitch: 62, bearing: -20, duration: 3600, essential: true, easing: (t) => 1 - Math.pow(1 - t, 3) });
+        m.once("moveend", () => {
+          // lock the camera to campus only after landing
+          m.setMinZoom(15);
+          m.setMaxBounds(USC_BOUNDS);
+          cb.current.onIntroDone?.();
+        });
+      }, 300));
+    }
     // trackpad two-finger click = right click: rotate the map instead of opening the browser menu
     el.current.addEventListener("contextmenu", (e) => e.preventDefault());
     const emit = () => {

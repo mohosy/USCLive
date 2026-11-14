@@ -139,3 +139,7 @@ html, body {
 .co-alertmini .co-title { font-size: 11px; font-weight: 600; color: #7f1d1d; }
 .co-alertmini .co-stem { height: 8px; background: #dc2626; }
 .co-alertmini .co-foot { width: 6px; height: 6px; border-color: #dc2626; }
+
+/* bubbles fade in after the intro lands */
+.co { animation: co-in 0.35s ease both; }
+@keyframes co-in { from { opacity: 0 } to { opacity: 1 } } /* opacity only: map libraries position bubbles with transform */
