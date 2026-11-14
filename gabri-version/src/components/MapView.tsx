@@ -453,7 +453,7 @@ export default function MapView(props: Props) {
 
   // side panel opened/closed: shift the visible center with padding (no canvas resize, no re-render)
   useEffect(() => {
-    map.current?.easeTo({ padding: { left: props.leftInset ?? 0, right: 0, top: 0, bottom: 0 }, duration: 280 });
+    map.current?.easeTo({ padding: { left: props.leftInset ?? 0, right: 0, top: 110, bottom: 0 }, duration: 320 });
   }, [props.leftInset]);
 
   useEffect(() => {

@@ -5,11 +5,13 @@
   --cardinal: #990000;
   --cardinal-hover: #7a0000;
   --gold: #ffcc00;
-  --background: #ffffff;
-  --surface: #f6f6f7;
-  --foreground: #16181d;
-  --muted: #6b7280;
-  --line: #e6e7ea;
+  /* Apple system colors */
+  --background: #f5f5f7;
+  --surface: rgba(118, 118, 128, 0.12);
+  --foreground: #1d1d1f;
+  --muted: #6e6e73;
+  --line: rgba(0, 0, 0, 0.08);
+  --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", var(--font-geist-sans), system-ui, sans-serif;
 }
 
 @theme inline {
@@ -21,7 +23,7 @@
   --color-gold: var(--gold);
   --color-muted: var(--muted);
   --color-line: var(--line);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-apple);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -29,8 +31,22 @@ html, body {
   height: 100%;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-apple);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
 }
+
+/* ---------- Liquid glass ----------
+   Frosted, translucent panels floating over the map. Used on a handful of large surfaces only:
+   backdrop blur over a live WebGL map is expensive, so map bubbles stay solid. */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.glass-strong { background: rgba(255, 255, 255, 0.86); }
 
 .scroll-thin { scrollbar-width: thin; scrollbar-color: #d4d6db transparent; }
 
@@ -148,22 +164,24 @@ html, body {
 /* ---------- Menu panel ---------- */
 /* Desktop: opening it takes 360px on the left and the map shrinks to fit, still draggable. */
 /* Slides over the map with a transform (GPU); animating width made the map resize on every frame. */
-.side { position: absolute; left: 0; top: 0; bottom: 0; z-index: 25; width: 360px; transform: translateX(-100%);
-  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.28s ease; will-change: transform; }
-.side-open { transform: none; box-shadow: 8px 0 30px rgba(0, 0, 0, 0.08); }
+.side { position: absolute; left: 12px; top: 80px; bottom: 12px; z-index: 25; width: 360px; border-radius: 26px;
+  transform: translateX(calc(-100% - 24px)); transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform; }
+.side-open { transform: none; }
 /* the map controls glide right with the panel instead of hiding under it */
 .side-shift { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
-@media (min-width: 901px) { .side-on .side-shift { transform: translateX(360px); } .side-on .chip-row { right: 372px; } }
-.side-inner { display: flex; flex-direction: column; width: 360px; height: 100%; background: #fff; border-right: 1px solid var(--line); }
+@media (min-width: 901px) { .side-on .side-shift { transform: translateX(372px); } .side-on .chip-row { right: 608px; } }
+.side-inner { display: flex; flex-direction: column; width: 360px; height: 100%; border-radius: 26px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.78); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.75); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.7); }
 .side-grip { display: none; }
 .chip-row { scrollbar-width: none; }
 .chip-row::-webkit-scrollbar { display: none; }
 /* Phones: the same panel is a bottom sheet with a drag handle; the map above it stays usable. */
 @media (max-width: 900px) {
-  .side { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; width: auto; height: 60dvh; border-radius: 20px 20px 0 0;
-    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18); transform: translateY(104%); transition: transform 0.25s ease; }
+  .side { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 40; width: auto; height: 60dvh; border-radius: 26px 26px 0 0;
+    transform: translateY(104%); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .side-open { width: auto; transform: none; }
-  .side-inner { width: 100%; border-right: 0; }
+  .side-inner { width: 100%; border-radius: 26px 26px 0 0; }
   .side-grip { display: block; flex-shrink: 0; width: 100%; height: 22px; touch-action: none; cursor: grab; }
   .side-grip::before { content: ""; display: block; width: 36px; height: 5px; margin: 0 auto; border-radius: 3px; background: #d6d3cc; }
 }
@@ -183,3 +201,9 @@ button { transition: background-color 0.15s ease, color 0.15s ease, border-color
 button:active:not(:disabled) { transform: scale(0.97); }
 .mapboxgl-ctrl button:active { transform: none; }
 @media (prefers-reduced-motion: reduce) { .side, .side-shift, button { transition: none; } }
+
+/* ---------- Apple-style map controls ---------- */
+.mapboxgl-ctrl-group { background: rgba(255, 255, 255, 0.72) !important; -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 14px !important; border: 0.5px solid rgba(255, 255, 255, 0.75); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.06) !important; overflow: hidden; }
+.mapboxgl-ctrl-group button + button { border-top: 0.5px solid rgba(0, 0, 0, 0.08) !important; }
+.co-card { border-radius: 14px; font-family: var(--font-apple); }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Inbox, LocateFixed, Menu, Plus, Search, X } from "lucide-react";
+import { Bell, Inbox, Menu, Navigation, Plus, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +40,7 @@ export default function App() {
   const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
+  const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
   const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: false, crowds: true, safety: true, schedule: true, webcams: true });
@@ -189,13 +190,19 @@ export default function App() {
     } catch (e) { setAskRes({ answer: (e as Error).message, eventIds: [], buildingIds: [], focusBuildingId: "none", ai: false }); }
     setAskBusy(false);
   }
-  function useGps() {
-    navigator.geolocation?.getCurrentPosition((p) => {
+  /** Locate button: with a fix, just re-center; otherwise ask the browser once. Off campus or denied keeps the demo spot. */
+  function locateMe() {
+    const center = (l: { lat: number; lng: number }) => setFocus({ lat: l.lat, lng: l.lng, zoom: 17, key: ++focusSeq.current });
+    if (gps === "on" || !navigator.geolocation) { center(loc); return; }
+    setGps("asking");
+    navigator.geolocation.getCurrentPosition((p) => {
       const here = { lat: p.coords.latitude, lng: p.coords.longitude };
       const nearest = [...BUILDINGS].sort((a, b) => distanceMeters(here, a) - distanceMeters(here, b))[0];
-      if (distanceMeters(here, nearest) > 1500) { alert("You're off campus, so the demo location is kept."); return; }
+      if (distanceMeters(here, nearest) > 1500) { setGps("off"); center(loc); return; } // off campus: keep the demo location
       setLoc({ ...here, label: `near ${nearest.name}`, buildingId: nearest.id });
-    }, () => alert("Location unavailable"));
+      setGps("on");
+      center(here);
+    }, () => { setGps("off"); center(loc); }, { enableHighAccuracy: true, timeout: 8000 });
   }
   async function markAllRead() {
     await api("/api/notifications", { json: { all: true } });
@@ -206,22 +213,23 @@ export default function App() {
   const detailOpen = !!(event || selBuilding || openAlert);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-white">
+    <div className="relative h-screen w-screen overflow-hidden bg-background">
       {/* Header */}
-      <header className="z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line px-3 md:gap-4 md:px-4">
-        <button onClick={() => setMenuOpen((o) => !o)} className="rounded-lg p-2 hover:bg-surface" aria-label="Menu" aria-expanded={menuOpen}><Menu size={20} /></button>
+      {/* Floating glass header over the full-screen map */}
+      <header className="glass absolute left-3 right-3 top-3 z-30 flex h-14 items-center gap-3 rounded-[20px] px-2.5 md:gap-4 md:px-3">
+        <button onClick={() => setMenuOpen((o) => !o)} className="rounded-full p-2 hover:bg-surface" aria-label="Menu" aria-expanded={menuOpen}><Menu size={20} /></button>
         <Link href="/" className="hidden w-[292px] shrink-0 text-[17px] font-semibold tracking-tight md:block">
           USC<span className="text-cardinal">Live</span>
         </Link>
 
         <form className="relative max-w-xl flex-1" onSubmit={(e) => { e.preventDefault(); runAsk(ask); }}>
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Ask about campus, e.g. how do I get to THH, free food near me" className="h-9 w-full rounded-lg border border-line bg-surface pl-9 pr-16 text-sm outline-none focus:border-foreground/30 focus:bg-white" />
+          <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Ask about campus, e.g. how do I get to THH, free food near me" className="h-9 w-full rounded-full bg-surface pl-9 pr-16 text-[14px] outline-none transition-colors focus:bg-white focus:shadow-[0_0_0_3px_rgba(153,0,0,0.12)]" />
           {askRes ? (
             <button type="button" onClick={() => { setAskRes(null); setAsk(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted hover:text-foreground" aria-label="Clear"><X size={14} /></button>
           ) : askBusy ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted">Searching</span> : null}
           {askRes && (
-            <div className="fade-in absolute left-0 right-0 top-11 z-40 rounded-lg border border-line bg-white p-4 shadow-lg">
+            <div className="glass glass-strong fade-in absolute left-0 right-0 top-12 z-40 rounded-2xl p-4">
               <p className="text-sm leading-relaxed">{askRes.answer}</p>
               {(askRes.eventIds.length > 0 || askRes.buildingIds.length > 0) && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -236,14 +244,14 @@ export default function App() {
 
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" className="max-md:hidden" onClick={() => setInboxOpen(true)}><Inbox size={16} /> Inbox</Button>
-          <Link href="/dashboard" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>
+          <Link href="/dashboard" className="rounded-full px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>
           <div className="relative">
-            <button onClick={() => setNotifOpen((o) => !o)} className="relative rounded-lg p-2 hover:bg-surface" aria-label="Notifications">
+            <button onClick={() => setNotifOpen((o) => !o)} className="relative rounded-full p-2 hover:bg-surface" aria-label="Notifications">
               <Bell size={18} />
               {unread > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-cardinal" />}
             </button>
             {notifOpen && (
-              <div className="fade-in absolute right-0 top-11 z-40 w-96 max-w-[calc(100vw-24px)] overflow-hidden rounded-lg border border-line bg-white shadow-lg">
+              <div className="glass glass-strong fade-in absolute right-0 top-12 z-40 w-96 max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl">
                 <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
                   <span className="text-sm font-semibold">Notifications</span>
                   <button onClick={markAllRead} className="text-xs text-muted hover:text-foreground">Mark all read</button>
@@ -267,7 +275,7 @@ export default function App() {
             <div className="relative ml-2">
               <button onClick={() => setAccountOpen((o) => !o)} title={`${state.me.name}, ${state.me.major}`} aria-label="Account" aria-expanded={accountOpen}><Avatar initials={state.me.avatar} size={30} /></button>
               {accountOpen && (
-                <div className="fade-in absolute right-0 top-10 z-40 w-64 rounded-lg border border-line bg-white p-3 text-sm shadow-lg">
+                <div className="glass glass-strong fade-in absolute right-0 top-11 z-40 w-64 rounded-2xl p-3 text-sm">
                   <div className="font-semibold">{state.me.name}</div>
                   <div className="text-xs text-muted">{state.me.major}</div>
                   <button className="mt-2 w-full rounded-md border border-line px-2 py-1.5 text-left text-sm hover:bg-surface" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}>Sign out</button>
@@ -278,7 +286,7 @@ export default function App() {
         </div>
       </header>
 
-      <div className="relative flex min-h-0 flex-1">
+      <div className="absolute inset-0">
         {/* Sidebar */}
         {/* Menu panel (see .side in globals.css): opened by the menu button, pushes the map on desktop, bottom sheet on phones */}
         <aside className={cx("side", menuOpen && "side-open")} aria-hidden={!menuOpen}>
@@ -314,13 +322,13 @@ export default function App() {
             )}
           </div>
           <div className="border-t border-line p-3">
-            <Button className="w-full" onClick={() => setAddOpen(true)}><Plus size={16} /> Add event</Button>
+            <Button className="w-full !rounded-full" onClick={() => setAddOpen(true)}><Plus size={16} /> Add event</Button>
           </div>
           </div>
         </aside>
 
         {/* Map */}
-        <main className={cx("relative min-w-0 flex-1", menuOpen && "side-on")}>
+        <main className={cx("absolute inset-0", menuOpen && "side-on")}>
           {/* Flat map. In 3D mode it shows satellite as a placeholder until the 3D campus has loaded. */}
           {state && (view === "map" || !flatGone) && (
             <MapView
@@ -329,7 +337,7 @@ export default function App() {
               buildings={state.buildings}
               me={loc}
               layers={mapLayers}
-              leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 360 : 0}
+              leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 384 : 0}
               mapStyle="map"
               selectedEventId={selEvent}
               highlightIds={highlight}
@@ -372,37 +380,36 @@ export default function App() {
             </div>
           )}
           {view === "3d" && !threeReady && (
-            <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-line bg-white px-3 py-1 text-xs text-muted shadow-sm">Loading 3D campus…</div>
+            <div className="glass absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
           )}
 
-          <div className="side-shift absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
-            <span className="px-1.5 text-muted">You are at</span>
-            <select className="max-w-[150px] rounded-md bg-surface px-2 py-1 font-medium outline-none md:max-w-[220px]" value={loc.buildingId ?? ""} onChange={(e) => { const b = BUILDING_BY_ID[e.target.value]; setLoc({ lat: b.lat, lng: b.lng, label: b.name, buildingId: b.id }); setFocus({ lat: b.lat, lng: b.lng, zoom: 16.5, key: ++focusSeq.current }); }}>
-              {!loc.buildingId && <option value="">{loc.label}</option>}
-              {BUILDINGS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-            <button onClick={useGps} className="rounded-md p-1 text-muted hover:bg-surface hover:text-foreground" title="Use my location"><LocateFixed size={14} /></button>
-          </div>
-
-          <div className="absolute right-3 top-3 z-10 flex rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
-            {([["map", "Explore"], ["3d", "Satellite"]] as const).map(([k, l]) => (
-              <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") setWarmSat(true); }} className={cx("rounded-md px-3 py-1 font-medium", view === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
-            ))}
+          {/* Apple-style segmented control */}
+          <div className="absolute right-3 top-[80px] z-10 flex items-center gap-2">
+            <div className="glass flex rounded-full p-1 text-xs">
+              {([["map", "Explore"], ["3d", "Satellite"]] as const).map(([k, l]) => (
+                <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") setWarmSat(true); }} className={cx("rounded-full px-3.5 py-1.5 font-medium", view === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>{l}</button>
+              ))}
+            </div>
+            {/* Maps-style locate button: centers on you, asks for location the first time */}
+            <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
+              className={cx("glass grid h-9 w-9 place-items-center rounded-full", gps === "on" ? "text-[#0a84ff]" : "text-foreground")}>
+              {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={15} className={cx(gps === "on" && "fill-current")} />}
+            </button>
           </div>
 
           {/* One filter row: each chip is a layer on the map (and its legend) */}
-          <div className="side-shift chip-row absolute left-3 right-3 top-[52px] z-10 flex gap-1.5 overflow-x-auto pb-1">
+          <div className="side-shift chip-row absolute left-3 right-3 top-[128px] md:right-[236px] md:top-[80px] z-10 flex gap-1.5 overflow-x-auto pb-1">
             {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
               <button key={k} aria-pressed={chips[k]}
                 onClick={() => (k === "food" ? setFilters((f) => ({ ...f, freeFood: !f.freeFood })) : setChips((c) => ({ ...c, [k]: !c[k] })))}
-                className={cx("whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium shadow-sm transition-colors", chips[k] ? "bg-foreground text-white" : "bg-white text-foreground hover:bg-surface")}>{l}</button>
+                className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors", chips[k] ? "bg-foreground text-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]" : "bg-white/85 text-foreground shadow-[0_0_0_0.5px_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.06)] hover:bg-white")}>{l}</button>
             ))}
           </div>
 
           <div className="pointer-events-none absolute bottom-12 right-14 z-20 flex w-80 flex-col gap-2">
             {toasts.map((n) => (
               <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setToasts((t) => t.filter((x) => x.id !== n.id)); }}
-                className="fade-in pointer-events-auto rounded-lg border border-line bg-white p-3 text-left shadow-md">
+                className="glass glass-strong fade-in pointer-events-auto rounded-2xl p-3 text-left">
                 <div className="text-sm font-medium">{n.title}</div>
                 <div className="text-xs text-muted">{n.body}</div>
               </button>
