@@ -2,7 +2,7 @@
 
 import { ImagePlus } from "lucide-react";
 import { useRef, useState } from "react";
-import { BUILDINGS, CATEGORY_META, SCHOOLS } from "@/lib/campus";
+import { BUILDINGS, CATEGORY_META, EVENT_TYPES, SCHOOLS } from "@/lib/campus";
 import { api, type AppState, type EventView } from "@/lib/client-types";
 import type { ExtractedEventT, ModerationT } from "@/lib/ai";
 import type { Moderation } from "@/lib/types";
@@ -19,7 +19,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const local = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 function blank(): Form {
   const s = new Date(Date.now() + 60 * 60_000); s.setMinutes(0, 0, 0);
-  return { title: "", description: "", category: "social", buildingId: "tcc", room: "", start: local(s), end: local(new Date(+s + 90 * 60_000)), visibility: "public", schools: ["all"], course: "", invitees: [], capacity: "", freeFood: false, foodDetail: "" };
+  return { title: "", description: "", category: "student", buildingId: "tcc", room: "", start: local(s), end: local(new Date(+s + 90 * 60_000)), visibility: "public", schools: ["all"], course: "", invitees: [], capacity: "", freeFood: false, foodDetail: "" };
 }
 
 const SAMPLES = [
@@ -139,7 +139,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
             <div className="col-span-2"><Field label="Description"><textarea className={cx(inputCls, "min-h-20")} value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
             <Field label="Category">
               <select className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)}>
-                {Object.entries(CATEGORY_META).filter(([k]) => k !== "class").map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+                {EVENT_TYPES.map((k) => <option key={k} value={k}>{CATEGORY_META[k].label}</option>)}
               </select>
             </Field>
             <Field label="Building">

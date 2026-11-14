@@ -1,14 +1,14 @@
 "use client";
 
-import { CATEGORY_META, SCHOOLS, walkMinutes } from "@/lib/campus";
+import { CATEGORY_META, EVENT_TYPES, SCHOOLS, walkMinutes } from "@/lib/campus";
 import { fmtWhen, isLive, type Category, type EventView, type Filters, type Loc } from "@/lib/client-types";
 import type { SchoolId } from "@/lib/types";
 import { Chip, Tag, cx, inputCls } from "./ui";
 
-const CATS: Category[] = ["social", "sports", "study", "academic", "career", "club", "arts"];
+const CATS: Category[] = [...EVENT_TYPES];
 
 export function EventRow({ e, loc, onOpen, now }: { e: EventView; loc: Loc; onOpen: () => void; now: Date }) {
-  const color = (CATEGORY_META[e.category] ?? CATEGORY_META.social).color;
+  const color = (CATEGORY_META[e.category] ?? CATEGORY_META.student).color;
   const live = isLive(e, now);
   const walk = e.lat != null && e.lng != null ? walkMinutes(loc, { lat: e.lat, lng: e.lng }) : null;
   return (
@@ -22,6 +22,7 @@ export function EventRow({ e, loc, onOpen, now }: { e: EventView; loc: Loc; onOp
         <div className="mt-1 flex flex-wrap items-center gap-1">
           {live && <Tag tone="live">Live</Tag>}
           {e.freeFood && <Tag tone="food">{e.foodDetail ?? "Free food"}</Tag>}
+          {e.category === "community" && <Tag>Not USC-run</Tag>}
           {e.visibility === "open" && <Tag tone="open">Open invite</Tag>}
           {e.visibility === "invite" && <Tag tone="private">{e.invited ? "Invited" : "Private"}</Tag>}
           {e.isClassmate && <Tag tone="class">{e.course}</Tag>}
@@ -57,7 +58,7 @@ export default function EventsPanel({ events, filters, setFilters, loc, onOpen, 
         <Chip active={filters.friends} onClick={() => setFilters({ ...filters, friends: !filters.friends })}>Friends going</Chip>
         <Chip active={filters.myClasses} onClick={() => setFilters({ ...filters, myClasses: !filters.myClasses })}>My classes</Chip>
         {CATS.map((c) => (
-          <Chip key={c} active={filters.categories.includes(c)} onClick={() => toggleCat(c)}>{CATEGORY_META[c].label}</Chip>
+          <Chip key={c} active={filters.categories.includes(c)} onClick={() => toggleCat(c)}>{CATEGORY_META[c].short}</Chip>
         ))}
       </div>
       <select className={inputCls} value={filters.school} onChange={(e) => setFilters({ ...filters, school: e.target.value as SchoolId | "any" })}>

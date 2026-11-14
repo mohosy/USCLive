@@ -23,7 +23,7 @@ export function Chip({ active, onClick, children }: { active?: boolean; onClick?
 }
 
 export function CatLabel({ category }: { category: string }) {
-  const m = CATEGORY_META[category] ?? CATEGORY_META.social;
+  const m = CATEGORY_META[category] ?? CATEGORY_META.student;
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-muted">
       <span className="h-2 w-2 rounded-full" style={{ background: m.color }} />

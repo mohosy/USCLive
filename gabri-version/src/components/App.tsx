@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Inbox, LogOut, Menu, Navigation, Plus, Search, Settings, UserRound, X } from "lucide-react";
+import { Bell, Inbox, LayoutDashboard, LogOut, Menu, Navigation, Plus, Search, Settings, UserRound, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -250,7 +250,7 @@ export default function App() {
             <button type="button" onClick={() => { setAskRes(null); setAsk(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted hover:text-foreground" aria-label="Clear"><X size={14} /></button>
           ) : askBusy ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted">Searching</span> : null}
           {askRes && (
-            <div className="glass glass-strong fade-in absolute left-0 right-0 top-12 z-40 rounded-2xl p-4">
+            <div className="menu absolute left-0 right-0 top-12 z-40 p-4" style={{ transformOrigin: "top center" }}>
               <p className="text-sm leading-relaxed">{askRes.answer}</p>
               {(askRes.eventIds.length > 0 || askRes.buildingIds.length > 0) && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -272,19 +272,22 @@ export default function App() {
               {unread > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-cardinal" />}
             </button>
             {notifOpen && (
-              <div className="glass glass-strong fade-in absolute right-0 top-12 z-40 w-96 max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl">
-                <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-                  <span className="text-sm font-semibold">Notifications</span>
-                  <button onClick={markAllRead} className="text-xs text-muted hover:text-foreground">Mark all read</button>
+              <div className="menu absolute right-0 top-12 z-40 w-[380px] max-w-[calc(100vw-24px)] overflow-hidden">
+                <div className="flex items-center justify-between px-4 pb-1 pt-3">
+                  <span className="text-[15px] font-semibold">Notifications</span>
+                  {unread > 0 && <button onClick={markAllRead} className="text-[13px] font-medium text-[#0a84ff] hover:opacity-80">Mark all read</button>}
                 </div>
-                <div className="scroll-thin max-h-[60vh] overflow-y-auto">
+                <div className="scroll-thin max-h-[60vh] overflow-y-auto p-1.5">
+                  {!notifs.length && <p className="px-3 py-6 text-center text-sm text-muted">You&apos;re all caught up.</p>}
                   {notifs.map((n) => (
-                    <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setNotifOpen(false); }} className="flex w-full gap-3 border-b border-line px-4 py-3 text-left last:border-0 hover:bg-surface">
-                      <span className={cx("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-cardinal")} />
+                    <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setNotifOpen(false); }} className="menu-item !items-start">
+                      <span className={cx("mt-[7px] h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-[#0a84ff]")} />
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium">{n.title}</div>
-                        <div className="text-xs text-muted">{n.body}</div>
-                        <div className="mt-0.5 text-[11px] text-muted">{new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}{n.source && n.source !== "live" ? ` · ${n.source}` : ""}</div>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className={cx("truncate text-[14px]", n.read ? "font-medium" : "font-semibold")}>{n.title}</span>
+                          <span className="shrink-0 text-[12px] text-muted">{new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+                        </div>
+                        <div className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted">{n.body}</div>
                       </div>
                     </button>
                   ))}
@@ -296,20 +299,21 @@ export default function App() {
             <div className="relative ml-2">
               <button onClick={() => setAccountOpen((o) => !o)} title={`${state.me.name}, ${state.me.major}`} aria-label="Account" aria-expanded={accountOpen} className="rounded-full transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={30} /></button>
               {accountOpen && (
-                <div className="glass glass-strong fade-in absolute right-0 top-11 z-40 w-72 rounded-2xl p-3 text-sm">
-                  <div className="flex items-center gap-3 px-1 pb-3 pt-1">
+                <div className="menu absolute right-0 top-11 z-40 w-72 p-1.5 text-sm">
+                  <div className="flex items-center gap-3 px-2.5 py-2">
                     <Avatar initials={state.me.avatar} photo={state.me.photo} size={44} />
                     <div className="min-w-0">
-                      <div className="truncate font-semibold">{state.me.name}{state.me.pronouns && <span className="ml-1.5 text-xs font-normal text-muted">({state.me.pronouns})</span>}</div>
-                      <div className="truncate text-xs text-muted">{state.me.major}</div>
+                      <div className="truncate text-[14px] font-semibold">{state.me.name}{state.me.pronouns && <span className="ml-1.5 text-xs font-normal text-muted">({state.me.pronouns})</span>}</div>
+                      <div className="truncate text-[12px] text-muted">{state.me.major}</div>
                       <AccountBadge type={state.me.accountType} className="mt-1" />
                     </div>
                   </div>
-                  <Link href="/profile" onClick={() => setAccountOpen(false)} className="flex w-full items-center justify-center gap-2 rounded-full bg-cardinal px-3 py-2 text-sm font-medium text-white hover:bg-cardinal-hover"><UserRound size={15} /> View profile</Link>
-                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                    <Link href="/settings" onClick={() => setAccountOpen(false)} className="flex items-center justify-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm hover:bg-surface"><Settings size={14} /> Settings</Link>
-                    <button className="flex items-center justify-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm hover:bg-surface" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={14} /> Sign out</button>
-                  </div>
+                  <div className="menu-sep" />
+                  <Link href="/profile" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><UserRound size={16} className="text-muted" /> View profile</Link>
+                  <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><Settings size={16} className="text-muted" /> Settings</Link>
+                  <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><LayoutDashboard size={16} className="text-muted" /> Organizer dashboard</Link>
+                  <div className="menu-sep" />
+                  <button className="menu-item text-[14px] text-[#d70015]" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={16} /> Sign out</button>
                 </div>
               )}
             </div>
@@ -338,7 +342,7 @@ export default function App() {
             ) : openAlert ? (
               <AlertDetail alert={openAlert} now={now} onClose={closeDetail} onResolved={() => { closeDetail(); refresh(); }} />
             ) : event ? (
-              <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onOpenBuilding={openBuilding} />
+              <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (

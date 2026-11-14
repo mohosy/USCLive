@@ -137,7 +137,7 @@ function eventGeo(events: EventView[], selectedId: string | null, highlight: str
       properties: {
         id: e.id,
         title: e.title.length > 28 ? `${e.title.slice(0, 27)}…` : e.title,
-        color: (CATEGORY_META[e.category] ?? CATEGORY_META.social).color,
+        color: (CATEGORY_META[e.category] ?? CATEGORY_META.student).color,
         radius: Math.round(6 + Math.min(5, Math.sqrt(e.attendeeCount) * 0.45)),
         live: isLive(e, now),
         selected: e.id === selectedId,

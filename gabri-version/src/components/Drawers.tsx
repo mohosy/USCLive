@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Navigation } from "lucide-react";
+import { HOST_LABEL, primaryAction } from "@/lib/eventActions";
 import { useEffect, useState } from "react";
 import { BUILDING_BY_ID, SCHOOLS, walkMinutes } from "@/lib/campus";
 import { api, fmtTime, fmtWhen, isLive, type AppState, type EventView, type Hotspot, type Loc } from "@/lib/client-types";
@@ -28,8 +29,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenBuilding }: {
+export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenBuilding, onDirections }: {
   ev: EventView; state: AppState; loc: Loc; onClose: () => void; onRsvp: (id: string) => Promise<void>; onInvite: (id: string, userIds: string[]) => Promise<void>; onOpenBuilding: (id: string) => void;
+  onDirections: (buildingId: string) => void;
 }) {
   const [picking, setPicking] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
@@ -39,7 +41,8 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenB
   const h = state.hotspots.find((x) => x.buildingId === ev.buildingId);
   const walk = b ? walkMinutes(loc, b) : null;
   const canInvite = ev.host.id === state.me.id || (ev.visibility !== "invite" && ev.going);
-  const full = ev.capacity != null && ev.attendeeCount >= ev.capacity;
+  const action = primaryAction(ev);
+  const toggle = async () => { setBusy(true); await onRsvp(ev.id); setBusy(false); };
   const schools = ev.schools.filter((s) => s !== "all").map((s) => SCHOOLS.find((x) => x.id === s)?.short ?? s);
 
   return (
@@ -52,7 +55,7 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenB
       <div className="mt-4 border-t border-line pt-2">
         <Row label="When">{fmtWhen(ev.start, ev.end, now)} <span className="text-muted">({fmtTime(ev.start)} – {fmtTime(ev.end)})</span></Row>
         <Row label="Where"><button className="text-left hover:underline" onClick={() => onOpenBuilding(ev.buildingId)}>{ev.buildingName}{ev.room ? `, ${ev.room}` : ""}</button>{walk != null && <span className="text-muted"> · {walk} min walk</span>}</Row>
-        <Row label="Host">{ev.host.name}</Row>
+        <Row label="Host">{ev.host.name} <span className="text-muted">· {HOST_LABEL[ev.host.kind]}</span></Row>
         <Row label="Who">{VIS_LABEL[ev.visibility]}{ev.course ? ` · ${ev.course}` : ""}{schools.length ? ` · ${schools.join(", ")}` : ""}</Row>
         {ev.freeFood && <Row label="Food">{ev.foodDetail ?? "Free food"}</Row>}
         <Row label="Going">{ev.attendeeCount}{ev.capacity ? ` of ${ev.capacity}` : ""}</Row>
@@ -67,11 +70,21 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenB
       )}
 
       <div className="mt-5 flex gap-2">
-        <Button className="flex-1" variant={ev.going ? "secondary" : "primary"} disabled={busy || (!ev.going && full)} onClick={async () => { setBusy(true); await onRsvp(ev.id); setBusy(false); }}>
-          {ev.going ? "Leave" : full ? "Full" : ev.visibility === "open" ? "Join" : "RSVP"}
-        </Button>
-        {canInvite && <Button variant="secondary" onClick={() => setPicking((p) => !p)}>Invite</Button>}
+        {action.kind === "link" ? (
+          <a href={action.url} target="_blank" rel="noopener noreferrer" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-white hover:opacity-90">
+            {action.label} <ArrowUpRight size={15} />
+          </a>
+        ) : (
+          <Button className="flex-1 !rounded-full" variant={action.kind === "leave" ? "secondary" : "primary"} disabled={busy || action.kind === "full"} onClick={toggle}>
+            {action.kind === "leave" ? "Going · Leave" : action.label}
+          </Button>
+        )}
+        <Button variant="secondary" className="!rounded-full" onClick={() => onDirections(ev.buildingId)} aria-label="Directions"><Navigation size={14} /> Directions</Button>
+        {canInvite && <Button variant="secondary" className="!rounded-full" onClick={() => setPicking((p) => !p)}>Invite</Button>}
       </div>
+      {action.kind === "link" && ev.category !== "sports_watch" && (
+        <button onClick={toggle} disabled={busy} className="mt-2 text-xs text-muted hover:text-foreground">{ev.going ? "Saved to your schedule · remove" : "Also save to my schedule"}</button>
+      )}
       {picking && (
         <div className="mt-3 rounded-lg border border-line p-2">
           {state.me.friends.map((f) => (

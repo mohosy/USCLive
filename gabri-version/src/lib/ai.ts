@@ -40,7 +40,8 @@ const anthropic = () => (_anthropic ??= new Anthropic());
 const openai = () => (_openai ??= new OpenAI());
 
 const BUILDING_IDS = BUILDINGS.map((b) => b.id) as [string, ...string[]];
-const CATEGORIES = ["social", "sports", "study", "academic", "career", "club", "arts", "office_hours"] as const;
+const CATEGORIES = ["sports_play", "sports_watch", "career", "academic", "usc", "student", "community"] as const;
+const TYPE_RULE = `Event type: sports_play (pickup, intramurals, rec/fitness classes), sports_watch (USC Athletics games people watch), career (fairs, info sessions, recruiting, company talks, networking, workshops), academic (study sessions, exam reviews, office hours). Otherwise pick by who runs it: usc (USC offices, schools, departments, USG), student (students or student orgs), community (non-USC organizers).`;
 const SCHOOL_IDS = ["all", "viterbi", "marshall", "dornsife", "annenberg", "sca", "thornton", "roski", "price", "iovine"] as const;
 
 const BUILDING_LIST = BUILDINGS.map((b) => `${b.id}: ${b.code} — ${b.name}`).join("\n");
@@ -152,6 +153,7 @@ export async function extractEvent(input: { text?: string; image?: { data: strin
 ${nowContext(now)}
 Resolve relative dates ("tonight", "this Friday") against the current time. Pick the closest building id from this list (or "unknown"):
 ${BUILDING_LIST}
+${TYPE_RULE}
 Set freeFood=true only if free food or drinks are offered, and put what it is in foodDetail (e.g. "Free pizza"). Titles and descriptions: no emojis, normal capitalization.
 ${SAFETY}`;
   const content = { text: `<data>\n${input.text ?? "(see image)"}\n</data>\nExtract the event.`, image: input.image };
@@ -173,11 +175,11 @@ function heuristicExtract(text: string, now: Date): ExtractedEventT {
   const end = new Date(+start + 90 * 60_000);
   const fmt = (d: Date) => `${localDate(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const lower = text.toLowerCase();
-  const category: Category = /soccer|basketball|volleyball|yoga|run|spikeball|frisbee/.test(lower) ? "sports"
-    : /study|review|midterm|exam|homework/.test(lower) ? "study"
-    : /career|resume|recruit|interview|internship/.test(lower) ? "career"
-    : /concert|film|screening|gallery|jazz|show/.test(lower) ? "arts"
-    : /club|meeting|general body|gbm/.test(lower) ? "club" : "social";
+  const category: Category = /\bvs\.?\b|tickets|game day|kickoff|tip-off/.test(lower) ? "sports_watch"
+    : /soccer|basketball|volleyball|yoga|run|spikeball|frisbee|pickup/.test(lower) ? "sports_play"
+    : /career|resume|recruit|interview|internship|info session|networking/.test(lower) ? "career"
+    : /study|review|midterm|exam|homework|office hours/.test(lower) ? "academic"
+    : /usg|usc (office|department)|visions (and|&) voices/.test(lower) ? "usc" : "student";
   const course = text.match(/\b([A-Z]{2,4})\s?(\d{3}[A-Z]?)\b/);
   return {
     isEvent: lines.length > 0,
@@ -229,7 +231,7 @@ export function ruleModeration(text: string): ModerationT {
     reasons: hits.map(([, r]) => r),
     riskScore: risk,
     ...food,
-    suggestedCategory: "social",
+    suggestedCategory: "student",
   };
 }
 

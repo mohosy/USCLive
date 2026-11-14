@@ -2,7 +2,7 @@
  * Map callouts ("bubbles"): the handful of things worth reading at a glance.
  * Built on the client from app state; the map only draws them.
  */
-import { BUILDING_BY_ID } from "./campus";
+import { BUILDING_BY_ID, CATEGORY_META } from "./campus";
 import { fmtTime, isLive, type AppState } from "./client-types";
 import type { GameInfo } from "./types";
 import { WEBCAMS } from "./webcams";
@@ -97,7 +97,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
       .slice(0, 4);
     for (const e of soon) {
       const where = b(e.buildingId)?.name ?? "";
-      const label = e.visibility === "open" ? "Pickup" : e.freeFood ? "Free food" : "Friends going";
+      const label = chips.food && e.freeFood ? "Free food" : CATEGORY_META[e.category]?.label ?? "Event";
       out.push({
         id: `ev:${e.id}`, kind: "event", lng: e.lng!, lat: e.lat!, eyebrow: `${label} · ${where}`,
         title: e.title.length > 26 ? `${e.title.slice(0, 25)}…` : e.title,

@@ -53,7 +53,7 @@ export async function POST() {
       let eventId = existing?.id;
       if (!existing) {
         const ev: CampusEvent = {
-          id: newId("ev"), title: r.title, description: r.summary, category: r.course ? "study" : "social", buildingId: r.buildingId,
+          id: newId("ev"), title: r.title, description: r.summary, category: r.course ? "academic" : "student", buildingId: r.buildingId,
           room: r.room ?? undefined, start, end, host: { kind: "user", name: item.from }, visibility: "invite", schools: ["all"],
           course: r.course ?? undefined, invitees: [me.id], attendees: [], freeFood: r.freeFood, foodDetail: r.foodDetail ?? undefined,
           tags: ["from-" + src], source: src === "gmail" ? "email" : src === "gcal" ? "calendar" : "brightspace",

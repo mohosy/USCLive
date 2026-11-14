@@ -49,7 +49,7 @@ What should ${me.name.split(" ")[0]} do right now? Give exactly 3 options, best 
         ...top.map((c) => ({
           eventId: c.id, buildingId: c.buildingId as NowPlanT["suggestions"][number]["buildingId"], title: c.title,
           why: [c.live ? "Happening now" : `Starts in ${c.startsInMin} min`, `${c.walkMin} min walk`, c.friendsGoing.length ? `${c.friendsGoing[0].name.split(" ")[0]} is going` : null, c.freeFood ? c.foodDetail : null].filter(Boolean).join(" · "),
-          action: (c.category === "study" ? "study" : c.freeFood ? "eat" : "join") as NowPlanT["suggestions"][number]["action"],
+          action: (c.category === "academic" ? "study" : c.freeFood ? "eat" : "join") as NowPlanT["suggestions"][number]["action"],
         })),
         ...(spot ? [{ eventId: null, buildingId: spot.building.id as NowPlanT["suggestions"][number]["buildingId"], title: `Study at ${spot.building.name}`, why: `${spot.fill}% full right now · ${spot.walk} min walk · ${spot.building.studySpot!.note}`, action: "study" as const }] : []),
       ].slice(0, 3),

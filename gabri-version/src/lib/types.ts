@@ -1,12 +1,16 @@
+/**
+ * Event types. Sports, Career and Academic are sorted by what the event is;
+ * everything else by who runs it (USC, students, or an outside organizer).
+ * "class" is only used for the personal schedule.
+ */
 export type Category =
-  | "social"
-  | "sports"
-  | "study"
-  | "academic"
+  | "sports_play" // pickup, intramurals, rec classes: join
+  | "sports_watch" // USC Athletics games: tickets + live score
   | "career"
-  | "club"
-  | "arts"
-  | "office_hours"
+  | "academic" // study sessions, reviews, office hours
+  | "usc" // run by USC: concerts, talks, exhibits, festivals, USG
+  | "student" // run by students or student orgs
+  | "community" // non-USC organizers
   | "class";
 
 export type Visibility = "public" | "school" | "open" | "invite";
@@ -74,7 +78,9 @@ export interface CampusEvent {
   room?: string;
   start: string; // ISO
   end: string; // ISO
-  host: { kind: "org" | "user" | "usc"; name: string; id?: string };
+  host: { kind: "org" | "user" | "usc" | "external"; name: string; id?: string };
+  /** where the main button goes for tickets / outside registration */
+  link?: { url: string; label: string };
   visibility: Visibility;
   schools: SchoolId[];
   course?: string;

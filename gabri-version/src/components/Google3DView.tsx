@@ -157,7 +157,7 @@ export default function Google3DView(props: Props) {
       pins.push({
         id: e.id,
         position: [e.lng + Math.cos(i * 2.4) * r * 1.2, e.lat + Math.sin(i * 2.4) * r],
-        color: hex((CATEGORY_META[e.category] ?? CATEGORY_META.social).color, dim ? 70 : 255),
+        color: hex((CATEGORY_META[e.category] ?? CATEGORY_META.student).color, dim ? 70 : 255),
         radius: (isLive(e, now) ? 10 : 8) + (e.id === p.selectedEventId ? 4 : 0),
         selected: e.id === p.selectedEventId,
         title: e.title.length > 28 ? `${e.title.slice(0, 27)}…` : e.title,

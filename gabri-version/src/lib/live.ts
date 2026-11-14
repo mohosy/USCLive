@@ -41,7 +41,7 @@ const SCRIPT: (() => void)[] = [
   () => {
     const now = Date.now();
     const ev = addLiveEvent({
-      title: "Spikeball on the Quad", description: "Have 2 sets, need players. Drop in anytime.", category: "sports", buildingId: "mcq",
+      title: "Spikeball on the Quad", description: "Have 2 sets, need players. Drop in anytime.", category: "sports_play", buildingId: "mcq",
       start: new Date(roundTo5(now + 15 * MIN)).toISOString(), end: new Date(roundTo5(now + 75 * MIN)).toISOString(),
       host: { kind: "user", name: "Ethan Brooks", id: "u_ethan" }, visibility: "open", schools: ["all"], invitees: [], attendees: ["u_ethan", "anon_x1", "anon_x2"],
       capacity: 8, freeFood: false, tags: ["pickup"], expectedTurnout: 6,
@@ -62,7 +62,7 @@ const SCRIPT: (() => void)[] = [
   () => {
     const now = Date.now();
     const ev = addLiveEvent({
-      title: "Leftover tacos from Latinx Business Assoc.", description: "Event ended early, ~40 taco plates left. Come grab one!", category: "social", buildingId: "jkp",
+      title: "Leftover tacos from Latinx Business Assoc.", description: "Event ended early, ~40 taco plates left. Come grab one!", category: "student", buildingId: "jkp",
       start: new Date(roundTo5(now)).toISOString(), end: new Date(roundTo5(now + 30 * MIN)).toISOString(),
       host: { kind: "org", name: "Latinx Business Association" }, visibility: "public", schools: ["all"], invitees: [], attendees: [],
       freeFood: true, foodDetail: "Free tacos (~40 left)", tags: ["leftovers"], expectedTurnout: 40,

@@ -8,7 +8,7 @@ import type { CampusEvent } from "@/lib/types";
 const CreateEvent = z.object({
   title: z.string().trim().min(3).max(100),
   description: z.string().trim().max(1000).default(""),
-  category: z.enum(["social", "sports", "study", "academic", "career", "club", "arts", "office_hours"]),
+  category: z.enum(["sports_play", "sports_watch", "career", "academic", "usc", "student", "community"]),
   buildingId: z.string().refine((id) => !!BUILDING_BY_ID[id], "Unknown building"),
   room: z.string().max(60).nullish(),
   start: z.string(),

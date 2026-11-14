@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     if (!buildingId) continue;
     const food = detectFoodHeuristic(summary + " " + desc);
     const ev: CampusEvent = {
-      id: newId("ev"), title: summary, description: desc.slice(0, 400), category: course ? "academic" : "social", buildingId, room: location || undefined,
+      id: newId("ev"), title: summary, description: desc.slice(0, 400), category: course ? "academic" : "student", buildingId, room: location || undefined,
       start: start.toISOString(), end: end.toISOString(), host: { kind: "usc", name: "Your calendar" }, visibility: "invite", schools: ["all"],
       course: course ? `${course[1]} ${course[2]}` : undefined, invitees: [me.id], attendees: [me.id], freeFood: food.freeFood, foodDetail: food.foodDetail ?? undefined,
       tags: ["imported"], source: "brightspace", moderation: { status: "approved", reasons: [], riskScore: 0, checkedBy: "rules" }, createdAt: new Date().toISOString(),

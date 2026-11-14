@@ -72,18 +72,19 @@ export const SCHOOLS: { id: SchoolId; name: string; short: string }[] = [
   { id: "iovine", name: "Iovine & Young Academy", short: "Iovine" },
 ];
 
-/** Event colors: 5 groups, none of them red (red is reserved for safety, gold for live games, blue for you). */
-export const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  sports: { label: "Sports", color: "#16a34a" },
-  social: { label: "Social", color: "#8b5cf6" },
-  club: { label: "Club", color: "#8b5cf6" },
-  study: { label: "Study", color: "#0d9488" },
-  academic: { label: "Academic", color: "#0d9488" },
-  office_hours: { label: "Office hours", color: "#0d9488" },
-  career: { label: "Career", color: "#475569" },
-  arts: { label: "Arts", color: "#db2777" },
-  class: { label: "Class", color: "#64748b" },
+/** Event types and colors. None of them red (safety), gold (live games) or blue (you). */
+export const CATEGORY_META: Record<string, { label: string; short: string; color: string }> = {
+  sports_play: { label: "Sports · Play", short: "Play", color: "#16a34a" },
+  sports_watch: { label: "Sports · Watch", short: "Watch", color: "#16a34a" },
+  career: { label: "Career", short: "Career", color: "#4f46e5" },
+  academic: { label: "Academic", short: "Academic", color: "#0d9488" },
+  usc: { label: "USC event", short: "USC", color: "#db2777" },
+  student: { label: "Student event", short: "Student", color: "#9333ea" },
+  community: { label: "Community", short: "Community", color: "#78716c" },
+  class: { label: "Class", short: "Class", color: "#64748b" },
 };
+/** the types people can filter by or create (classes come from your schedule) */
+export const EVENT_TYPES = ["sports_play", "sports_watch", "career", "academic", "usc", "student", "community"] as const;
 
 const WALK_M_PER_MIN = 80;
 
