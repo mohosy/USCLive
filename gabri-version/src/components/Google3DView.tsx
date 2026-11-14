@@ -62,6 +62,9 @@ export default function Google3DView(props: Props) {
     minZoom: 15, maxZoom: 20, maxPitch: 80,
   });
   const ready = useRef(false);
+  const hovered = useRef<string | null>(null);
+  const ZOOM_LABELS = 18.2;
+  const zoomedIn = useRef((props.initialCamera?.zoom ?? 16.6) >= ZOOM_LABELS);
   const [credits, setCredits] = useState("");
   const [error, setError] = useState<string | null>(null);
   const cb = useRef(props);
@@ -110,6 +113,19 @@ export default function Google3DView(props: Props) {
           };
         },
       }),
+      // invisible hover targets, one per building
+      new ScatterplotLayer<Building>({
+        id: "building-hit",
+        data: p.buildings,
+        getPosition: (b) => [b.lng, b.lat],
+        getRadius: 22,
+        radiusUnits: "pixels",
+        getFillColor: [0, 0, 0, 0],
+        pickable: true,
+        billboard: true,
+        extensions: [terrain],
+        parameters: { depthCompare: "always" },
+      }),
       new ScatterplotLayer<Pin>({
         id: "pins",
         data: pins,
@@ -127,17 +143,19 @@ export default function Google3DView(props: Props) {
         parameters: { depthCompare: "always" },
         updateTriggers: { getLineColor: p.selectedEventId, getLineWidth: p.selectedEventId },
       }),
+      // names only for the hovered building, plus the main buildings once you zoom in close
       new TextLayer<Building>({
         id: "building-names",
-        data: p.buildings,
+        data: p.buildings.filter((b) => b.id === hovered.current || (zoomedIn.current && !b.minor)),
         getPosition: (b) => [b.lng, b.lat],
         getText: (b) => b.name,
-        getSize: 13,
+        getSize: (b) => (b.id === hovered.current ? 13 : 11),
         getColor: [255, 255, 255, 255],
-        outlineWidth: 3,
-        outlineColor: [0, 0, 0, 200],
+        outlineWidth: 1.5,
+        outlineColor: [0, 0, 0, 170],
         fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
-        fontWeight: 600,
+        fontWeight: 500,
+        updateTriggers: { getSize: hovered.current },
         fontSettings: { sdf: true },
         parameters: { depthCompare: "always" },
         getPixelOffset: [0, -22],
@@ -171,6 +189,9 @@ export default function Google3DView(props: Props) {
   function setView(v: MapViewState) {
     viewState.current = clamp(v);
     deck.current?.setProps({ viewState: viewState.current });
+    // crossing the zoom threshold shows/hides the building names
+    const z = (viewState.current.zoom ?? 0) >= ZOOM_LABELS;
+    if (z !== zoomedIn.current) { zoomedIn.current = z; deck.current?.setProps({ layers: layers() }); }
     const { longitude, latitude, zoom, pitch = 0, bearing = 0 } = viewState.current;
     if (ready.current) cb.current.onCamera({ longitude, latitude, zoom, pitch, bearing });
   }
@@ -203,6 +224,10 @@ export default function Google3DView(props: Props) {
       onClick: (info: PickingInfo<Pin>) => { if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent(info.object.id); },
       getCursor: ({ isHovering, isDragging }) => (isDragging ? "grabbing" : isHovering ? "pointer" : "grab"),
       getTooltip: (info: PickingInfo<Pin>) => (info.layer?.id === "pins" && info.object ? { text: info.object.title } : null),
+      onHover: (info: PickingInfo) => {
+        const id = info.layer?.id === "building-hit" ? (info.object as Building | undefined)?.id ?? null : null;
+        if (id !== hovered.current) { hovered.current = id; deck.current?.setProps({ layers: layers() }); }
+      },
       layers: layers(),
     });
     return () => { deck.current?.finalize(); deck.current = null; };

@@ -6,7 +6,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
+import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
 import { parseNavQuery } from "@/lib/nav";
+import { WEBCAMS, type Webcam } from "@/lib/webcams";
+import AlertDetail from "./AlertDetail";
+import WebcamViewer from "./WebcamViewer";
 import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
 import EventsPanel from "./EventsPanel";
@@ -15,7 +19,7 @@ import type { Camera, MapLayers } from "./MapView";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
-import { Avatar, Button, LEVEL_COLOR, cx } from "./ui";
+import { Avatar, Button, cx } from "./ui";
 
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
@@ -32,6 +36,9 @@ export default function App() {
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
+  const [chips, setChips] = useState<ChipState>({ games: true, busy: true, safety: true, schedule: true, events: true, webcams: true });
+  const [selAlert, setSelAlert] = useState<string | null>(null);
+  const [cam, setCam] = useState<Webcam | null>(null);
   const [threeReady, setThreeReady] = useState(false); // 3D tiles loaded enough to show
   const [flatGone, setFlatGone] = useState(false); // flat satellite placeholder removed after the fade
   const camera = useRef<Camera | null>(null); // shared so switching views keeps the same spot
@@ -97,6 +104,8 @@ export default function App() {
   const visible = useMemo(() => (state ? applyFilters(state.events, filters, now) : []), [state, filters, now]);
   const mapEvents = askRes ? state?.events.filter((e) => askRes.eventIds.includes(e.id) || visible.some((v) => v.id === e.id)) ?? [] : visible;
   const event = state?.events.find((e) => e.id === selEvent) ?? null;
+  const openAlert = state?.alerts.find((a) => a.id === selAlert) ?? null;
+  const callouts = useMemo(() => (state ? buildCallouts(state, chips, now) : []), [state, chips, now]);
 
   const openEvent = (id: string) => {
     const e = state?.events.find((x) => x.id === id);
@@ -108,7 +117,14 @@ export default function App() {
     setSelEvent(null); setSelBuilding(id);
     if (b) setFocus({ lat: b.lat, lng: b.lng, key: ++focusSeq.current });
   };
-  const closeDetail = () => { setSelEvent(null); setSelBuilding(null); };
+  const closeDetail = () => { setSelEvent(null); setSelBuilding(null); setSelAlert(null); };
+  function onCallout(c: Callout) {
+    const [kind, id] = c.id.split(":");
+    if (kind === "ev") openEvent(id);
+    else if (kind === "b") openBuilding(id);
+    else if (kind === "al") { setSelEvent(null); setSelBuilding(null); setSelAlert(id); setFocus({ lat: c.lat, lng: c.lng, zoom: 17.2, key: ++focusSeq.current }); }
+    else if (kind === "cam") setCam(WEBCAMS.find((w) => w.id === id) ?? null);
+  }
 
   async function rsvp(id: string) {
     try {
@@ -158,7 +174,7 @@ export default function App() {
   }
 
   const unread = notifs.filter((n) => !n.read).length;
-  const detailOpen = !!(event || selBuilding);
+  const detailOpen = !!(event || selBuilding || openAlert);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-white">
@@ -234,6 +250,8 @@ export default function App() {
           <div className={cx("min-h-0 flex-1 p-4", !detailOpen && tab === "events" ? "overflow-hidden" : "scroll-thin overflow-y-auto")}>
             {!state ? (
               <div className="space-y-2"><div className="skeleton h-24" /><div className="skeleton h-16" /><div className="skeleton h-16" /></div>
+            ) : openAlert ? (
+              <AlertDetail alert={openAlert} now={now} onClose={closeDetail} onResolved={() => { closeDetail(); refresh(); }} />
             ) : event ? (
               <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onOpenBuilding={openBuilding} />
             ) : selBuilding ? (
@@ -256,7 +274,7 @@ export default function App() {
           {/* Flat map. In 3D mode it shows satellite as a placeholder until the 3D campus has loaded. */}
           {state && (view === "map" || !flatGone) && (
             <MapView
-              events={layers.events ? mapEvents : []}
+              events={chips.events ? mapEvents : []}
               hotspots={state.hotspots}
               buildings={state.buildings}
               me={loc}
@@ -267,6 +285,9 @@ export default function App() {
               focus={focus}
               onSelectEvent={openEvent}
               onSelectBuilding={openBuilding}
+              callouts={walk ? [] : callouts}
+              alerts={chips.safety ? state.alerts : []}
+              onCallout={onCallout}
               initialCamera={startCam}
               onCamera={onFlatCamera}
               walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
@@ -309,16 +330,19 @@ export default function App() {
             ))}
           </div>
 
-          {view === "map" && <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
-            {([["events", "Events"], ["hotspots", "Crowds"], ["columns", "3D crowds"], ["places", "Places"]] as const).map(([k, l]) => (
-              <button key={k} onClick={() => setLayers((x) => ({ ...x, [k]: !x[k] }))} className={cx("rounded-md px-2.5 py-1 font-medium", layers[k] ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
-            ))}
-            {layers.hotspots && (
-              <div className="ml-2 flex items-center gap-2 pr-2 text-[11px] text-muted">
-                {Object.entries(LEVEL_COLOR).map(([l, c]) => <span key={l} className="flex items-center gap-1 capitalize"><span className="h-2 w-2 rounded-full" style={{ background: c }} />{l}</span>)}
-              </div>
-            )}
-          </div>}
+          {view === "map" && (
+            <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5">
+              {([["games", "Live games"], ["busy", "Busy spots"], ["safety", "Safety"], ["schedule", "My schedule"], ["events", "Events"], ["webcams", "Webcams"]] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
+                  className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-sm transition-colors", chips[k] ? "bg-cardinal text-white" : "border border-line bg-white text-foreground hover:bg-surface")}>{l}</button>
+              ))}
+              <span className="mx-1 h-5 w-px bg-black/10" />
+              {([["hotspots", "Heat"], ["places", "Places"]] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setLayers((x) => ({ ...x, [k]: !x[k] }))}
+                  className={cx("whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-sm", layers[k] ? "bg-foreground text-white" : "border border-line bg-white text-muted hover:bg-surface")}>{l}</button>
+              ))}
+            </div>
+          )}
 
           <div className="pointer-events-none absolute bottom-12 right-14 z-20 flex w-80 flex-col gap-2">
             {toasts.map((n) => (
@@ -332,6 +356,7 @@ export default function App() {
         </main>
       </div>
 
+      {cam && <WebcamViewer key={cam.id} cam={cam} onClose={() => setCam(null)} />}
       {state && <AddEventModal open={addOpen} onClose={() => setAddOpen(false)} state={state} onCreated={(e) => { refresh(); setTimeout(() => openEvent(e.id), 300); }} />}
       <InboxModal open={inboxOpen} onClose={() => setInboxOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} />
     </div>

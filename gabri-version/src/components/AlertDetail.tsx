@@ -1,0 +1,32 @@
+"use client";
+
+import { ArrowLeft, ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { api, fmtTime, type SafetyAlert } from "@/lib/client-types";
+import { Button } from "./ui";
+
+const KIND: Record<SafetyAlert["kind"], string> = { crime: "Crime reported", suspicious: "Suspicious activity", hazard: "Hazard", police_activity: "Police activity" };
+
+export default function AlertDetail({ alert, now, onClose, onResolved }: { alert: SafetyAlert; now: Date; onClose: () => void; onResolved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const mins = Math.max(0, Math.round((+now - +new Date(alert.createdAt)) / 60_000));
+  const left = Math.max(0, Math.round((+new Date(alert.expiresAt) - +now) / 60_000));
+  return (
+    <div>
+      <button onClick={onClose} className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"><ArrowLeft size={14} /> Back</button>
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-700"><ShieldAlert size={14} /> DPS · {KIND[alert.kind]}</div>
+      <h2 className="mt-1.5 text-xl font-semibold leading-tight">{alert.title}</h2>
+      <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{alert.advice}</p>
+      <div className="mt-4 border-t border-line pt-2 text-sm">
+        <div className="flex gap-3 py-1.5"><div className="w-20 shrink-0 text-muted">Where</div><div>{alert.locationText}</div></div>
+        <div className="flex gap-3 py-1.5"><div className="w-20 shrink-0 text-muted">Reported</div><div>{fmtTime(alert.createdAt)} ({mins < 1 ? "just now" : `${mins} min ago`})</div></div>
+        <div className="flex gap-3 py-1.5"><div className="w-20 shrink-0 text-muted">Source</div><div>{alert.source === "dps_email" ? "DPS Trojans Alert email" : "USC Department of Public Safety"}</div></div>
+        <div className="flex gap-3 py-1.5"><div className="w-20 shrink-0 text-muted">On map</div><div>For {left} more min, or until DPS clears it</div></div>
+      </div>
+      <p className="mt-4 text-sm text-muted">Need a walking escort? Call DPS at <a href="tel:2137404321" className="font-medium text-foreground underline">213-740-4321</a>. In an emergency call 911.</p>
+      <Button variant="secondary" className="mt-5 w-full" disabled={busy} onClick={async () => { setBusy(true); await api(`/api/alerts/${alert.id}`, { method: "POST" }); setBusy(false); onResolved(); }}>
+        Mark cleared (DPS staff)
+      </Button>
+    </div>
+  );
+}

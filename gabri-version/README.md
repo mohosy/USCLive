@@ -24,6 +24,11 @@ Without an API key everything still works in **offline mode** (heuristics). With
 |---|---|
 | 3D campus map (Mapbox Standard: 3D buildings, landmarks, trees; needs `NEXT_PUBLIC_MAPBOX_TOKEN`), event pins sized by attendance | `src/components/MapView.tsx` |
 | Map / Satellite / **3D** switch. 3D = Google Photorealistic 3D Tiles via deck.gl (needs `NEXT_PUBLIC_GOOGLE_MAPS_KEY` with Map Tiles API) | `src/components/Google3DView.tsx` |
+| Map callouts (Mo's design): live game scores, busy/quiet spots, DPS cautions, your next class, pickup events, webcams, with filter chips | `src/lib/callouts.ts`, `MapView.tsx` |
+| DPS safety alerts: red zones + callouts, expire automatically, "Trojans Alert" emails become map alerts via the inbox scan | `src/lib/seed.ts`, `api/inbox/scan`, `api/alerts/[id]` |
+| Live webcams: Caltrans I-110 live video (HLS) + USC Tommy/Hecuba snapshots (link to usc.edu for USC's live player) | `src/lib/webcams.ts`, `WebcamViewer.tsx` |
+| Every named building on campus tagged (143 from OpenStreetMap + 27 hand-tuned) | `src/lib/campus.ts`, `campus-buildings.osm.json` |
+| Mo's 3D walking tour: type "how do I get to THH" | `src/components/walk/` |
 | Hotspots: heatmap + 3D "crowd columns" vs. normal level for that hour, k-anonymity (<5 people hidden) | `src/lib/hotspots.ts` |
 | **"What should I do now?"** — free time before next class, walk times, friends, free food → 3 ranked suggestions | `src/app/api/ai/now`, `NowPanel.tsx` |
 | Ask the map (natural language → answer + highlighted pins + fly-to) | `src/app/api/ai/ask` |

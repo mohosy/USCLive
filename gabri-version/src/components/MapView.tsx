@@ -4,7 +4,9 @@ import mapboxgl from "mapbox-gl";
 import type { Feature, FeatureCollection } from "geojson";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
-import { isLive, type Building, type EventView, type Hotspot, type Loc } from "@/lib/client-types";
+import type { Callout } from "@/lib/callouts";
+import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
+import { gameState } from "@/lib/games";
 import { LEVEL_COLOR } from "./ui";
 import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
@@ -52,6 +54,9 @@ interface Props {
   focus: { lat: number; lng: number; zoom?: number; key: number } | null;
   onSelectEvent: (id: string) => void;
   onSelectBuilding: (id: string) => void;
+  callouts: Callout[];
+  alerts: SafetyAlert[];
+  onCallout: (c: Callout) => void;
   initialCamera?: Camera | null;
   onCamera?: (c: Camera) => void;
   /** "How do I get to THH" — animated 3D walk from `me` to this building. */
@@ -103,6 +108,32 @@ function buildingLabelGeo(buildings: Building[]): FC {
   };
 }
 
+function alertGeo(alerts: SafetyAlert[]): FC {
+  return {
+    type: "FeatureCollection",
+    features: alerts.map((a) => ({ type: "Feature", properties: { id: a.id }, geometry: { type: "Polygon", coordinates: [circlePolygon(a.lng, a.lat, a.radiusM, 40)] } })),
+  };
+}
+
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/** Inner HTML of a callout bubble. Games get their score/clock filled in separately every second. */
+function calloutHTML(c: Callout, now: Date) {
+  let title = esc(c.title);
+  let meta = c.meta ? esc(c.meta) : "";
+  if (c.game) {
+    const g = gameState(c.game.info, c.game.start, now);
+    title = `${esc(c.game.info.home)} <b>${g.home}</b><span class="co-dash">–</span><b>${g.away}</b> ${esc(c.game.info.away)}`;
+    meta = `${g.period}${g.clock ? ` · ${g.clock}` : ""}`;
+  }
+  const dot = c.kind === "busy" ? "#ea580c" : c.kind === "quiet" ? "#16a34a" : c.kind === "alert" || c.kind === "game" ? "#dc2626" : "";
+  return `<div class="co-card">
+    <div class="co-eyebrow">${dot ? `<i style="background:${dot}" class="${c.kind === "game" || c.kind === "alert" ? "co-blink" : ""}"></i>` : ""}${esc(c.eyebrow)}</div>
+    <div class="co-title">${title}${meta && (c.kind === "busy" || c.kind === "quiet") ? ` <span class="co-meta">· ${meta}</span>` : ""}</div>
+    ${meta && c.kind !== "busy" && c.kind !== "quiet" ? `<div class="co-meta">${meta}</div>` : ""}
+  </div><div class="co-stem"></div><div class="co-foot"></div>`;
+}
+
 /** Events as GeoJSON points. Several events in one building fan out in a small ring. */
 function eventGeo(events: EventView[], selectedId: string | null, highlight: string[] | null): FC {
   const perBuilding = new Map<string, number>();
@@ -139,7 +170,8 @@ export default function MapView(props: Props) {
   const ready = useRef(false);
   const styleRef = useRef<MapStyle>(props.mapStyle);
   const meMarker = useRef<mapboxgl.Marker | null>(null);
-  const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings) });
+  const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC; alerts: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings), alerts: EMPTY });
+  const bubbles = useRef(new Map<string, { m: mapboxgl.Marker; el: HTMLDivElement; html: string; c: Callout }>());
   const cb = useRef(props);
   useEffect(() => { cb.current = props; });
   const walkRef = useRef<WalkGuide | null>(null);
@@ -171,6 +203,10 @@ export default function MapView(props: Props) {
     m.addSource("hot-points", { type: "geojson", data: data.current.points });
     m.addSource("hot-columns", { type: "geojson", data: data.current.columns });
     m.addSource("building-labels", { type: "geojson", data: data.current.buildings });
+    m.addSource("alerts", { type: "geojson", data: data.current.alerts });
+    // DPS alert zones
+    m.addLayer({ id: "alert-fill", type: "fill", source: "alerts", slot: "middle", paint: { "fill-color": "#dc2626", "fill-opacity": 0.16, "fill-emissive-strength": 1 } });
+    m.addLayer({ id: "alert-line", type: "line", source: "alerts", slot: "middle", paint: { "line-color": "#dc2626", "line-width": 1.5, "line-opacity": 0.6, "line-emissive-strength": 1 } });
 
 
     m.addLayer({
@@ -300,7 +336,8 @@ export default function MapView(props: Props) {
       if (id) cb.current.onSelectBuilding(id);
     });
 
-    return () => { m.remove(); map.current = null; ready.current = false; };
+    const bb = bubbles.current;
+    return () => { bb.clear(); m.remove(); map.current = null; ready.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -330,6 +367,58 @@ export default function MapView(props: Props) {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(syncLayers, [props.layers]);
+
+  useEffect(() => {
+    const fc = alertGeo(props.alerts);
+    data.current.alerts = fc;
+    if (ready.current) setSource("alerts", fc);
+  }, [props.alerts]);
+
+  // callout bubbles: a few DOM markers (diffed by id, so nothing re-mounts on refresh)
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const now = new Date();
+    const keep = new Set<string>();
+    for (const c of props.callouts) {
+      keep.add(c.id);
+      const html = calloutHTML(c, now);
+      let b = bubbles.current.get(c.id);
+      if (!b) {
+        const el = document.createElement("div");
+        el.className = `co co-${c.kind}`;
+        el.addEventListener("click", (ev) => { ev.stopPropagation(); cb.current.onCallout(bubbles.current.get(c.id)?.c ?? c); });
+        el.innerHTML = html;
+        const marker = new mapboxgl.Marker({ element: el, anchor: "bottom" }).setLngLat([c.lng, c.lat]).addTo(m);
+        b = { m: marker, el, html, c };
+        bubbles.current.set(c.id, b);
+      } else {
+        b.c = c;
+        b.m.setLngLat([c.lng, c.lat]);
+        if (b.html !== html) { b.el.innerHTML = html; b.html = html; }
+      }
+      if (c.intensity != null) b.el.style.setProperty("--intensity", String(c.intensity));
+    }
+    for (const [id, b] of bubbles.current) if (!keep.has(id)) { b.m.remove(); bubbles.current.delete(id); }
+  }, [props.callouts]);
+
+  // tick live game clocks every second; flash the bubble when the score changes
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = new Date();
+      for (const b of bubbles.current.values()) {
+        if (!b.c.game) continue;
+        const html = calloutHTML(b.c, now);
+        if (html === b.html) continue;
+        const scoreOf = (h: string) => (h.match(/<b>\d+<\/b>/g) ?? []).join();
+        const scored = scoreOf(html) !== scoreOf(b.html);
+        b.el.innerHTML = html;
+        b.html = html;
+        if (scored) { b.el.classList.remove("co-bump"); void b.el.offsetWidth; b.el.classList.add("co-bump"); }
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const m = map.current;
