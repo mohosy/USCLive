@@ -71,7 +71,7 @@ export default function WebcamViewer({ cam, onClose }: { cam: Webcam; onClose: (
           <div className="absolute bottom-4 right-4 flex items-center gap-2">
             {cam.page && (
               <a href={cam.page} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-semibold text-black hover:bg-white/90">
-                Watch live video on usc.edu <ExternalLink size={12} />
+                {mode === "video" ? "Official page" : "Watch live video on usc.edu"} <ExternalLink size={12} />
               </a>
             )}
             <span className="rounded bg-black/55 px-2 py-1 text-[10px] text-white/80">{cam.source === "Caltrans" ? "Caltrans CCTV" : "USC"}{mode === "image" ? " · still, updates every ~30 s" : ""}</span>

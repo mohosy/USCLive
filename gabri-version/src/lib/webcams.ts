@@ -3,8 +3,9 @@
  *
  * - Caltrans CCTV: open public data (cwwp2.dot.ca.gov), CORS allowed. Credit "Caltrans".
  *   Full District 7 list: https://cwwp2.dot.ca.gov/data/d7/cctv/cctvStatusD07.json
- * - USC Tommy Cam / Hecuba Cam: USC restricts its player to usc.edu, so we only show the public
- *   snapshot and link out to the official page for the live video.
+ * - USC Tommy Cam / Hecuba Cam: USC's own player only runs on usc.edu, so we play the public HLS
+ *   stream directly (team decision for the hackathon demo) and credit/link the official page.
+ *   Ask USC Communications before using this in production.
  */
 export interface Webcam {
   id: string;
@@ -27,12 +28,14 @@ export const WEBCAMS: Webcam[] = [
   {
     id: "usc-tommy", name: "Tommy Trojan", view: "Hahn Plaza: Tommy Trojan, Bovard and Trousdale Parkway",
     lat: 34.020536, lng: -118.285465, source: "USC",
+    hls: "https://cs9.pixelcaster.com/live/usc-tommy.stream/playlist.m3u8",
     image: "https://cdn.pixelcaster.com/public.pixelcaster.com/snapshots/usc-tommy/latest_1920x.jpg",
     page: "https://www.usc.edu/tommy-cam/",
   },
   {
     id: "usc-hecuba", name: "Hecuba, USC Village", view: "USC Village plaza, looking north",
     lat: 34.02482, lng: -118.28469, source: "USC",
+    hls: "https://cs9.pixelcaster.com/live/usc-hecuba.stream/playlist.m3u8",
     image: "https://cdn.pixelcaster.com/public.pixelcaster.com/snapshots/usc-hecuba/latest_1920x.jpg",
     page: "https://www.usc.edu/hecuba-cam/",
   },
