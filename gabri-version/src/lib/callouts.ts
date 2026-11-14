@@ -23,7 +23,8 @@ export interface Callout {
   intensity?: number;
 }
 
-export interface ChipState { games: boolean; busy: boolean; safety: boolean; schedule: boolean; events: boolean; webcams: boolean }
+/** The one filter row on the map. Free food narrows Events; Crowds covers busy/quiet places and the heat glow. */
+export interface ChipState { games: boolean; events: boolean; food: boolean; crowds: boolean; safety: boolean; schedule: boolean; webcams: boolean }
 
 const ago = (iso: string, now: Date) => {
   const m = Math.max(0, Math.round((+now - +new Date(iso)) / 60_000));
@@ -48,7 +49,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     }
   }
 
-  if (chips.busy) {
+  if (chips.crowds) {
     const tracked = s.hotspots.filter((h) => !h.suppressed && b(h.buildingId) && ["dining", "gym", "library", "student_center"].includes(b(h.buildingId).kind));
     const fill = (h: (typeof tracked)[number]) => Math.min(99, Math.round((h.count / b(h.buildingId).capacity) * 100));
     const busiest = [...tracked].filter((h) => h.level === "busy" || h.level === "packed").sort((x, y) => fill(y) - fill(x)).slice(0, 3);
@@ -90,7 +91,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
 
   if (chips.events) {
     const soon = s.events
-      .filter((e) => !e.game && e.lat != null && e.lng != null && (e.visibility === "open" || e.freeFood || e.friendsGoing.length > 0))
+      .filter((e) => !e.game && e.lat != null && e.lng != null && (chips.food ? e.freeFood : e.visibility === "open" || e.freeFood || e.friendsGoing.length > 0))
       .filter((e) => +new Date(e.end) > +now && +new Date(e.start) - +now < 90 * 60_000)
       .sort((x, y) => y.friendsGoing.length - x.friendsGoing.length || +new Date(x.start) - +new Date(y.start))
       .slice(0, 4);

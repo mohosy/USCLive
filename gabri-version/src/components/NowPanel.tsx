@@ -17,8 +17,10 @@ interface NowRes {
 
 const ACTION_LABEL: Record<string, string> = { join: "Join", go: "Go", study: "View", eat: "Join", rest: "View", prep: "View" };
 
-export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRsvp }: {
+export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRsvp, compact }: {
   state: AppState; loc: Loc; onOpenEvent: (id: string) => void; onOpenBuilding: (id: string) => void; onRsvp: (id: string) => Promise<void>;
+  /** only the "Right now" suggestions (the Home tab shows the schedule itself) */
+  compact?: boolean;
 }) {
   const [res, setRes] = useState<NowRes | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,6 +97,7 @@ export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRs
         ) : null}
       </section>
 
+      {!compact && (
       <section>
         <h2 className="mb-2 text-sm font-semibold">Today</h2>
         {state.me.today.length === 0 && <p className="text-sm text-muted">No classes today.</p>}
@@ -116,6 +119,7 @@ export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRs
           })}
         </ul>
       </section>
+      )}
     </div>
   );
 }

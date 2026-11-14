@@ -26,7 +26,7 @@ import { Avatar, Button, cx } from "./ui";
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 
-type Tab = "menu" | "now" | "events" | "study";
+type Tab = "menu" | "events" | "study";
 const START_LOC: Loc = { lat: BUILDING_BY_ID.gin.lat, lng: BUILDING_BY_ID.gin.lng, label: "Ginsburg Hall", buildingId: "gin" };
 
 interface AskRes { answer: string; eventIds: string[]; buildingIds: string[]; focusBuildingId: string; ai: boolean }
@@ -42,12 +42,13 @@ export default function App() {
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
-  const [chips, setChips] = useState<ChipState>({ games: true, busy: true, safety: true, schedule: true, events: true, webcams: true });
+  const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: false, crowds: true, safety: true, schedule: true, webcams: true });
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
   const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
   const [warmSat, setWarmSat] = useState(false);
-  const [intro, setIntro] = useState(true); // globe-to-campus flight on first load // start loading Satellite in the background (on hover)
+  const [intro, setIntro] = useState(true); // campus glide on first load (bubbles wait for it)
+  useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
   const threeReady = view === "3d" && satLoaded;
   const [flatGone, setFlatGone] = useState(false); // flat satellite placeholder removed after the fade
   const camera = useRef<Camera | null>(null); // shared so switching views keeps the same spot
@@ -127,6 +128,7 @@ export default function App() {
   const mapEvents = askRes ? state?.events.filter((e) => askRes.eventIds.includes(e.id) || visible.some((v) => v.id === e.id)) ?? [] : visible;
   const event = state?.events.find((e) => e.id === selEvent) ?? null;
   const openAlert = state?.alerts.find((a) => a.id === selAlert) ?? null;
+  const chips = useMemo(() => ({ ...chipState, food: filters.freeFood }), [chipState, filters.freeFood]);
   const callouts = useMemo(() => (state ? buildCallouts(state, chips, now) : []), [state, chips, now]);
 
   const openEvent = (id: string) => {
@@ -279,7 +281,7 @@ export default function App() {
             onPointerDown={(e) => { grip.current = e.clientY; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerUp={(e) => { if (grip.current != null && e.clientY - grip.current > 50) setMenuOpen(false); grip.current = null; }} />
           {!detailOpen && (
             <nav className="flex items-center gap-4 border-b border-line px-4">
-              {([["menu", "Overview"], ["now", "For you"], ["events", "Events"], ["study", "Study spots"]] as const).map(([t, l]) => (
+              {([["menu", "Home"], ["events", "Events"], ["study", "Study spots"]] as const).map(([t, l]) => (
                 <button key={t} onClick={() => setTab(t)} className={cx("-mb-px border-b-2 py-3 text-sm font-medium", tab === t ? "border-cardinal text-foreground" : "border-transparent text-muted hover:text-foreground")}>{l}</button>
               ))}
               <button onClick={() => setMenuOpen(false)} className="ml-auto rounded-md p-1 text-muted hover:bg-surface hover:text-foreground" aria-label="Close menu"><X size={16} /></button>
@@ -295,9 +297,10 @@ export default function App() {
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (
-              <MenuPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={() => setAddOpen(true)} onStudy={() => setTab("study")} />
-            ) : tab === "now" ? (
-              <NowPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
+              <>
+                <NowPanel compact state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
+                <div className="mt-4"><MenuPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={() => setAddOpen(true)} onStudy={() => setTab("study")} /></div>
+              </>
             ) : tab === "events" ? (
               <EventsPanel events={visible} filters={filters} setFilters={setFilters} loc={loc} onOpen={openEvent} now={now} />
             ) : (
@@ -319,7 +322,7 @@ export default function App() {
               hotspots={state.hotspots}
               buildings={state.buildings}
               me={loc}
-              layers={layers}
+              layers={{ ...layers, hotspots: chips.crowds, places: false }}
               mapStyle="map"
               selectedEventId={selEvent}
               highlightIds={askRes && askRes.eventIds.length ? askRes.eventIds : null}
@@ -356,7 +359,7 @@ export default function App() {
                 callouts={walk ? [] : callouts}
                 alerts={chips.safety ? state.alerts : []}
                 hotspots={state.hotspots}
-                showHeat={layers.hotspots}
+                showHeat={chips.crowds}
                 onCallout={onCallout}
               />
             </div>
@@ -380,27 +383,14 @@ export default function App() {
             ))}
           </div>
 
-          {/* Layer chips under the search bar */}
+          {/* One filter row: each chip is a layer on the map (and its legend) */}
           <div className="chip-row absolute left-3 right-3 top-[52px] z-10 flex gap-1.5 overflow-x-auto pb-1">
-            {([["games", "Games"], ["busy", "Busy spots"], ["schedule", "My schedule"], ["events", "Events"]] as const).map(([k, l]) => (
-              <button key={k} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))} aria-pressed={chips[k]}
-                className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-semibold shadow-sm transition-colors", chips[k] ? "bg-cardinal text-white" : "bg-white text-foreground hover:bg-surface")}>{l}</button>
+            {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
+              <button key={k} aria-pressed={chips[k]}
+                onClick={() => (k === "food" ? setFilters((f) => ({ ...f, freeFood: !f.freeFood })) : setChips((c) => ({ ...c, [k]: !c[k] })))}
+                className={cx("whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium shadow-sm transition-colors", chips[k] ? "bg-foreground text-white" : "bg-white text-foreground hover:bg-surface")}>{l}</button>
             ))}
           </div>
-
-          {!(view === "3d" && !threeReady) && (
-            <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5">
-              {([["safety", "Safety"], ["webcams", "Webcams"]] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
-                  className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-sm transition-colors", chips[k] ? "bg-cardinal text-white" : "border border-line bg-white text-foreground hover:bg-surface")}>{l}</button>
-              ))}
-              <span className="mx-1 h-5 w-px bg-black/10" />
-              {(view === "map" ? ([["hotspots", "Heat"], ["places", "Places"]] as const) : ([["hotspots", "Heat"]] as const)).map(([k, l]) => (
-                <button key={k} onClick={() => setLayers((x) => ({ ...x, [k]: !x[k] }))}
-                  className={cx("whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-sm", layers[k] ? "bg-foreground text-white" : "border border-line bg-white text-muted hover:bg-surface")}>{l}</button>
-              ))}
-            </div>
-          )}
 
           <div className="pointer-events-none absolute bottom-12 right-14 z-20 flex w-80 flex-col gap-2">
             {toasts.map((n) => (

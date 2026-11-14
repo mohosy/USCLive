@@ -93,7 +93,6 @@ export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onA
             </span>
           </button>
         ))}
-        <button onClick={onAddEvent} className="mt-1.5 rounded-[10px] border border-[#e3e0da] bg-white px-3 py-2 text-[13px] font-semibold hover:border-cardinal hover:text-cardinal">+ New event</button>
       </Section>
 
       <section className="border-b border-[#eeece8] py-2">

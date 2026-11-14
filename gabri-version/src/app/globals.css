@@ -112,9 +112,10 @@ html, body {
 .co-alert .co-foot::after { width: 120px; height: 120px; background: rgba(220, 38, 38, 0.12); border: 2px solid rgba(220, 38, 38, 0.6); animation: co-ring 2s ease-out infinite; }
 
 /* next class / office hours: cardinal border */
-.co-schedule { --co-edge: var(--cardinal); }
-.co-schedule .co-card { border-color: var(--cardinal); }
-.co-schedule .co-eyebrow { color: var(--cardinal); }
+/* your schedule = blue, same as your location dot */
+.co-schedule { --co-edge: #2563eb; }
+.co-schedule .co-card { border-color: #2563eb; }
+.co-schedule .co-eyebrow { color: #2563eb; }
 
 /* webcam: compact dark pill */
 .co-webcam { --co-edge: #16181d; }

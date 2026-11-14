@@ -72,15 +72,16 @@ export const SCHOOLS: { id: SchoolId; name: string; short: string }[] = [
   { id: "iovine", name: "Iovine & Young Academy", short: "Iovine" },
 ];
 
+/** Event colors: 5 groups, none of them red (red is reserved for safety, gold for live games, blue for you). */
 export const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  social: { label: "Social", color: "#e11d48" },
   sports: { label: "Sports", color: "#16a34a" },
-  study: { label: "Study", color: "#2563eb" },
-  academic: { label: "Academic", color: "#7c3aed" },
-  career: { label: "Career", color: "#0891b2" },
-  club: { label: "Club", color: "#ea580c" },
+  social: { label: "Social", color: "#8b5cf6" },
+  club: { label: "Club", color: "#8b5cf6" },
+  study: { label: "Study", color: "#0d9488" },
+  academic: { label: "Academic", color: "#0d9488" },
+  office_hours: { label: "Office hours", color: "#0d9488" },
+  career: { label: "Career", color: "#475569" },
   arts: { label: "Arts", color: "#db2777" },
-  office_hours: { label: "Office hours", color: "#9333ea" },
   class: { label: "Class", color: "#64748b" },
 };
 

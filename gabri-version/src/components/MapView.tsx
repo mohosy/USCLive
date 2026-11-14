@@ -305,7 +305,11 @@ export default function MapView(props: Props) {
     m.on("style.load", install);
     if (intro) {
       // a gentle glide: zoom in, tilt into 3D and turn slightly, landing on where you are
-      m.once("load", () => setTimeout(() => {
+      // start when the map is ready, but never wait more than 1.5 s after the style for slow tiles
+      let started = false;
+      const go = () => {
+        if (started) return;
+        started = true;
         const me = cb.current.me;
         m.easeTo({ center: [me.lng, me.lat], zoom: 16.6, pitch: 62, bearing: -20, duration: 3600, essential: true, easing: (t) => 1 - Math.pow(1 - t, 3) });
         m.once("moveend", () => {
@@ -314,7 +318,9 @@ export default function MapView(props: Props) {
           m.setMaxBounds(USC_BOUNDS);
           cb.current.onIntroDone?.();
         });
-      }, 300));
+      };
+      m.once("load", () => setTimeout(go, 300));
+      m.once("style.load", () => setTimeout(go, 1500));
     }
     // trackpad two-finger click = right click: rotate the map instead of opening the browser menu
     el.current.addEventListener("contextmenu", (e) => e.preventDefault());
