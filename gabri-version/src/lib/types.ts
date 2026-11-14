@@ -171,8 +171,11 @@ export interface SafetyAlert {
   radiusM: number;
   createdAt: string;
   expiresAt: string;
-  source: "dps" | "dps_email";
+  source: "dps" | "dps_email" | "dps_log";
   resolved: boolean;
+  /** from the DPS Daily Crime Log */
+  caseNo?: string;
+  disposition?: string;
 }
 
 export interface Org {

@@ -62,6 +62,8 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
 
   if (chips.safety) {
     for (const a of s.alerts) {
+      // crime-log entries: bubble only for serious or recent ones; the rest stay as red zones on the map
+      if (a.source === "dps_log" && a.severity !== "high" && +now - +new Date(a.createdAt) > 6 * 3600_000) continue;
       out.push({ id: `al:${a.id}`, kind: "alert", lng: a.lng, lat: a.lat, eyebrow: "DPS · Caution", title: a.title, meta: `${a.advice} · ${ago(a.createdAt, now)}` });
     }
   }

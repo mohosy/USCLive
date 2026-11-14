@@ -3,11 +3,12 @@ import { aiEnabled } from "@/lib/ai";
 import { BUILDINGS } from "@/lib/campus";
 import { computeHotspots } from "@/lib/hotspots";
 import { freeWindow, todaysClasses } from "@/lib/planner";
-import { activeAlerts, canSee, db, getMe, getUser, orgs, publicEvent } from "@/lib/store";
+import { activeAlerts, canSee, db, getMe, getUser, orgs, publicEvent, syncDps } from "@/lib/store";
 
 
 export async function GET() {
   await connection();
+  void syncDps(); // background refresh of the DPS crime log (throttled to every 30 min)
   const me = getMe();
   const now = new Date();
   const d = db();

@@ -16,6 +16,7 @@ interface DB {
   scannedInbox: string[];
   notifications: Notification[];
   alerts: SafetyAlert[];
+  dps: { lastSync: number; lastUrl: string | null; error: string | null; syncing: boolean };
   lastLiveTick: number;
   liveScriptIndex: number;
 }
@@ -32,6 +33,7 @@ function fresh(): DB {
     scannedInbox: [],
     notifications: seedNotifications(now),
     alerts: seedAlerts(now),
+    dps: { lastSync: 0, lastUrl: null, error: null, syncing: false },
     lastLiveTick: +now,
     liveScriptIndex: 0,
   };
@@ -39,7 +41,11 @@ function fresh(): DB {
 
 export function db(): DB {
   if (!g.__usclive) g.__usclive = fresh();
-  return g.__usclive;
+  // fill fields added after the store was created (hot reload keeps the old object around)
+  const d = g.__usclive;
+  d.alerts ??= seedAlerts(new Date());
+  d.dps ??= { lastSync: 0, lastUrl: null, error: null, syncing: false };
+  return d;
 }
 
 export function resetDb() {
@@ -49,6 +55,27 @@ export function resetDb() {
 
 /** DPS alerts still on the map: not resolved and not expired. */
 export const activeAlerts = (now = new Date()) => db().alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now);
+
+/** Pull the DPS Daily Crime Log (at most every 30 min) and merge its incidents into the alerts. */
+export async function syncDps(force = false) {
+  const d = db();
+  if (d.dps.syncing || (!force && Date.now() - d.dps.lastSync < 30 * 60_000)) return d.dps;
+  d.dps.syncing = true;
+  try {
+    const { syncDpsLog } = await import("./dps");
+    const r = await syncDpsLog();
+    const have = new Set(d.alerts.map((a) => a.id));
+    for (const a of r.alerts) if (!have.has(a.id)) d.alerts.push(a);
+    Object.assign(d.dps, { lastSync: Date.now(), lastUrl: r.url, error: null });
+    console.log(`[dps] synced ${r.alerts.length} alerts from ${r.incidents} log entries (${r.url})`);
+  } catch (e) {
+    Object.assign(d.dps, { lastSync: Date.now(), error: (e as Error).message });
+    console.error("[dps] sync failed:", (e as Error).message);
+  } finally {
+    d.dps.syncing = false;
+  }
+  return d.dps;
+}
 
 export const currentUserId = () => ME;
 export const getUser = (id: string) => db().users.find((u) => u.id === id);
