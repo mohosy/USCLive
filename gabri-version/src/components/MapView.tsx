@@ -282,7 +282,6 @@ export default function MapView(props: Props) {
       accessToken: TOKEN,
       style: s.url,
       config: { basemap: { ...s.config, ...placeConfig(styleRef.current, props.layers.places) } },
-      projection: "globe",
       center: intro ? [props.me.lng, props.me.lat] : props.initialCamera ? [props.initialCamera.longitude, props.initialCamera.latitude] : USC_CENTER,
       zoom: intro ? 14.6 : props.initialCamera?.zoom ?? 16.4,
       minZoom: intro ? 14 : 15,
