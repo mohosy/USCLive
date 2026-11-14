@@ -147,8 +147,7 @@ export default function App() {
       setAskRes(null);
       setSelEvent(null);
       setSelBuilding(null);
-      switchView("map");
-      setWalk({ toId: nav.buildingId, key: ++focusSeq.current });
+      setWalk({ toId: nav.buildingId, key: ++focusSeq.current }); // plays in whichever view is open (Map or 3D)
       return;
     }
     setAskBusy(true);
@@ -290,7 +289,7 @@ export default function App() {
               onCallout={onCallout}
               initialCamera={startCam}
               onCamera={onFlatCamera}
-              walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
+              walk={view === "map" && walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
               onWalkEnd={() => { setWalk(null); setAsk(""); }}
             />
           )}
@@ -308,6 +307,8 @@ export default function App() {
                 follow={camBus}
                 onReady={() => { setThreeReady(true); setTimeout(() => setFlatGone(true), 800); }}
                 onCamera={(c) => { camera.current = c; }}
+                walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
+                onWalkEnd={() => { setWalk(null); setAsk(""); }}
               />
             </div>
           )}

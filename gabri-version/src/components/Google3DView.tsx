@@ -7,13 +7,16 @@
 import { Deck, FlyToInterpolator, type MapViewState, type PickingInfo } from "@deck.gl/core";
 import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import { Tile3DLayer } from "@deck.gl/geo-layers";
-import { ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
 import { RotateCcw, RotateCw, Compass } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { isLive, type Building, type EventView, type Loc } from "@/lib/client-types";
+import { bearing as bearingTo, fetchWalkRoute, Path, type Step } from "@/lib/walkRoute";
 import type { Camera } from "./MapView";
+import type { WalkPhase, WalkProgress } from "./walk/WalkGuide";
+import WalkHUD from "./walk/WalkHUD";
 
 /** Tiny pub/sub so the flat map can drive this camera while the 3D tiles load (no React re-renders per frame). */
 export interface CameraBus { listeners: Set<(c: Camera) => void> }
@@ -38,6 +41,24 @@ interface Props {
   follow: CameraBus;
   onReady: () => void;
   onCamera: (c: Camera) => void;
+  /** walking tour to this building (same trigger as Mo's tour on the flat map) */
+  walk: { to: Building; key: number } | null;
+  onWalkEnd: () => void;
+}
+
+interface WalkState {
+  path: Path;
+  steps: Step[];
+  landmarks: { name: string; atM: number }[];
+  fallback: boolean;
+  to: Building;
+  dist: number;
+  speed: number; // m/s of the fast-forwarded preview
+  phase: WalkPhase;
+  bearing: number;
+  last: number;
+  raf: number;
+  started: number;
 }
 
 interface Pin { id: string; position: [number, number]; color: [number, number, number, number]; radius: number; selected: boolean; title: string }
@@ -69,6 +90,8 @@ export default function Google3DView(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const cb = useRef(props);
   useEffect(() => { cb.current = props; });
+  const walk = useRef<WalkState | null>(null);
+  const [walkP, setWalkP] = useState<WalkProgress | null>(null);
 
   function layers() {
     const p = cb.current;
@@ -91,6 +114,8 @@ export default function Google3DView(props: Props) {
       });
     }
     const terrain = new TerrainExtension();
+    const w = walk.current;
+    const walkLayers = w ? walkLayersFor(w, terrain) : [];
     return [
       new Tile3DLayer({
         id: "google-3d",
@@ -126,9 +151,10 @@ export default function Google3DView(props: Props) {
         extensions: [terrain],
         parameters: { depthCompare: "always" },
       }),
+      ...walkLayers,
       new ScatterplotLayer<Pin>({
         id: "pins",
-        data: pins,
+        data: w ? [] : pins,
         getPosition: (d) => d.position,
         getFillColor: (d) => d.color,
         getLineColor: (d) => (d.selected ? [153, 0, 0, 255] : [255, 255, 255, 255]),
@@ -178,6 +204,86 @@ export default function Google3DView(props: Props) {
         parameters: { depthCompare: "always" },
       }),
     ];
+  }
+
+  function walkLayersFor(w: WalkState, terrain: InstanceType<typeof TerrainExtension>) {
+    const here = w.path.at(w.dist);
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+    const toLL = (p: { lng: number; lat: number }): [number, number] => [p.lng, p.lat];
+    return [
+      new PathLayer({ id: "walk-casing", data: [{ path: w.path.pts.map(toLL) }], getPath: (d: { path: [number, number][] }) => d.path, getColor: [255, 255, 255, 230], getWidth: 11, widthUnits: "pixels", capRounded: true, jointRounded: true, extensions: [terrain], parameters: { depthCompare: "always" } }),
+      new PathLayer({ id: "walk-route", data: [{ path: w.path.pts.map(toLL) }], getPath: (d: { path: [number, number][] }) => d.path, getColor: [153, 0, 0, 255], getWidth: 6, widthUnits: "pixels", capRounded: true, jointRounded: true, extensions: [terrain], parameters: { depthCompare: "always" } }),
+      new PathLayer({ id: "walk-done", data: [{ path: w.path.until(w.dist).map(toLL) }], getPath: (d: { path: [number, number][] }) => d.path, getColor: [255, 204, 0, 255], getWidth: 6, widthUnits: "pixels", capRounded: true, jointRounded: true, extensions: [terrain], parameters: { depthCompare: "always" }, updateTriggers: { getPath: w.dist } }),
+      new ScatterplotLayer({ id: "walk-halo", data: [here], getPosition: toLL, getFillColor: [255, 204, 0, Math.round(70 + 60 * pulse)], getRadius: 16 + 8 * pulse, radiusUnits: "pixels", billboard: true, extensions: [terrain], parameters: { depthCompare: "always" }, updateTriggers: { getRadius: pulse, getFillColor: pulse } }),
+      new ScatterplotLayer({ id: "walk-dot", data: [here], getPosition: toLL, getFillColor: [255, 204, 0, 255], getLineColor: [153, 0, 0, 255], getRadius: 9, radiusUnits: "pixels", stroked: true, getLineWidth: 3, lineWidthUnits: "pixels", billboard: true, extensions: [terrain], parameters: { depthCompare: "always" } }),
+      new TextLayer({ id: "walk-dest", data: [w.to], getPosition: (b: Building) => [b.lng, b.lat], getText: (b: Building) => b.name, getSize: 14, getColor: [255, 255, 255, 255], getBackgroundColor: [153, 0, 0, 235], background: true, backgroundPadding: [8, 4], fontWeight: 600, fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif", getPixelOffset: [0, -30], billboard: true, extensions: [terrain], parameters: { depthCompare: "always" } }),
+    ];
+  }
+
+  function emitWalk(w: WalkState) {
+    const step = [...w.steps].reverse().find((s) => s.startM <= w.dist);
+    const nextStep = w.steps.find((s) => s.startM > w.dist);
+    const passing = w.landmarks.find((l) => Math.abs(l.atM - w.dist) < 35)?.name;
+    setWalkP({ phase: w.phase, traveledM: w.dist, totalM: w.path.length, realMinutes: Math.max(1, Math.round(w.path.length / 80)), step, nextStep, passing, fallback: w.fallback });
+  }
+
+  function walkFrame(now: number) {
+    const w = walk.current;
+    if (!w) return;
+    const dt = Math.min(0.1, (now - w.last) / 1000);
+    w.last = now;
+    if (w.phase === "overview" && now - w.started > 2600) w.phase = "walking";
+    if (w.phase === "walking") {
+      w.dist = Math.min(w.path.length, w.dist + dt * w.speed);
+      if (w.dist >= w.path.length) w.phase = "arrived";
+      const here = w.path.at(w.dist);
+      const ahead = w.path.at(w.dist + 30);
+      const target = w.dist < w.path.length - 5 ? bearingTo(here, ahead) : w.bearing;
+      const diff = ((target - w.bearing + 540) % 360) - 180;
+      w.bearing = (w.bearing + diff * Math.min(1, dt * 2.5) + 360) % 360;
+      // chase camera, low and close, looking down the path (Immersive View style)
+      // (Google's scans get blurry at street level, so stay ~a rooftop above it)
+      const look = w.path.at(w.dist + 40);
+      viewState.current = { ...viewState.current, longitude: look.lng, latitude: look.lat, zoom: 17.9, pitch: 58, bearing: w.bearing, transitionDuration: 0 } as MapViewState;
+      deck.current?.setProps({ viewState: viewState.current });
+    } else if (w.phase === "arrived") {
+      // slow orbit around the destination
+      w.bearing = (w.bearing + dt * 10) % 360;
+      viewState.current = { ...viewState.current, longitude: w.to.lng, latitude: w.to.lat, zoom: 18, pitch: 58, bearing: w.bearing, transitionDuration: 0 } as MapViewState;
+      deck.current?.setProps({ viewState: viewState.current });
+    }
+    deck.current?.setProps({ layers: layers() });
+    if (Math.floor(now / 120) !== Math.floor((now - dt * 1000) / 120)) emitWalk(w);
+    w.raf = requestAnimationFrame(walkFrame);
+  }
+
+  async function startWalk(to: Building, key: number) {
+    stopWalk();
+    const me = cb.current.me;
+    setWalkP({ phase: "loading", traveledM: 0, totalM: 0, realMinutes: 0 });
+    const r = await fetchWalkRoute(me, to, process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "");
+    if (cb.current.walk?.key !== key) return; // cancelled meanwhile
+    const path = new Path(r.pts);
+    const first = bearingTo(path.at(0), path.at(30));
+    const now = performance.now();
+    walk.current = {
+      path, steps: r.steps, landmarks: path.landmarks(to.id), fallback: r.fallback, to,
+      dist: 0, speed: path.length / Math.min(40, Math.max(20, path.length / 20)), phase: "overview", bearing: first, last: now, raf: 0, started: now,
+    };
+    deck.current?.setProps({ controller: false });
+    // establishing shot over the whole route
+    const mid = path.at(path.length / 2);
+    const zoom = Math.min(18, Math.max(16, 17.6 - Math.log2(Math.max(path.length, 200) / 300)));
+    setView({ ...viewState.current, longitude: mid.lng, latitude: mid.lat, zoom, pitch: 50, bearing: first, transitionDuration: 1800, transitionInterpolator: new FlyToInterpolator() } as MapViewState);
+    walk.current.raf = requestAnimationFrame(walkFrame);
+    emitWalk(walk.current);
+  }
+
+  function stopWalk() {
+    if (walk.current) cancelAnimationFrame(walk.current.raf);
+    walk.current = null;
+    setWalkP(null);
+    deck.current?.setProps({ controller: { touchRotate: true, inertia: 250 }, layers: layers() });
   }
 
   function markReady() {
@@ -239,6 +345,16 @@ export default function Google3DView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.events, props.buildings, props.me, props.selectedEventId, props.highlightIds]);
 
+  // start / stop the 3D walk when the search bar asks for directions
+  const walkKey = props.walk?.key;
+  useEffect(() => {
+    const w = cb.current.walk;
+    if (w && deck.current) startWalk(w.to, w.key);
+    else stopWalk();
+    return () => { if (walk.current) cancelAnimationFrame(walk.current.raf); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walkKey]);
+
   useEffect(() => {
     if (!props.focus || !deck.current) return;
     setView({ ...viewState.current, longitude: props.focus.lng, latitude: props.focus.lat, zoom: props.focus.zoom ?? 18, pitch: 60, transitionDuration: 1200, transitionInterpolator: new FlyToInterpolator() } as MapViewState);
@@ -259,6 +375,18 @@ export default function Google3DView(props: Props) {
         <button onClick={() => rotate(45)} className="p-2 text-foreground hover:bg-surface" title="Rotate right"><RotateCw size={16} /></button>
       </div>
       <div className="pointer-events-none absolute bottom-10 left-3 z-10 rounded-md bg-white/85 px-2 py-1 text-[11px] text-gray-700">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
+      {walkP && props.walk && (
+        <WalkHUD
+          p={walkP}
+          fromLabel={props.me.label}
+          toName={props.walk.to.name}
+          toCode={props.walk.to.code}
+          onPause={() => { if (walk.current && walk.current.phase === "walking") { walk.current.phase = "paused"; emitWalk(walk.current); } }}
+          onResume={() => { if (walk.current && walk.current.phase === "paused") { walk.current.phase = "walking"; emitWalk(walk.current); } }}
+          onRestart={() => { if (walk.current) { walk.current.dist = 0; walk.current.phase = "walking"; emitWalk(walk.current); } }}
+          onClose={() => props.onWalkEnd()}
+        />
+      )}
       {error && <div className="absolute left-1/2 top-16 z-10 -translate-x-1/2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs text-red-700 shadow">{error}</div>}
     </div>
   );

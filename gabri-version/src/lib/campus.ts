@@ -100,18 +100,45 @@ export function walkMinutes(a: { lat: number; lng: number }, b: { lat: number; l
   return Math.max(1, Math.round((distanceMeters(a, b) * 1.3) / WALK_M_PER_MIN));
 }
 
-const STOP = new Set(["hall", "center", "building", "school", "library", "memorial", "campus", "science", "computer", "arts", "field", "plaza"]);
 
 /** Loose match of a free-text location ("SAL 101", "Leavey", "Lyon Center") to a building id. */
+/** Words that appear in many building names; they count, but much less than distinctive ones. */
+const GENERIC = new Set([
+  "hall", "halls", "tower", "towers", "center", "centre", "building", "house", "residential", "college", "school", "the", "of", "and", "for",
+  "usc", "apartments", "apartment", "structure", "parking", "library", "memorial", "campus", "science", "sciences", "arts", "field", "plaza",
+  "research", "institute", "student", "students", "university", "foundation", "complex", "international", "theatre", "theater", "west", "east",
+  "north", "south", "street", "st", "ave", "blvd", "way", "to", "get", "how", "do", "i", "me", "take", "walk", "directions", "go", "where", "is",
+]);
+const ALIASES: Record<string, string> = {
+  village: "vil", "usc village": "vil", leavey: "lvl", doheny: "dml", lyon: "lrc", "lyon center": "lrc", coliseum: "col", galen: "gal",
+  "tommy trojan": "tommy", tommy: "tommy", parkside: "pks", evk: "evk", "everybody's kitchen": "evk", taper: "thh", annenberg: "ann",
+  "campus center": "tcc", marshall: "jff", "cinema school": "sci", "film school": "sci", thornton: "mus",
+};
+const tokens = (s: string) => s.toLowerCase().replace(/['’]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+
+/**
+ * Best building for free text ("how do i get to Webb Tower", "SAL 101", "Leavey").
+ * Scores every building: typed code > distinctive name words > generic words, so "Webb Tower" beats "Marks Tower".
+ */
 export function matchBuilding(text: string | undefined | null): string | undefined {
   if (!text) return undefined;
-  const t = text.toLowerCase();
-  for (const b of BUILDINGS) {
-    if (new RegExp(`\\b${b.code.toLowerCase()}\\b`).test(t)) return b.id;
+  const lower = text.toLowerCase();
+  const q = new Set(tokens(text));
+  for (const [alias, id] of Object.entries(ALIASES)) {
+    if (new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(lower) && BUILDING_BY_ID[id]) return id;
   }
+  let best: { id: string; score: number } | null = null;
   for (const b of BUILDINGS) {
-    const words = b.name.toLowerCase().replace(/[()]/g, "").split(/[\s/]+/).filter((w) => w.length > 3 && !STOP.has(w));
-    if (words.some((w) => t.includes(w))) return b.id;
+    let score = 0;
+    // codes: "THH" typed in capitals, or any case for 3+ letter codes; 2-letter codes only in capitals (so "to"/"at" never match)
+    const code = b.code;
+    if (new RegExp(`\\b${code}\\b`).test(text) || (code.length >= 3 && q.has(code.toLowerCase()))) score += 10;
+    const words = tokens(b.name.replace(/\(.*?\)/g, ""));
+    const distinctive = words.filter((w) => w.length > 2 && !GENERIC.has(w));
+    const dHits = distinctive.filter((w) => q.has(w)).length;
+    const gHits = words.filter((w) => GENERIC.has(w) && w.length > 3 && q.has(w)).length;
+    if (dHits) score += 3 * dHits + gHits + (lower.includes(b.name.toLowerCase()) ? 5 : 0);
+    if (score > 0 && (!best || score > best.score || (score === best.score && !b.minor))) best = { id: b.id, score };
   }
-  return undefined;
+  return best?.id;
 }
