@@ -2,13 +2,12 @@
 
 import mapboxgl from "mapbox-gl";
 import * as THREE from "three";
-import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BUILDINGS, distanceMeters } from "@/lib/campus";
+import { buildTrojan, type CharacterAsset } from "./trojanModel";
 
-// CC0 robot by Tomás Laulhé (three.js examples), restyled in cardinal & gold at load time.
-const MODEL_URL = "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/models/gltf/RobotExpressive/RobotExpressive.glb";
-const CHARACTER_HEIGHT_M = 3.2; // a bit larger than life so it reads on screen
+// Procedural Trojan mascot (see trojanModel.ts): walks, waves and grins on arrival.
+const CHARACTER_HEIGHT_M = 3.4; // a bit larger than life so it reads on screen
 const WALK_SPEED_MPS = 1.4; // used for the real ETA
 
 // Third-person chase camera: rides the path behind the robot and looks ahead down the route.
@@ -104,43 +103,8 @@ class Path {
   }
 }
 
-// ---------- model (loaded once, reused) ----------
-let modelPromise: Promise<GLTF> | null = null;
-function loadModel() {
-  if (!modelPromise) {
-    modelPromise = new GLTFLoader().loadAsync(MODEL_URL).then((gltf) => {
-      gltf.scene.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        mesh.frustumCulled = false; // skinned bounds are unreliable; it's one small model
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const m of mats as THREE.MeshStandardMaterial[]) {
-          if (m.name === "Main") {
-            // glossy cardinal shell
-            m.color = new THREE.Color("#a3001b");
-            m.roughness = 0.38;
-            m.metalness = 0.05;
-          } else if (m.name === "Grey") {
-            // polished gold trim
-            m.color = new THREE.Color("#e8b100");
-            m.roughness = 0.3;
-            m.metalness = 0.75;
-            m.envMapIntensity = 0.9;
-          } else if (m.name === "Black") {
-            m.color = new THREE.Color("#141418");
-            m.roughness = 0.3;
-            m.metalness = 0.2;
-            m.envMapIntensity = 0.5;
-          }
-          m.needsUpdate = true;
-        }
-      });
-      return gltf;
-    });
-    modelPromise.catch(() => (modelPromise = null));
-  }
-  return modelPromise;
-}
+// ---------- model (built once, reused) ----------
+const loadModel = async (): Promise<CharacterAsset> => buildTrojan();
 
 function softShadowTexture() {
   const c = document.createElement("canvas");
@@ -162,7 +126,7 @@ class CharacterLayer implements mapboxgl.CustomLayerInterface {
   renderingMode = "3d" as const;
   pos: LL;
   heading = 0;
-  timeScale = 2.1;
+  timeScale = 1;
   private camera = new THREE.Camera();
   private scene = new THREE.Scene();
   private lights = new THREE.Group();
@@ -176,7 +140,7 @@ class CharacterLayer implements mapboxgl.CustomLayerInterface {
   private clock = new THREE.Clock();
   private envReady = false;
 
-  constructor(gltf: GLTF, start: LL) {
+  constructor(gltf: CharacterAsset, start: LL) {
     this.pos = start;
     const root = gltf.scene;
     root.position.set(0, 0, 0);
@@ -213,6 +177,10 @@ class CharacterLayer implements mapboxgl.CustomLayerInterface {
     rim.position.set(modelH * 2, modelH * 2, modelH * 2.5);
     this.lights.add(rim);
     this.scene.add(this.lights);
+    // soft fill from the character's front so the face never sits in shadow
+    const fill = new THREE.DirectionalLight("#fff1e2", 1.1);
+    fill.position.set(0, modelH * 1.5, modelH * 3);
+    this.scene.add(fill);
 
     this.mixer = new THREE.AnimationMixer(root);
     for (const clip of gltf.animations) this.actions[clip.name] = this.mixer.clipAction(clip);
@@ -241,7 +209,7 @@ class CharacterLayer implements mapboxgl.CustomLayerInterface {
   render(_gl: WebGL2RenderingContext, matrix: number[]) {
     if (!this.renderer || !this.map) return;
     if (!this.envReady) {
-      // studio reflections on the gold trim and eyes only (on the body they'd wash the cardinal out to pink).
+      // studio reflections on the metal (gold armor, helmet, sword) only.
       // Done here, where the map resets GL state after us.
       const pmrem = new THREE.PMREMGenerator(this.renderer);
       const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -249,7 +217,7 @@ class CharacterLayer implements mapboxgl.CustomLayerInterface {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         for (const m of (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.MeshStandardMaterial[]) {
-          if (m.name === "Grey" || m.name === "Black") {
+          if (m.name === "Gold" || m.name === "GoldDark" || m.name === "Steel") {
             m.envMap = env;
             m.needsUpdate = true;
           }
@@ -374,7 +342,7 @@ export class WalkGuide {
   resume() {
     if (this.mode !== "paused") return;
     this.mode = "walking";
-    this.layer?.play("Walking");
+    this.layer?.play("Walk");
     this.emit(true);
   }
 
@@ -508,7 +476,7 @@ export class WalkGuide {
       this.applyCamera(this.eye, this.look);
       if (this.introT >= 1) {
         this.mode = "walking";
-        L.play("Walking");
+        L.play("Walk");
         this.emit(true);
       }
     } else if (this.mode === "walking") {
@@ -530,7 +498,7 @@ export class WalkGuide {
       else if (!this.waved) {
         this.waved = true;
         L.play("Wave", true);
-        this.timers.push(setTimeout(() => !this.destroyed && this.mode === "arrived" && L.play("Idle"), 2700));
+        this.timers.push(setTimeout(() => !this.destroyed && this.mode === "arrived" && L.play("Happy"), 2950));
       }
       // gentle close-up arc on the side he came from (open walkway, so the camera never clips a building)
       const arc = this.arriveHeading + 180 + 32 * Math.sin(this.arriveT * 0.35);

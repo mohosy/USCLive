@@ -7,7 +7,7 @@ import { fmtTime, isLive, type AppState } from "./client-types";
 import type { GameInfo } from "./types";
 import { WEBCAMS } from "./webcams";
 
-export type CalloutKind = "game" | "busy" | "quiet" | "event" | "schedule" | "alert" | "webcam";
+export type CalloutKind = "game" | "busy" | "quiet" | "event" | "schedule" | "alert" | "alertmini" | "webcam";
 
 export interface Callout {
   id: string; // "ev:<id>" | "b:<buildingId>" | "al:<id>" | "cam:<id>"
@@ -27,7 +27,10 @@ export interface ChipState { games: boolean; busy: boolean; safety: boolean; sch
 
 const ago = (iso: string, now: Date) => {
   const m = Math.max(0, Math.round((+now - +new Date(iso)) / 60_000));
-  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  if (m < 24 * 60) return `${Math.round(m / 60)} h ago`;
+  return m < 48 * 60 ? "yesterday" : `${Math.floor(m / 1440)} days ago`;
 };
 
 export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout[] {
@@ -62,8 +65,11 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
 
   if (chips.safety) {
     for (const a of s.alerts) {
-      // crime-log entries: bubble only for serious or recent ones; the rest stay as red zones on the map
-      if (a.source === "dps_log" && a.severity !== "high" && +now - +new Date(a.createdAt) > 6 * 3600_000) continue;
+      // crime-log entries: full bubble for serious or recent ones, a compact tag for the rest (every red circle gets a label)
+      if (a.source === "dps_log" && a.severity !== "high" && +now - +new Date(a.createdAt) > 6 * 3600_000) {
+        out.push({ id: `al:${a.id}`, kind: "alertmini", lng: a.lng, lat: a.lat, eyebrow: `DPS · ${ago(a.createdAt, now)}`, title: a.title });
+        continue;
+      }
       out.push({ id: `al:${a.id}`, kind: "alert", lng: a.lng, lat: a.lat, eyebrow: "DPS · Caution", title: a.title, meta: `${a.advice} · ${ago(a.createdAt, now)}` });
     }
   }

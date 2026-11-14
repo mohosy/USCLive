@@ -20,6 +20,7 @@ import { bearing as bearingTo, fetchWalkRoute, Path, type Step } from "@/lib/wal
 import type { Camera } from "./MapView";
 import type { WalkPhase, WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
+import { trojanGlbUrl } from "./walk/trojanModel";
 
 /** Tiny pub/sub so the flat map can drive this camera while the 3D tiles load (no React re-renders per frame). */
 export interface CameraBus { listeners: Set<(c: Camera) => void> }
@@ -28,9 +29,12 @@ const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
 const TILESET = "https://tile.googleapis.com/v1/3dtiles/root.json";
 const BOUNDS = { west: -118.2995, south: 34.0115, east: -118.2715, north: 34.0305 };
 
-// realistic animated person for the walking tour (three.js example model, CC-BY Mixamo)
-const WALKER_URL = "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/models/gltf/Soldier.glb";
+/** Walker avatar clips (from the procedural Trojan, exported to .glb at runtime). */
+const WALKER_CLIPS = ["Idle", "Walk", "Wave", "Happy"] as const;
 const LEVEL_RGB: Record<string, [number, number, number]> = { quiet: [22, 163, 74], normal: [202, 138, 4], busy: [234, 88, 12], packed: [220, 38, 38] };
+
+/** Height of USC's ground in Google's 3D tiles as deck.gl sees it (meters); calibrated against draped layers. */
+const GROUND_Z = -30;
 
 const hex = (h: string, a = 255): [number, number, number, number] => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
@@ -71,6 +75,9 @@ interface WalkState {
   last: number;
   raf: number;
   started: number;
+  arrivedAt: number;
+  /** deck timeline time (s) at arrival, so the wave plays from its first frame */
+  waveStart: number;
 }
 
 interface Pin { id: string; position: [number, number]; color: [number, number, number, number]; radius: number; selected: boolean; title: string }
@@ -112,9 +119,13 @@ export default function Google3DView(props: Props) {
   const walk = useRef<WalkState | null>(null);
   // height of the photoreal ground (meters), measured by picking the 3D tiles; campus is flat so one value works
   const groundZ = useRef<number | null>(null);
+  // surface height right under each bubble / the walker (measured by picking the 3D tiles)
+  const zAt = useRef(new Map<string, number>());
   const overlay = useRef<HTMLDivElement>(null);
   const bubbles = useRef(new Map<string, { el: HTMLDivElement; html: string; c: Callout }>());
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
+  // the Trojan walker as a .glb blob URL (null until built; falls back to a gold dot)
+  const walkerUrl = useRef<string | null>(null);
 
   function layers() {
     const p = cb.current;
@@ -137,42 +148,23 @@ export default function Google3DView(props: Props) {
       });
     }
     const terrain = new TerrainExtension();
+    // points sit at the measured ground height (cheap); only areas (zones, heat, route) are draped (expensive)
+    const gz = groundZ.current ?? GROUND_Z;
     const w = walk.current;
     const walkLayers = w ? walkLayersFor(w, terrain) : [];
     return [
-      new Tile3DLayer({
-        id: "google-3d",
-        pickable: true, // lets us measure the ground height under the bubbles
-        data: TILESET,
-        // maximumScreenSpaceError 20 (default 16): slightly coarser detail -> far fewer tiles, sharp sooner
-        loadOptions: { fetch: { headers: { "X-GOOG-API-KEY": KEY } }, tileset: { maximumScreenSpaceError: 20 } },
-        operation: "terrain+draw",
-        onTileError: () => setError("Google 3D tiles failed to load. Check that the Map Tiles API is enabled for this key."),
-        onTilesetLoad: (tileset: Tileset3D) => {
-          // Google requires showing the data providers for the tiles on screen
-          tileset.options.onTraversalComplete = (selected) => {
-            const set = new Set<string>();
-            for (const t of selected) {
-              const c = (t.content as { gltf?: { asset?: { copyright?: string } } } | undefined)?.gltf?.asset?.copyright;
-              c?.split(";").forEach((s) => s.trim() && set.add(s.trim()));
-            }
-            setCredits(Array.from(set).join("; "));
-            if (!ready.current && tileset.isLoaded()) markReady();
-            return selected;
-          };
-        },
-      }),
+      tileLayer(),
       // invisible hover targets, one per building
       new ScatterplotLayer<Building>({
         id: "building-hit",
         data: p.buildings,
-        getPosition: (b) => [b.lng, b.lat],
+        getPosition: (b) => [b.lng, b.lat, gz],
         getRadius: 22,
         radiusUnits: "pixels",
         getFillColor: [0, 0, 0, 0],
         pickable: true,
         billboard: true,
-        extensions: [terrain],
+        
         parameters: { depthCompare: "always" },
       }),
       new ScatterplotLayer<Hotspot & { lng: number; lat: number }>({
@@ -201,7 +193,7 @@ export default function Google3DView(props: Props) {
       new ScatterplotLayer<Pin>({
         id: "pins",
         data: w ? [] : pins,
-        getPosition: (d) => d.position,
+        getPosition: (d) => [d.position[0], d.position[1], gz],
         getFillColor: (d) => d.color,
         getLineColor: (d) => (d.selected ? [153, 0, 0, 255] : [255, 255, 255, 255]),
         getRadius: (d) => d.radius,
@@ -211,7 +203,7 @@ export default function Google3DView(props: Props) {
         stroked: true,
         billboard: true,
         pickable: true,
-        extensions: [terrain],
+        
         parameters: { depthCompare: "always" },
         updateTriggers: { getLineColor: p.selectedEventId, getLineWidth: p.selectedEventId },
       }),
@@ -219,7 +211,7 @@ export default function Google3DView(props: Props) {
       new TextLayer<Building>({
         id: "building-names",
         data: p.buildings.filter((b) => b.id === hovered.current || (zoomedIn.current && !b.minor)),
-        getPosition: (b) => [b.lng, b.lat],
+        getPosition: (b) => [b.lng, b.lat, gz],
         getText: (b) => b.name,
         getSize: (b) => (b.id === hovered.current ? 13 : 11),
         getColor: [255, 255, 255, 255],
@@ -232,12 +224,12 @@ export default function Google3DView(props: Props) {
         parameters: { depthCompare: "always" },
         getPixelOffset: [0, -22],
         billboard: true,
-        extensions: [terrain],
+        
       }),
       new ScatterplotLayer<Loc>({
         id: "me",
         data: [p.me],
-        getPosition: (d) => [d.lng, d.lat],
+        getPosition: (d) => [d.lng, d.lat, gz],
         getFillColor: [37, 99, 235, 255],
         getLineColor: [255, 255, 255, 255],
         getRadius: 7,
@@ -246,36 +238,74 @@ export default function Google3DView(props: Props) {
         getLineWidth: 3,
         stroked: true,
         billboard: true,
-        extensions: [terrain],
+        
         parameters: { depthCompare: "always" },
       }),
     ];
   }
 
+  // the photoreal tile layer is created once and reused (rebuilding it on every hover was wasted work)
+  const tiles = useRef<Tile3DLayer | null>(null);
+  function tileLayer() {
+    tiles.current ??= new Tile3DLayer({
+        id: "google-3d",
+        pickable: true, // lets us measure the ground height under the bubbles
+        data: TILESET,
+        // maximumScreenSpaceError 24 (default 16): a bit less detail -> far fewer tiles, sharp much sooner
+        loadOptions: { fetch: { headers: { "X-GOOG-API-KEY": KEY } }, tileset: { maximumScreenSpaceError: 24 } },
+        operation: "terrain+draw",
+        onTileError: () => setError("Google 3D tiles failed to load. Check that the Map Tiles API is enabled for this key."),
+        onTilesetLoad: (tileset: Tileset3D) => {
+          // Google requires showing the data providers for the tiles on screen
+          tileset.options.onTraversalComplete = (selected) => {
+            const set = new Set<string>();
+            for (const t of selected) {
+              const c = (t.content as { gltf?: { asset?: { copyright?: string } } } | undefined)?.gltf?.asset?.copyright;
+              c?.split(";").forEach((s) => s.trim() && set.add(s.trim()));
+            }
+            setCredits(Array.from(set).join("; "));
+            if (!ready.current && tileset.isLoaded()) markReady();
+            return selected;
+          };
+        },
+      });
+    return tiles.current;
+  }
+
   function walkLayersFor(w: WalkState, terrain: InstanceType<typeof TerrainExtension>) {
     const here = w.path.at(w.dist);
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+    const gz = groundZ.current ?? GROUND_Z;
+    const pulse = 0.5 + 0.5 * Math.sin(w.last / 250); // w.last = time of the current animation frame
     const toLL = (p: { lng: number; lat: number }): [number, number] => [p.lng, p.lat];
     return [
       new PathLayer({ id: "walk-casing", data: [{ path: w.path.pts.map(toLL) }], getPath: (d: { path: [number, number][] }) => d.path, getColor: [255, 255, 255, 230], getWidth: 11, widthUnits: "pixels", capRounded: true, jointRounded: true, extensions: [terrain], parameters: { depthCompare: "always" } }),
       new PathLayer({ id: "walk-route", data: [{ path: w.path.pts.map(toLL) }], getPath: (d: { path: [number, number][] }) => d.path, getColor: [153, 0, 0, 255], getWidth: 6, widthUnits: "pixels", capRounded: true, jointRounded: true, extensions: [terrain], parameters: { depthCompare: "always" } }),
       new PathLayer({ id: "walk-done", data: [{ path: w.path.until(w.dist).map(toLL) }], getPath: (d: { path: [number, number][] }) => d.path, getColor: [255, 204, 0, 255], getWidth: 6, widthUnits: "pixels", capRounded: true, jointRounded: true, extensions: [terrain], parameters: { depthCompare: "always" }, updateTriggers: { getPath: w.dist } }),
-      new ScatterplotLayer({ id: "walk-halo", data: [here], getPosition: toLL, getFillColor: [255, 204, 0, Math.round(50 + 40 * pulse)], getRadius: 14 + 6 * pulse, radiusUnits: "pixels", billboard: true, extensions: [terrain], parameters: { depthCompare: "always" }, updateTriggers: { getRadius: pulse, getFillColor: pulse } }),
-      // the walker: an animated person, a bit larger than life so it reads from rooftop height
-      new ScenegraphLayer({
+      new ScatterplotLayer({ id: "walk-halo", data: [here], getPosition: (p: { lng: number; lat: number }) => [p.lng, p.lat, zAt.current.get("walker") ?? gz], getFillColor: [255, 204, 0, Math.round(50 + 40 * pulse)], getRadius: 14 + 6 * pulse, radiusUnits: "pixels", billboard: true,  parameters: { depthCompare: "always" }, updateTriggers: { getRadius: pulse, getFillColor: pulse } }),
+      // the walker: the Trojan mascot, a bit larger than life so it reads from rooftop height.
+      // On arrival he turns to the camera, hops, waves and grins.
+      ...(walkerUrl.current ? [new ScenegraphLayer({
         id: "walker",
-        data: [{ ...here, bearing: w.bearing }],
-        scenegraph: WALKER_URL,
-        getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat, (groundZ.current ?? 25) + 0.5],
+        data: [{ ...here, bearing: w.phase === "arrived" ? w.bearing + 180 : w.bearing }],
+        scenegraph: walkerUrl.current,
+        getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat, zAt.current.get("walker") ?? groundZ.current ?? GROUND_Z],
         getOrientation: (d: { bearing: number }) => [0, 180 - d.bearing, 90],
-        sizeScale: 9,
-        _animations: { [w.phase === "walking" ? "Walk" : "Idle"]: { playing: true, speed: w.phase === "walking" ? 1.6 : 1 } },
+        sizeScale: 8,
+        _animations: Object.fromEntries(WALKER_CLIPS.map((c) => [c, { playing: c === walkerClip(w), speed: c === "Walk" ? 1.4 : 1, ...(c === "Wave" ? { startTime: w.waveStart } : {}) }])),
         _lighting: "pbr",
-        updateTriggers: { getPosition: w.dist, getOrientation: Math.round(w.bearing), _animations: w.phase },
+        updateTriggers: { getPosition: w.dist, getOrientation: Math.round(w.bearing), _animations: walkerClip(w) },
         parameters: { depthCompare: "always" },
-      }),
-      new TextLayer({ id: "walk-dest", data: [w.to], getPosition: (b: Building) => [b.lng, b.lat], getText: (b: Building) => b.name, getSize: 14, getColor: [255, 255, 255, 255], getBackgroundColor: [153, 0, 0, 235], background: true, backgroundPadding: [8, 4], fontWeight: 600, fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif", getPixelOffset: [0, -30], billboard: true, extensions: [terrain], parameters: { depthCompare: "always" } }),
+      })] : [
+        new ScatterplotLayer({ id: "walk-dot", data: [here], getPosition: (p: { lng: number; lat: number }) => [p.lng, p.lat, zAt.current.get("walker") ?? gz], getFillColor: [255, 204, 0, 255], getLineColor: [153, 0, 0, 255], getRadius: 9, radiusUnits: "pixels", stroked: true, getLineWidth: 3, lineWidthUnits: "pixels", billboard: true,  parameters: { depthCompare: "always" } }),
+      ]),
+      new TextLayer({ id: "walk-dest", data: [w.to], getPosition: (b: Building) => [b.lng, b.lat, gz], getText: (b: Building) => b.name, getSize: 14, getColor: [255, 255, 255, 255], getBackgroundColor: [153, 0, 0, 235], background: true, backgroundPadding: [8, 4], fontWeight: 600, fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif", getPixelOffset: [0, -30], billboard: true,  parameters: { depthCompare: "always" } }),
     ];
+  }
+
+  function walkerClip(w: WalkState): (typeof WALKER_CLIPS)[number] {
+    if (w.phase === "walking") return "Walk";
+    if (w.phase === "arrived") return performance.now() - w.arrivedAt < 3000 ? "Wave" : "Happy";
+    return "Idle";
   }
 
   function emitWalk(w: WalkState) {
@@ -293,7 +323,12 @@ export default function Google3DView(props: Props) {
     if (w.phase === "overview" && now - w.started > 2600) w.phase = "walking";
     if (w.phase === "walking") {
       w.dist = Math.min(w.path.length, w.dist + dt * w.speed);
-      if (w.dist >= w.path.length) w.phase = "arrived";
+      if (w.dist >= w.path.length) {
+        w.phase = "arrived";
+        w.arrivedAt = now;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        w.waveStart = ((deck.current as any)?.animationLoop?.timeline?.getTime?.() ?? 0) / 1000;
+      }
       const here = w.path.at(w.dist);
       const ahead = w.path.at(w.dist + 30);
       const target = w.dist < w.path.length - 5 ? bearingTo(here, ahead) : w.bearing;
@@ -310,6 +345,12 @@ export default function Google3DView(props: Props) {
       viewState.current = { ...viewState.current, longitude: w.to.lng, latitude: w.to.lat, zoom: 18, pitch: 58, bearing: w.bearing, transitionDuration: 0 } as MapViewState;
       deck.current?.setProps({ viewState: viewState.current });
     }
+    // keep the walker on the photoreal ground
+    if (Math.floor(now / 250) !== Math.floor((now - dt * 1000) / 250)) {
+      const pos = w.path.at(w.dist);
+      const z = surfaceZ(pos.lng, pos.lat, zAt.current.get("walker") ?? groundZ.current ?? GROUND_Z);
+      if (z != null) zAt.current.set("walker", z);
+    }
     deck.current?.setProps({ layers: layers() });
     if (Math.floor(now / 120) !== Math.floor((now - dt * 1000) / 120)) emitWalk(w);
     w.raf = requestAnimationFrame(walkFrame);
@@ -319,14 +360,19 @@ export default function Google3DView(props: Props) {
     stopWalk();
     const me = cb.current.me;
     setWalkP({ phase: "loading", traveledM: 0, totalM: 0, realMinutes: 0 });
-    const r = await fetchWalkRoute(me, to, process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "");
+    const [r, glb] = await Promise.all([
+      fetchWalkRoute(me, to, process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ""),
+      trojanGlbUrl().catch(() => null),
+    ]);
+    walkerUrl.current = glb;
     if (cb.current.walk?.key !== key) return; // cancelled meanwhile
     const path = new Path(r.pts);
     const first = bearingTo(path.at(0), path.at(30));
+    // eslint-disable-next-line react-hooks/purity -- runs from an effect, not during render
     const now = performance.now();
     walk.current = {
       path, steps: r.steps, landmarks: path.landmarks(to.id), fallback: r.fallback, to,
-      dist: 0, speed: path.length / Math.min(40, Math.max(20, path.length / 20)), phase: "overview", bearing: first, last: now, raf: 0, started: now,
+      dist: 0, speed: path.length / Math.min(40, Math.max(20, path.length / 20)), phase: "overview", bearing: first, last: now, raf: 0, started: now, arrivedAt: 0, waveStart: 0,
     };
     deck.current?.setProps({ controller: false });
     // establishing shot over the whole route
@@ -357,7 +403,7 @@ export default function Google3DView(props: Props) {
     const spots: [number, number][] = [[-118.287864, 34.022038], [-118.283156, 34.020943], [-118.285465, 34.020536], [-118.2845, 34.0195]];
     const zs: number[] = [];
     for (const [lng, lat] of spots) {
-      const [x, y] = vp.project([lng, lat, groundZ.current ?? 25]);
+      const [x, y] = vp.project([lng, lat, groundZ.current ?? GROUND_Z]);
       if (x < 0 || y < 0 || x > vp.width || y > vp.height) continue;
       let info: PickingInfo | null = null;
       try { info = d.pickObject({ x, y, radius: 0, layerIds: ["google-3d"], unproject3D: true }); } catch { /* not ready */ }
@@ -367,12 +413,39 @@ export default function Google3DView(props: Props) {
     if (zs.length) groundZ.current = Math.min(...zs);
   }
 
+  /** Height of the 3D surface at (lng, lat): pick along the view ray a few times until it settles. */
+  function surfaceZ(lng: number, lat: number, start: number): number | null {
+    const d = deck.current;
+    const vp = viewport();
+    if (!d || !vp) return null;
+    let z = start;
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = vp.project([lng, lat, z]);
+      if (x < 0 || y < 0 || x > vp.width || y > vp.height) return null;
+      let hit: number | undefined;
+      try { hit = d.pickObject({ x, y, radius: 0, layerIds: ["google-3d"], unproject3D: true })?.coordinate?.[2]; } catch { return null; }
+      if (typeof hit !== "number" || !isFinite(hit)) return null;
+      if (Math.abs(hit - z) < 0.5) return hit;
+      z = hit;
+    }
+    return z;
+  }
+
+  /** Re-measure the ground under every visible bubble (a few picks each, once a second). */
+  function measureBubbles() {
+    for (const b of bubbles.current.values()) {
+      if (b.el.style.display === "none") continue;
+      const z = surfaceZ(b.c.lng, b.c.lat, zAt.current.get(b.c.id) ?? groundZ.current ?? GROUND_Z);
+      if (z != null) zAt.current.set(b.c.id, z);
+    }
+  }
+
   /** Keep the HTML bubbles pinned to their spots on the 3D scene (runs after every frame). */
   function positionBubbles() {
     const vp = viewport();
     if (!vp) return;
-    const z = (groundZ.current ?? 25) + 2;
     for (const b of bubbles.current.values()) {
+      const z = zAt.current.get(b.c.id) ?? groundZ.current ?? GROUND_Z;
       const [x, y] = vp.project([b.c.lng, b.c.lat, z]);
       const off = x < -50 || y < -50 || x > vp.width + 50 || y > vp.height + 50;
       b.el.style.display = off ? "none" : "";
@@ -411,15 +484,23 @@ export default function Google3DView(props: Props) {
     const t = setTimeout(markReady, 15_000);
     // measure the ground a few times while tiles stream in
     const g = setInterval(sampleGround, 2500);
-    return () => { bus?.listeners?.delete(fn); clearTimeout(t); clearInterval(g); };
+    const mb = setInterval(measureBubbles, 1000);
+    return () => { bus?.listeners?.delete(fn); clearTimeout(t); clearInterval(g); clearInterval(mb); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.follow]);
 
   useEffect(() => {
     if (!el.current || !KEY || deck.current) return;
-    el.current.addEventListener("contextmenu", (e) => e.preventDefault());
-    deck.current = new Deck({
-      parent: el.current,
+    const host = el.current;
+    host.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Create the engine on the next tick: React dev mode mounts twice, and a Deck finalized before it
+    // finished starting keeps rendering as an orphan. Deferring means only one Deck is ever created.
+    let created: Deck | null = null;
+    const t = setTimeout(() => {
+    created = deck.current = new Deck({
+      parent: host,
+      // retina at 2-3x renders 4-9x the pixels; 1.5x looks the same on campus imagery and is much smoother
+      useDevicePixels: Math.min(typeof window !== "undefined" ? window.devicePixelRatio : 1, 1.5),
       viewState: viewState.current,
       controller: { touchRotate: true, inertia: 250 },
       onViewStateChange: ({ viewState: v }) => setView(v as MapViewState),
@@ -433,7 +514,13 @@ export default function Google3DView(props: Props) {
       },
       layers: layers(),
     });
-    return () => { deck.current?.finalize(); deck.current = null; };
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      created?.finalize();
+      if (deck.current === created) deck.current = null;
+      host.querySelectorAll("canvas").forEach((c) => c.remove());
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

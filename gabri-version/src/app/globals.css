@@ -132,3 +132,10 @@ html, body {
 .cam-dot { animation: co-blink 1s steps(2) infinite; }
 @keyframes cam-fade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes cam-zoom { 0% { transform: scale(0.6) translateY(40px); opacity: 0; filter: blur(8px) } 100% { transform: none; opacity: 1; filter: none } }
+
+/* compact DPS tag for older crime-log incidents */
+.co-alertmini .co-card { background: #fff; border: 1.5px solid #dc2626; padding: 2px 7px; border-radius: 7px; }
+.co-alertmini .co-eyebrow { color: #b91c1c; font-size: 8px; }
+.co-alertmini .co-title { font-size: 11px; font-weight: 600; color: #7f1d1d; }
+.co-alertmini .co-stem { height: 8px; background: #dc2626; }
+.co-alertmini .co-foot { width: 6px; height: 6px; border-color: #dc2626; }

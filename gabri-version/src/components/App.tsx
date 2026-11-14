@@ -39,7 +39,9 @@ export default function App() {
   const [chips, setChips] = useState<ChipState>({ games: true, busy: true, safety: true, schedule: true, events: true, webcams: true });
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
-  const [threeReady, setThreeReady] = useState(false); // 3D tiles loaded enough to show
+  const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
+  const [warmSat, setWarmSat] = useState(false); // start loading Satellite in the background (on hover)
+  const threeReady = view === "3d" && satLoaded;
   const [flatGone, setFlatGone] = useState(false); // flat satellite placeholder removed after the fade
   const camera = useRef<Camera | null>(null); // shared so switching views keeps the same spot
   const [camBus] = useState<CameraBus>(() => ({ listeners: new Set() }));
@@ -63,8 +65,9 @@ export default function App() {
   function switchView(v: "map" | "3d") {
     if (v === view) return;
     setStartCam(camera.current);
-    setThreeReady(false);
     setFlatGone(false);
+    if (v === "map") { setSatLoaded(false); setWarmSat(false); } // free the GPU when leaving Satellite
+    else if (satLoaded) setTimeout(() => setFlatGone(true), 800); // pre-warmed: fade straight in
     setView(v);
   }
   const onFlatCamera = (c: Camera) => {
@@ -293,7 +296,7 @@ export default function App() {
               onWalkEnd={() => { setWalk(null); setAsk(""); }}
             />
           )}
-          {state && view === "3d" && (
+          {state && (view === "3d" || warmSat) && (
             <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
               <Google3DView
                 events={chips.events ? mapEvents : []}
@@ -305,7 +308,7 @@ export default function App() {
                 onSelectEvent={openEvent}
                 initialCamera={startCam}
                 follow={camBus}
-                onReady={() => { setThreeReady(true); setTimeout(() => setFlatGone(true), 800); }}
+                onReady={() => { setSatLoaded(true); if (view === "3d") setTimeout(() => setFlatGone(true), 800); }}
                 onCamera={(c) => { camera.current = c; }}
                 walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
                 onWalkEnd={() => { setWalk(null); setAsk(""); }}
@@ -332,7 +335,7 @@ export default function App() {
 
           <div className="absolute right-3 top-3 z-10 flex rounded-lg border border-line bg-white p-1 text-xs shadow-sm">
             {([["map", "Explore"], ["3d", "Satellite"]] as const).map(([k, l]) => (
-              <button key={k} onClick={() => switchView(k)} className={cx("rounded-md px-3 py-1 font-medium", view === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
+              <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") setWarmSat(true); }} className={cx("rounded-md px-3 py-1 font-medium", view === k ? "bg-foreground text-white" : "text-muted hover:bg-surface")}>{l}</button>
             ))}
           </div>
 

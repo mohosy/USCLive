@@ -57,9 +57,4 @@ export const WEBCAMS: Webcam[] = [
     hls: "https://wzmedia.dot.ca.gov/D7/CCTV-177.stream/playlist.m3u8",
     image: `${CT}/i110177martinlutherkingblvd/i110177martinlutherkingblvd.jpg`,
   },
-  {
-    id: "ct-179", name: "I-110 at Adams Blvd", view: "Harbor Freeway at the northeast corner of campus",
-    lat: 34.0272, lng: -118.2745, source: "Caltrans",
-    image: `${CT}/i110179adamsblvd/i110179adamsblvd.jpg`,
-  },
 ];
