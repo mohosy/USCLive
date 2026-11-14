@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
+import { parseNavQuery } from "@/lib/nav";
 import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
 import EventsPanel from "./EventsPanel";
@@ -48,6 +49,7 @@ export default function App() {
   const [askRes, setAskRes] = useState<AskRes | null>(null);
   const [askBusy, setAskBusy] = useState(false);
   const [tick, setTick] = useState(0);
+  const [walk, setWalk] = useState<{ toId: string; key: number } | null>(null);
   const seenNotifs = useRef<Set<string> | null>(null);
   const focusSeq = useRef(0); // makes every fly-to a new object, even to the same spot
 
@@ -120,6 +122,19 @@ export default function App() {
   }
   async function runAsk(q: string) {
     if (q.trim().length < 2) return;
+    // "how do I get to THH" -> animated 3D walk instead of a text answer
+    const nav = parseNavQuery(q);
+    if (nav) {
+      const none = { eventIds: [], buildingIds: [], focusBuildingId: "none", ai: false };
+      if (!nav.buildingId) { setAskRes({ ...none, answer: "Which building? Try a name or code, like Taper Hall (THH), Leavey (LVL) or SGM." }); return; }
+      if (nav.buildingId === loc.buildingId) { setAskRes({ ...none, answer: `You're already at ${BUILDING_BY_ID[nav.buildingId].name}.` }); return; }
+      setAskRes(null);
+      setSelEvent(null);
+      setSelBuilding(null);
+      switchView("map");
+      setWalk({ toId: nav.buildingId, key: ++focusSeq.current });
+      return;
+    }
     setAskBusy(true);
     try {
       const r = await api<AskRes>("/api/ai/ask", { json: { question: q, lat: loc.lat, lng: loc.lng } });
@@ -155,7 +170,7 @@ export default function App() {
 
         <form className="relative max-w-xl flex-1" onSubmit={(e) => { e.preventDefault(); runAsk(ask); }}>
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Ask about campus, e.g. free food near me, pickup soccer tonight" className="h-9 w-full rounded-lg border border-line bg-surface pl-9 pr-16 text-sm outline-none focus:border-foreground/30 focus:bg-white" />
+          <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Ask about campus, e.g. how do I get to THH, free food near me" className="h-9 w-full rounded-lg border border-line bg-surface pl-9 pr-16 text-sm outline-none focus:border-foreground/30 focus:bg-white" />
           {askRes ? (
             <button type="button" onClick={() => { setAskRes(null); setAsk(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted hover:text-foreground" aria-label="Clear"><X size={14} /></button>
           ) : askBusy ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted">Searching</span> : null}
@@ -254,6 +269,8 @@ export default function App() {
               onSelectBuilding={openBuilding}
               initialCamera={startCam}
               onCamera={onFlatCamera}
+              walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
+              onWalkEnd={() => { setWalk(null); setAsk(""); }}
             />
           )}
           {state && view === "3d" && (

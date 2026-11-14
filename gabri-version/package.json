@@ -17,6 +17,7 @@
     "@deck.gl/mesh-layers": "^9.4.1",
     "@loaders.gl/3d-tiles": "^4.5.4",
     "@loaders.gl/core": "^4.5.4",
+    "@types/three": "^0.187.0",
     "lucide-react": "^1.73.0",
     "mapbox-gl": "^3.35.0",
     "next": "16.4.6",
@@ -24,6 +25,7 @@
     "openai": "^7.57.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "three": "^0.187.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

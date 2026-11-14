@@ -2,10 +2,12 @@
 
 import mapboxgl from "mapbox-gl";
 import type { Feature, FeatureCollection } from "geojson";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { isLive, type Building, type EventView, type Hotspot, type Loc } from "@/lib/client-types";
 import { LEVEL_COLOR } from "./ui";
+import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
+import WalkHUD from "./walk/WalkHUD";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -52,6 +54,9 @@ interface Props {
   onSelectBuilding: (id: string) => void;
   initialCamera?: Camera | null;
   onCamera?: (c: Camera) => void;
+  /** "How do I get to THH" — animated 3D walk from `me` to this building. */
+  walk: { to: Building; key: number } | null;
+  onWalkEnd: () => void;
 }
 
 type FC = FeatureCollection;
@@ -137,6 +142,8 @@ export default function MapView(props: Props) {
   const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings) });
   const cb = useRef(props);
   useEffect(() => { cb.current = props; });
+  const walkRef = useRef<WalkGuide | null>(null);
+  const [walkP, setWalkP] = useState<WalkProgress | null>(null);
 
   function setSource(id: string, fc: FC) {
     (map.current?.getSource(id) as mapboxgl.GeoJSONSource | undefined)?.setData(fc);
@@ -240,6 +247,7 @@ export default function MapView(props: Props) {
     });
     ready.current = true;
     syncLayers();
+    walkRef.current?.install(); // keep an active walk alive across Map/Satellite switches
   }
 
   useEffect(() => {
@@ -258,6 +266,7 @@ export default function MapView(props: Props) {
       pitch: props.initialCamera?.pitch ?? 60,
       maxPitch: 72,
       bearing: props.initialCamera?.bearing ?? -20,
+      antialias: true, // smooth edges on 3D buildings and the walking character
     });
     map.current = m;
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
@@ -338,12 +347,51 @@ export default function MapView(props: Props) {
     map.current.flyTo({ center: [props.focus.lng, props.focus.lat], zoom: props.focus.zoom ?? 17.4, speed: 1.2, essential: true });
   }, [props.focus]);
 
+  // start / stop the 3D walk
+  const walkKey = props.walk?.key;
+  useEffect(() => {
+    const m = map.current;
+    walkRef.current?.destroy();
+    walkRef.current = null;
+    const w = cb.current.walk;
+    if (!m || !w) return;
+    const me = cb.current.me;
+    const guide = new WalkGuide(m, {
+      from: { lng: me.lng, lat: me.lat, label: me.label },
+      to: { lng: w.to.lng, lat: w.to.lat, name: w.to.name, code: w.to.code, id: w.to.id },
+      token: TOKEN,
+      onProgress: setWalkP,
+    });
+    walkRef.current = guide;
+    const go = () => { if (walkRef.current === guide) guide.start(); };
+    if (m.isStyleLoaded()) go();
+    else m.once("idle", go);
+    return () => {
+      guide.destroy();
+      if (walkRef.current === guide) walkRef.current = null;
+      setWalkP(null);
+      syncLayers(); // bring back pins/crowds the walk hid
+    };
+  }, [walkKey]);
+
   if (!TOKEN) {
     return <div className="absolute inset-0 flex items-center justify-center bg-surface text-sm text-muted">Add NEXT_PUBLIC_MAPBOX_TOKEN to .env.local to load the map.</div>;
   }
   return (
     <div className="absolute inset-0">
       <div ref={el} className="h-full w-full" />
+      {walkP && props.walk && (
+        <WalkHUD
+          p={walkP}
+          fromLabel={props.me.label}
+          toName={props.walk.to.name}
+          toCode={props.walk.to.code}
+          onPause={() => walkRef.current?.pause()}
+          onResume={() => walkRef.current?.resume()}
+          onRestart={() => walkRef.current?.restart()}
+          onClose={() => props.onWalkEnd()}
+        />
+      )}
     </div>
   );
 }
