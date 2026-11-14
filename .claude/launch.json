@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "gabri-version", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "gabri-version", "run", "dev", "--", "-p", "3100"], "port": 3100 }
+  ]
+}
