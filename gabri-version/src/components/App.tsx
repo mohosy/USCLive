@@ -63,6 +63,9 @@ function mergeState(prev: AppState | null, next: AppState): AppState {
 /** Map layers you can switch on and off (each is a layer on the map and its own legend). */
 const LAYERS = [["events", "Events"], ["food", "Free food"], ["games", "Live games"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My classes"], ["webcams", "Cams"]] as const;
 
+/** Satellite (Google 3D tiles) is off for the submission: it still glitches while tiles stream in */
+const SATELLITE = false;
+
 export default function App() {
   const { weather, demo: weatherDemo } = useCampusWeather(); // live campus weather; W cycles demo weather, Shift+W goes back to live
   const [state, setState] = useState<AppState | null>(null);
@@ -156,7 +159,7 @@ export default function App() {
   const seenNotifs = useRef<Set<string> | null>(null);
   const focusSeq = useRef(0); // makes every fly-to a new object, even to the same spot
 
-  function switchView(v: "map" | "3d") {
+    function switchView(v: "map" | "3d") {
     if (v === view) return;
     setStartCam(camera.current);
     setFlatGone(false);
@@ -425,7 +428,7 @@ export default function App() {
   const trojanColors = useMemo(() => (look ? { plume: TROJAN_PLUME[look.plume], cape: TROJAN_CAPE[look.cape] } : undefined), [look]);
   // Settings > Map > Open in: start in Satellite when that is your choice
   // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the app opens
-  useEffect(() => { if (loadOpenIn() === "satellite") { const t = setTimeout(() => switchView("3d"), 0); return () => clearTimeout(t); } }, []);
+  useEffect(() => { if (SATELLITE && loadOpenIn() === "satellite") { const t = setTimeout(() => switchView("3d"), 0); return () => clearTimeout(t); } }, []);
   const openMe = useCallback(() => setMeCard({ accuracyM: meLive.current.accuracyM }), []);
   const closeMe = useCallback(() => setMeCard(null), []);
   const playAsked = useCallback(() => setPlayAsk(false), []);
@@ -670,13 +673,13 @@ export default function App() {
           )}
 
           {/* Explore / Satellite: icon-only switch in the bottom-left corner (names show as tooltips) */}
-          <div className="view-switch" role="group" aria-label="Map view">
+          {SATELLITE && <div className="view-switch" role="group" aria-label="Map view">
             {([["map", "Explore", MapIcon], ["3d", "Satellite", Satellite]] as const).map(([k, l, Icon]) => (
               <button key={k} type="button" aria-label={l} aria-pressed={view === k} data-tip={l} onClick={() => switchView(k)}>
                 <Icon size={19} aria-hidden="true" />
               </button>
             ))}
-          </div>
+          </div>}
 
 
           {/* tap your Trojan: where you are, and what you can do from there */}

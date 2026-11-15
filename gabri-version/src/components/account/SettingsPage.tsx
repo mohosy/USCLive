@@ -219,10 +219,6 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
             ))}
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <div className="text-sm font-medium" id="map-open-label">Open in</div>
-          <Segmented labelledBy="map-open-label" value={prefs.map.openIn} options={[["explore", "Explore"], ["satellite", "Satellite"]] as const} onChange={(openIn) => savePrefs({ map: { openIn } })} />
-        </div>
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
           <div>
             <div className="text-sm font-medium" id="map-people-label">Show people on the map</div>
