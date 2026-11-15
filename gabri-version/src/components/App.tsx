@@ -370,8 +370,10 @@ export default function App() {
   const unread = notifs.filter((n) => !n.read).length;
   const detailOpen = !!(event || selBuilding || openAlert || selHost);
 
+  // the app is pinned to all four screen edges: on iPhone home-screen apps 100dvh comes up short by the
+  // status bar's height (a blank strip at the bottom), and in Safari the toolbar comes and goes
   return (
-    <div className="map-app relative h-dvh w-full overflow-hidden bg-background" data-night={light === "night"}>
+    <div className="map-app fixed inset-0 overflow-hidden bg-background" data-night={light === "night"}>
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}

@@ -292,7 +292,7 @@ export default function Google3DView(props: Props) {
         id: "alerts-3d",
         data: w ? [] : p.alerts,
         scenegraph: BEACON_MODEL,
-        getPosition: (a) => [a.lng, a.lat, zAt.current.get(`al:${a.id}`) ?? gz],
+        getPosition: (a) => [a.lng, a.lat, (zAt.current.get(`al:${a.id}`) ?? gz) + 4], // the beacon light floats a little above its zone
         getOrientation: [0, 0, 90],
         sizeScale: 400,
         sizeMinPixels: 36,

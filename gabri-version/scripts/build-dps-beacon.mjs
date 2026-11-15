@@ -1,5 +1,5 @@
 /**
- * Builds public/models/dps-beacon.glb: a red police beacon on a short pole, for DPS alerts on the map.
+ * Builds public/models/dps-beacon.glb: a red police beacon light (no pole), floating over DPS alerts on the map.
  * Made from three.js primitives (no downloaded assets). Run: node scripts/build-dps-beacon.mjs
  * Units are meters, Y up. About 1.1 m tall; the maps scale it up.
  */
@@ -26,14 +26,12 @@ g.name = "dps-beacon";
 scene.add(g);
 const add = (geo, m, y) => { const mesh = new THREE.Mesh(geo, m); mesh.position.y = y; g.add(mesh); return mesh; };
 
-add(new THREE.CylinderGeometry(0.16, 0.19, 0.04, 28), DARK, 0.02); // base plate
-add(new THREE.CylinderGeometry(0.035, 0.04, 0.72, 16), POLE, 0.4); // pole
-add(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 16), WHITE, 0.62); // reflective band
-add(new THREE.CylinderGeometry(0.17, 0.19, 0.08, 32), DARK, 0.8); // beacon housing
-add(new THREE.CylinderGeometry(0.15, 0.16, 0.12, 32), RED, 0.9); // light ring
-add(new THREE.SphereGeometry(0.15, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), RED, 0.96); // dome
-add(new THREE.SphereGeometry(0.06, 16, 12), GLOW, 1.02); // hot spot inside the dome
-add(new THREE.CylinderGeometry(0.03, 0.04, 0.03, 12), DARK, 1.12); // cap
+// just the beacon light, no pole: it floats above the alert's zone (the map lifts it)
+add(new THREE.CylinderGeometry(0.17, 0.19, 0.08, 32), DARK, 0.04); // beacon housing
+add(new THREE.CylinderGeometry(0.15, 0.16, 0.12, 32), RED, 0.14); // light ring
+add(new THREE.SphereGeometry(0.15, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), RED, 0.2); // dome
+add(new THREE.SphereGeometry(0.06, 16, 12), GLOW, 0.26); // hot spot inside the dome
+add(new THREE.CylinderGeometry(0.03, 0.04, 0.03, 12), DARK, 0.36); // cap
 
 new GLTFExporter().parse(
   scene,
