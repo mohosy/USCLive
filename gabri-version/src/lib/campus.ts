@@ -16,6 +16,10 @@ export const CORE_BUILDINGS: Building[] = [
   { id: "tommy", code: "HCP", name: "Hahn Plaza / Tommy Trojan", lat: 34.020536, lng: -118.285465, kind: "outdoor", capacity: 250 },
   { id: "bov", code: "BOV", name: "Bovard Auditorium", lat: 34.020913, lng: -118.285529, kind: "arena", capacity: 1200 },
   { id: "lrc", code: "LRC", name: "Lyon Recreation Center", lat: 34.024349, lng: -118.288126, kind: "gym", capacity: 300 },
+  // the gym under Cale and Irani residential colleges at USC Village
+  { id: "vfc", code: "VFC", name: "USC Village Fitness Center", lat: 34.024912, lng: -118.285658, kind: "gym", capacity: 220 },
+  // the pool next to the Lyon Center
+  { id: "uac", code: "UAC", name: "Uytengsu Aquatics Center", lat: 34.024059, lng: -118.288545, kind: "gym", capacity: 150 },
   { id: "vil", code: "VIL", name: "USC Village", lat: 34.025481, lng: -118.284197, kind: "dining", capacity: 700 },
   { id: "sal", code: "SAL", name: "Salvatori Computer Science Center", lat: 34.019384, lng: -118.289520, kind: "classroom", capacity: 200,
     studySpot: { quiet: true, outlets: true, openLate: true, note: "CS lab vibes, whiteboards, usually calm" } },
@@ -46,7 +50,8 @@ export const CORE_BUILDINGS: Building[] = [
 ];
 
 /** All buildings: core + every other named building, so any place can be tagged and pinned exactly. */
-export const BUILDINGS: Building[] = [...CORE_BUILDINGS, ...(OSM_BUILDINGS as Building[])];
+const CORE_NAMES = new Set(CORE_BUILDINGS.map((b) => b.name.toLowerCase()));
+export const BUILDINGS: Building[] = [...CORE_BUILDINGS, ...(OSM_BUILDINGS as Building[]).filter((b) => !CORE_NAMES.has(b.name.toLowerCase()))];
 
 /** Street corners around campus, so off-campus DPS alerts can be placed exactly. */
 export const INTERSECTIONS: { id: string; name: string; lat: number; lng: number }[] = [
@@ -112,6 +117,7 @@ const GENERIC = new Set([
   "north", "south", "street", "st", "ave", "blvd", "way", "to", "get", "how", "do", "i", "me", "take", "walk", "directions", "go", "where", "is",
 ]);
 const ALIASES: Record<string, string> = {
+  "village gym": "vfc", "village fitness": "vfc", "fitness center": "vfc", pool: "uac", aquatics: "uac", "aquatics center": "uac", uytengsu: "uac",
   village: "vil", "usc village": "vil", leavey: "lvl", doheny: "dml", lyon: "lrc", "lyon center": "lrc", coliseum: "col", galen: "gal",
   "tommy trojan": "tommy", tommy: "tommy", parkside: "pks", evk: "evk", "everybody's kitchen": "evk", taper: "thh", annenberg: "ann",
   "campus center": "tcc", marshall: "jff", "cinema school": "sci", "film school": "sci", thornton: "mus",
