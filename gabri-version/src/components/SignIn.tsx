@@ -177,7 +177,7 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
             <button type="button" className="w-full text-center text-xs text-muted hover:text-foreground" onClick={() => { setStep("email"); setErr(null); }}>Use a different email</button>
           </form>
         )}
-        <p className="mt-4 text-center text-[11px] text-muted">Demo sign-in, not an official USC service. You can add interests and switch to a creator account in Settings.</p>
+        <p className="mt-4 text-center text-[11px] text-muted">Not an official USC service.</p>
       </div>
     </div>
   );
