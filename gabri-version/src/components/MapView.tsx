@@ -5,7 +5,7 @@ import type { CampusWeather } from "@/lib/weather";
 import WeatherEffects from "./weather/WeatherEffects";
 import type { Feature, FeatureCollection } from "geojson";
 import { useEffect, useRef, useState } from "react";
-import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
+import { BUILDINGS, CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import type { Callout } from "@/lib/callouts";
 import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
 import { calloutHTML } from "@/lib/calloutHtml";
@@ -97,9 +97,38 @@ function placeConfig(style: MapStyle, on: boolean): Record<string, boolean> {
 // everything outside the boundary is flat and faded, with a few landmarks kept for orientation.
 interface CampusData { campus: Feature; mask: Feature; buildings: FeatureCollection }
 let campusPromise: Promise<CampusData> | null = null;
+/** Places you look for while walking around: they get their own colour on the building and on its name. */
+const SPECIAL: Record<string, "dining" | "gym" | "pool"> = { evk: "dining", pks: "dining", vil: "dining", lrc: "gym", vfc: "gym", uac: "pool" };
+const SPECIAL_NAMES: [RegExp, "dining" | "gym" | "pool"][] = [[/dining hall|kitchen/i, "dining"], [/recreation center|fitness/i, "gym"], [/aquatic/i, "pool"]];
+function inRing(x: number, y: number, ring: number[][]) {
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+const outerRings = (f: Feature): number[][][] => (f.geometry.type === "Polygon" ? [f.geometry.coordinates[0]] : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates.map((p) => p[0]) : []);
+/** height of the footprint under each building point (labels float at roof height) */
+const labelHeights: Record<string, number> = {};
+function tagCampus(c: CampusData) {
+  for (const f of c.buildings.features as Feature[]) {
+    const props = (f.properties ??= {}) as Record<string, unknown>;
+    const named = SPECIAL_NAMES.find(([re]) => re.test(String(props.name ?? "")));
+    if (named) props.k = named[1];
+  }
+  for (const b of BUILDINGS) {
+    const f = (c.buildings.features as Feature[]).find((x) => outerRings(x).some((r) => inRing(b.lng, b.lat, r)));
+    if (!f) continue;
+    labelHeights[b.id] = Number((f.properties as { h?: number }).h) || 0;
+    if (SPECIAL[b.id]) (f.properties as Record<string, unknown>).k = SPECIAL[b.id];
+  }
+  return c;
+}
 const loadCampus = () =>
   (campusPromise ??= fetch("/data/usc-campus.json")
     .then((r) => { if (!r.ok) throw new Error(`campus data ${r.status}`); return r.json() as Promise<CampusData>; })
+    .then(tagCampus)
     .catch((e) => { campusPromise = null; throw e; }));
 
 /** The neighborhood drawn in 3D around campus: north to the I-10, east past the I-110, south past Expo Park, west to Normandie. */
@@ -169,9 +198,12 @@ function applyLight(m: mapboxgl.Map, light: LightPreset) {
   set("usc-edge", "line-color", k.edge);
   set("usc-edge-glow", "line-color", k.edge);
   set("usc-edge-glow", "line-opacity", k.glow);
-  set("usc-buildings", "fill-extrusion-color", ["interpolate", ["linear"], ["get", "h"], 0, k.bld[0], 20, k.bld[1], 45, k.bld[2]]);
+  // dining halls orange, gyms green, the pool blue (kept through every light preset); the rest take the preset's stone
+  set("usc-buildings", "fill-extrusion-color", ["match", ["get", "k"], "dining", "#f2b07a", "gym", "#94cfa0", "pool", "#86c9e4",
+    ["interpolate", ["linear"], ["get", "h"], 0, k.bld[0], 20, k.bld[1], 45, k.bld[2]]]);
   set("usc-buildings", "fill-extrusion-flood-light-intensity", k.flood);
-  set("usc-buildings", "fill-extrusion-emissive-strength", k.emissive);
+  // the special places (dining, gyms, pool) keep a little glow of their own at every time of day
+  set("usc-buildings", "fill-extrusion-emissive-strength", ["match", ["get", "k"], ["dining", "gym", "pool"], Math.max(Number(k.emissive) || 0, 0.45), k.emissive] as unknown as number);
   set("area-buildings", "fill-extrusion-color", ["interpolate", ["linear"], ["get", "h"], 0, k.area[0], 20, k.area[1], 60, k.area[2]]);
   set("area-buildings", "fill-extrusion-flood-light-intensity", k.areaFlood);
   set("usc-context-labels", "text-color", k.label);
@@ -195,7 +227,9 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, light: L
   if (!sat) m.addLayer({
     id: "usc-buildings", type: "fill-extrusion", source: "usc-buildings", slot: "middle",
     paint: {
-      "fill-extrusion-color": ["interpolate", ["linear"], ["get", "h"], 0, "#f2e9de", 20, "#eadccc", 45, "#e0cdb9"],
+      // dining halls warm orange, gyms green, the pool blue: easy to spot walking around; the rest warm stone
+      "fill-extrusion-color": ["match", ["get", "k"], "dining", "#f2b07a", "gym", "#94cfa0", "pool", "#86c9e4",
+        ["interpolate", ["linear"], ["get", "h"], 0, "#f2e9de", 20, "#eadccc", 45, "#e0cdb9"]],
       "fill-extrusion-height": ["get", "h"],
       "fill-extrusion-base": ["get", "mh"],
       "fill-extrusion-opacity": 0.97,
@@ -305,10 +339,19 @@ function hotspotGeo(hotspots: Hotspot[], buildings: Building[]): { points: FC; c
   };
 }
 
+/** building names: bigger as you get close (walking around as your Trojan), floating at roof height so walls don't hide them */
+const LABEL_SIZE = ["interpolate", ["linear"], ["zoom"], 16, 10, 18, 12, 19.5, 14.5, 21.5, 19] as unknown as number;
+const LABEL_PAINT = (sat: boolean) => ({
+  "text-color": sat ? "#ffffff" : (["match", ["get", "k"], "dining", "#b45309", "gym", "#15803d", "pool", "#0369a1", "#45403b"] as unknown as string),
+  "text-halo-color": sat ? "rgba(0,0,0,.75)" : "rgba(255,255,255,.95)",
+  "text-halo-width": 1.8,
+  "text-emissive-strength": 1,
+  "symbol-z-offset": ["+", ["get", "h"], 1.5] as unknown as number,
+});
 function buildingLabelGeo(buildings: Building[]): FC {
   return {
     type: "FeatureCollection",
-    features: buildings.map((b) => ({ type: "Feature", properties: { id: b.id, name: b.name, minor: !!b.minor }, geometry: { type: "Point", coordinates: [b.lng, b.lat] } })),
+    features: buildings.map((b) => ({ type: "Feature", properties: { id: b.id, name: b.name, minor: !!b.minor, k: SPECIAL[b.id] ?? "", h: labelHeights[b.id] ?? 0 }, geometry: { type: "Point", coordinates: [b.lng, b.lat] } })),
   };
 }
 
@@ -484,24 +527,14 @@ export default function MapView(props: Props) {
     // building names: only the main ones by default, every building once you zoom in close
     m.addLayer({
       id: "building-names", type: "symbol", source: "building-labels", slot: "top", minzoom: 16, filter: ["!", ["get", "minor"]],
-      layout: { "text-field": ["get", "name"], "text-size": ["interpolate", ["linear"], ["zoom"], 16, 10, 18, 12], "text-max-width": 8, "text-padding": 4, "text-anchor": "bottom", "text-offset": [0, -1.1] },
-      paint: {
-        "text-color": sat ? "#ffffff" : "#57534e",
-        "text-halo-color": sat ? "rgba(0,0,0,.7)" : "rgba(255,255,255,.9)",
-        "text-halo-width": 1.2,
-        "text-emissive-strength": 1,
-      },
+      layout: { "text-field": ["get", "name"], "text-size": LABEL_SIZE, "text-max-width": 8, "text-padding": 4, "text-anchor": "bottom", "text-offset": [0, -0.6] },
+      paint: LABEL_PAINT(sat),
     });
 
     m.addLayer({
       id: "building-names-minor", type: "symbol", source: "building-labels", slot: "top", minzoom: 17.6, filter: ["get", "minor"],
-      layout: { "text-field": ["get", "name"], "text-size": ["interpolate", ["linear"], ["zoom"], 16, 10, 18, 12], "text-max-width": 8, "text-padding": 4, "text-anchor": "bottom", "text-offset": [0, -1.1] },
-      paint: {
-        "text-color": sat ? "#ffffff" : "#57534e",
-        "text-halo-color": sat ? "rgba(0,0,0,.7)" : "rgba(255,255,255,.9)",
-        "text-halo-width": 1.2,
-        "text-emissive-strength": 1,
-      },
+      layout: { "text-field": ["get", "name"], "text-size": LABEL_SIZE, "text-max-width": 8, "text-padding": 4, "text-anchor": "bottom", "text-offset": [0, -0.6] },
+      paint: LABEL_PAINT(sat),
     });
 
     const dimmed = ["case", ["get", "dim"], 0.25, 1] as unknown as number;
@@ -676,6 +709,8 @@ export default function MapView(props: Props) {
     loadCampus().then(
       (c) => {
         campus.current = c;
+        data.current.buildings = buildingLabelGeo(cb.current.buildings); // now with roof heights
+        if (ready.current && map.current === m) setSource("building-labels", data.current.buildings);
         crowd.current?.addObstacles(c.buildings); // people walk around buildings, never through them
         if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, cb.current.light ?? "day", "alert-fill");
         // the neighborhood's buildings come after campus (a bigger file; campus shows first)
