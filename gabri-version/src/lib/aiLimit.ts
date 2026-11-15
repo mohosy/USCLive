@@ -7,9 +7,9 @@
  */
 import { currentUserId, db } from "./store";
 
-const PER_MINUTE = Number(process.env.AI_PER_MINUTE ?? 8);
-const PER_USER_DAY = Number(process.env.AI_PER_USER_DAY ?? 150);
-const PER_APP_DAY = Number(process.env.AI_PER_APP_DAY ?? 3000);
+const PER_MINUTE = Number(process.env.AI_PER_MINUTE ?? 60);
+const PER_USER_DAY = Number(process.env.AI_PER_USER_DAY ?? 2000);
+const PER_APP_DAY = Number(process.env.AI_PER_APP_DAY ?? 10000);
 
 export class AiLimitError extends Error {}
 
