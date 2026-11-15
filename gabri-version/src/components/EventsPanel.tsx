@@ -38,7 +38,6 @@ export function EventRow({ e, loc, onOpen, now }: { e: EventView; loc: Loc; onOp
 export default function EventsPanel({ events, filters, setFilters, loc, onOpen, now }: {
   events: EventView[]; filters: Filters; setFilters: (f: Filters) => void; loc: Loc; onOpen: (id: string) => void; now: Date;
 }) {
-  const toggleCat = (c: Category) => setFilters({ ...filters, categories: filters.categories.includes(c) ? filters.categories.filter((x) => x !== c) : [...filters.categories, c] });
   const sorted = [...events].sort((a, b) => {
     const la = isLive(a, now) ? 0 : 1, lb = isLive(b, now) ? 0 : 1;
     return la - lb || +new Date(a.start) - +new Date(b.start);
@@ -53,18 +52,26 @@ export default function EventsPanel({ events, filters, setFilters, loc, onOpen, 
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      {/* one row: two quick toggles, then type and school as compact menus */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <Chip active={filters.freeFood} onClick={() => setFilters({ ...filters, freeFood: !filters.freeFood })}>Free food</Chip>
-        <Chip active={filters.friends} onClick={() => setFilters({ ...filters, friends: !filters.friends })}>Friends going</Chip>
-        <Chip active={filters.myClasses} onClick={() => setFilters({ ...filters, myClasses: !filters.myClasses })}>My classes</Chip>
-        {CATS.map((c) => (
-          <Chip key={c} active={filters.categories.includes(c)} onClick={() => toggleCat(c)}>{CATEGORY_META[c].short}</Chip>
-        ))}
+        <Chip active={filters.friends} onClick={() => setFilters({ ...filters, friends: !filters.friends })}>Friends</Chip>
+        <select aria-label="Event type" className={cx("pill-select", (filters.myClasses || filters.categories.length > 0) && "pill-select-on")}
+          value={filters.myClasses ? "mine" : filters.categories[0] ?? "any"}
+          onChange={(e) => {
+            const v = e.target.value;
+            setFilters({ ...filters, myClasses: v === "mine", categories: v === "any" || v === "mine" ? [] : [v as Category] });
+          }}>
+          <option value="any">Type</option>
+          <option value="mine">My classes</option>
+          {CATS.map((c) => <option key={c} value={c}>{CATEGORY_META[c].short}</option>)}
+        </select>
+        <select aria-label="School" className={cx("pill-select", filters.school !== "any" && "pill-select-on")} value={filters.school}
+          onChange={(e) => setFilters({ ...filters, school: e.target.value as SchoolId | "any" })}>
+          <option value="any">School</option>
+          {SCHOOLS.filter((x) => x.id !== "all").map((x) => <option key={x.id} value={x.id}>{x.short ?? x.name}</option>)}
+        </select>
       </div>
-      <select className={inputCls} value={filters.school} onChange={(e) => setFilters({ ...filters, school: e.target.value as SchoolId | "any" })}>
-        <option value="any">All schools</option>
-        {SCHOOLS.filter((s) => s.id !== "all").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-      </select>
       <div className="text-xs text-muted">{sorted.length} event{sorted.length === 1 ? "" : "s"}</div>
       <div className="scroll-thin -mx-2 flex-1 overflow-y-auto">
         {sorted.map((e) => <EventRow key={e.id} e={e} loc={loc} onOpen={() => onOpen(e.id)} now={now} />)}

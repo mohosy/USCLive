@@ -103,7 +103,7 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
   const [email, setEmail] = useState(google?.email ?? "");
   const [first, setFirst] = useState(google?.firstName ?? "");
   const [last, setLast] = useState(google?.lastName ?? "");
-  const [googleReady, setGoogleReady] = useState(false); // shown only when the server has Google credentials
+  const [googleReady, setGoogleReady] = useState(true); // shown from the first frame; hidden only if the server has no Google credentials
   useEffect(() => { api<{ configured: boolean }>("/api/auth/google/status").then((r) => setGoogleReady(r.configured), () => {}); }, []);
   const [school, setSchool] = useState<SchoolId | "">("");
   // suggested from the name until the student types their own
@@ -134,24 +134,25 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-white/70 p-5 backdrop-blur-md">
-      <div className="fade-in my-auto w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-xl">
-        <div className="text-[22px] font-semibold tracking-tight">USC<span className="text-cardinal">Live</span></div>
+    <div className="signin-wrap">
+      <div className="signin-card">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="" width={56} height={56} className="signin-logo" />
+        <div className="signin-title">USC<span className="text-cardinal">Live</span></div>
         {step === "email" ? (
           // real accounts come only from Google (a verified email); anyone can look around as the demo student
-          <div className="mt-1">
-            <p className="text-sm text-muted">Sign in to see what is happening on campus.</p>
-            {err && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{err}</p>}
+          <div className="signin-body">
+            <p className="signin-sub">Everything happening on campus, right now.</p>
+            {err && <p role="alert" className="mt-3 text-center text-sm font-medium text-red-700">{err}</p>}
             {googleReady && (
-              <a href="/api/auth/google/start" className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:bg-surface">
+              <a href="/api/auth/google/start" className="signin-google">
                 <GoogleMark /> Continue with Google
               </a>
             )}
-            <Button variant="secondary" className={googleReady ? "mt-2 w-full" : "mt-4 w-full"} disabled={busy} onClick={() => { setEmail("ttrojan@usc.edu"); next("ttrojan@usc.edu"); }}>{busy ? "Opening…" : "Try the demo student"}</Button>
-            <p className="mt-3 text-center text-[11px] leading-relaxed text-muted">The demo student comes with a full schedule, friends and events, so you can try everything.</p>
+            <button type="button" className="signin-demo" disabled={busy} onClick={() => { setEmail("ttrojan@usc.edu"); next("ttrojan@usc.edu"); }}>{busy ? "Opening…" : "Demo"}</button>
           </div>
         ) : (
-          <form className="mt-1 space-y-3" onSubmit={(e) => { e.preventDefault(); create(); }}>
+          <form className="mt-5 space-y-3 text-left" onSubmit={(e) => { e.preventDefault(); create(); }}>
             <p className="text-sm text-muted">{google ? "Signed in with Google. Pick your school to finish" : "Create your account"} for <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>.</p>
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
