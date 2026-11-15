@@ -8,6 +8,7 @@ import type { GameInfo } from "./types";
 import { WEBCAMS } from "./webcams";
 import { eventPhoto } from "./eventPhotos";
 import { DINING_HALLS } from "./dining";
+import { fillPct } from "./hotspots";
 
 export type CalloutKind = "game" | "busy" | "quiet" | "dining" | "event" | "schedule" | "alert" | "alertmini" | "webcam";
 
@@ -31,8 +32,8 @@ export interface Callout {
   stacked?: boolean;
   /** dining halls: how busy it is right now (absent when hidden or unknown) */
   level?: "quiet" | "normal" | "busy" | "packed";
-  /** how busy the place is, as a short tag ("TCC · Busy 78%"). On a busy or dining marker it is what the marker says;
-   *  on an event it is the marker that gave way to it, so the busyness is still on the map. */
+  /** events at a tracked place (dining, gym, library, campus center): how busy the building is, as a small tag
+   *  ("TCC · Busy 78%"). The event takes the spot of the building's busy marker, so the busyness rides on the ticket. */
   crowd?: { text: string; level: "quiet" | "normal" | "busy" | "packed" };
   /** busy/quiet ring intensity 0..1 */
   intensity?: number;
@@ -82,7 +83,8 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     }
   }
 
-  const fill = (h: AppState["hotspots"][number]) => Math.min(99, Math.round((h.count / b(h.buildingId).capacity) * 100));
+  const fill = (h: AppState["hotspots"][number]) => fillPct(h.count, b(h.buildingId).capacity);
+  const TRACKED = ["dining", "gym", "library", "student_center"];
 
   // an event pin at the same building (on now or soon): lift the busy or dining marker above it
   const t = now.getTime();
@@ -95,21 +97,21 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     const known = h && !h.suppressed && b(d.buildingId);
     out.push({
       id: `b:${d.buildingId}`, kind: "dining", lng: d.lng, lat: d.lat, eyebrow: d.name, title: d.short, stacked: hasPin(d.buildingId),
-      ...(known ? { level: h.level, meta: `${LEVEL_WORD[h.level]} · ${fill(h)}%`, crowd: { text: `${d.short} · ${LEVEL_WORD[h.level]} ${fill(h)}%`, level: h.level } } : {}),
+      ...(known ? { level: h.level, meta: `${LEVEL_WORD[h.level]} · ${fill(h)}%` } : {}),
     });
   }
 
   if (chips.crowds) {
-    const tracked = s.hotspots.filter((h) => !h.suppressed && !hallBuildings.has(h.buildingId) && b(h.buildingId) && ["dining", "gym", "library", "student_center"].includes(b(h.buildingId).kind));
+    const tracked = s.hotspots.filter((h) => !h.suppressed && !hallBuildings.has(h.buildingId) && b(h.buildingId) && TRACKED.includes(b(h.buildingId).kind));
     const busiest = [...tracked].filter((h) => h.level === "busy" || h.level === "packed").sort((x, y) => fill(y) - fill(x)).slice(0, 3);
     const quietest = [...tracked].filter((h) => h.level === "quiet").sort((x, y) => fill(x) - fill(y)).slice(0, 1);
     for (const h of busiest) {
       const bd = b(h.buildingId);
-      out.push({ id: `b:${bd.id}`, kind: "busy", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: h.level === "packed" ? "Packed" : "Busy", meta: `${fill(h)}%`, intensity: Math.min(1, h.ratio / 2), stacked: hasPin(bd.id), crowd: { text: `${bd.code} · ${LEVEL_WORD[h.level]} ${fill(h)}%`, level: h.level } });
+      out.push({ id: `b:${bd.id}`, kind: "busy", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: h.level === "packed" ? "Packed" : "Busy", meta: `${fill(h)}%`, intensity: Math.min(1, h.ratio / 2), stacked: hasPin(bd.id) });
     }
     for (const h of quietest) {
       const bd = b(h.buildingId);
-      out.push({ id: `b:${bd.id}`, kind: "quiet", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: "Quiet", meta: `${fill(h)}%`, stacked: hasPin(bd.id), crowd: { text: `${bd.code} · Quiet ${fill(h)}%`, level: h.level } });
+      out.push({ id: `b:${bd.id}`, kind: "quiet", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: "Quiet", meta: `${fill(h)}%`, stacked: hasPin(bd.id) });
     }
   }
 
@@ -157,7 +159,11 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
       const where = b(e.buildingId)?.name ?? "";
       // the label is always the event's type; free food is a badge on top, so turning a filter on/off never renames an event
       const label = CATEGORY_META[e.category]?.label ?? "Event";
+      // the building's busyness rides on the ticket (the event takes the spot of the building's own marker)
+      const bd = b(e.buildingId);
+      const h = chips.crowds && bd && TRACKED.includes(bd.kind) ? s.hotspots.find((x) => x.buildingId === bd.id && !x.suppressed) : undefined;
       out.push({
+        ...(h && bd ? { crowd: { text: `${bd.code} · ${LEVEL_WORD[h.level]} ${fill(h)}%`, level: h.level } } : {}),
         id: `ev:${e.id}`, kind: "event", lng: e.lng!, lat: e.lat!, eyebrow: `${label} · ${where}`, food: e.freeFood ? e.foodDetail ?? "Free food" : undefined,
         title: e.title.length > 26 ? `${e.title.slice(0, 25)}…` : e.title,
         meta: `${isLive(e, now) ? "Now" : fmtTime(e.start)} · ${e.attendeeCount} going`,
@@ -190,11 +196,6 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     if (c.kind === "alert") continue;
     const cur = winner.get(spot(c));
     if (!cur || CALLOUT_RANK[c.kind] > CALLOUT_RANK[cur.kind]) winner.set(spot(c), c);
-  }
-  // a busy or dining marker that gave way to an event leaves its busyness on the event as a small tag
-  for (const c of out) {
-    const w = winner.get(spot(c));
-    if (c.crowd && w && w !== c && w.kind === "event" && !w.crowd) w.crowd = c.crowd;
   }
   return out.filter((c) => c.kind === "alert" || winner.get(spot(c)) === c);
 }
