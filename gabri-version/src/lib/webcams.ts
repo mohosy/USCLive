@@ -29,8 +29,8 @@ const CT = "https://cwwp2.dot.ca.gov/data/d7/cctv/image";
 export const WEBCAMS: Webcam[] = [
   {
     id: "usc-tommy", name: "Tommy Trojan", view: "Hahn Plaza: Tommy Trojan, Bovard and Trousdale Parkway",
-    // mounted on the Student Union's northeast corner, looking at the statue
-    lat: 34.020274, lng: -118.285497, source: "USC", heading: 39,
+    // just outside the Student Union's northeast corner, looking at the statue
+    lat: 34.020310, lng: -118.285452, source: "USC", heading: 19,
     hls: "https://cs9.pixelcaster.com/live/usc-tommy.stream/playlist.m3u8",
     image: "https://cdn.pixelcaster.com/public.pixelcaster.com/snapshots/usc-tommy/latest_1920x.jpg",
     page: "https://www.usc.edu/tommy-cam/",
