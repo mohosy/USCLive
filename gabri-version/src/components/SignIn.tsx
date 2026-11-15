@@ -13,6 +13,8 @@ export interface SavedProfile { name?: string; pronouns?: string; bio?: string; 
 export interface Signup { firstName: string; lastName: string; school: SchoolId }
 export interface Session {
   email: string;
+  /** private calendar link synced from the Home panel (re-synced after the demo server restarts) */
+  calendarUrl?: string;
   /** a new (non-directory) account: what the student entered when creating it */
   signup?: Signup;
   interests: string[];

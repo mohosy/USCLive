@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/client-types";
 import type { ScanT } from "@/lib/ai";
 import type { InboxItem } from "@/lib/types";
-import { Button, Modal, Tag, inputCls } from "./ui";
+import { Button, Modal, Tag } from "./ui";
 
 const SRC = { gmail: "Gmail", brightspace: "Brightspace", gcal: "Google Calendar" } as const;
 const KIND: Record<string, { label: string; tone: "neutral" | "food" | "live" | "class" | "private" | "open" }> = {
@@ -20,7 +20,6 @@ export default function InboxModal({ open, onClose, onChanged }: { open: boolean
   const [items, setItems] = useState<(InboxItem & { scanned: boolean })[]>([]);
   const [results, setResults] = useState<ScanT["items"]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [ical, setIcal] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => { if (open) api<{ items: (InboxItem & { scanned: boolean })[] }>("/api/inbox").then((r) => setItems(r.items)); }, [open]);
@@ -33,14 +32,6 @@ export default function InboxModal({ open, onClose, onChanged }: { open: boolean
       setItems((it) => it.map((i) => ({ ...i, scanned: true })));
       setMsg(r.message ?? (r.addedEvents?.length ? `${r.addedEvents.length} items added to your map.` : null));
       onChanged();
-    } catch (e) { setMsg((e as Error).message); }
-    setBusy(null);
-  }
-  async function importIcal() {
-    setBusy("ical"); setMsg(null);
-    try {
-      const r = await api<{ added: number; deadlines: number }>("/api/import/ical", { json: { url: ical } });
-      setMsg(`Calendar synced: ${r.added} events, ${r.deadlines} deadlines.`); onChanged();
     } catch (e) { setMsg((e as Error).message); }
     setBusy(null);
   }
@@ -58,10 +49,10 @@ export default function InboxModal({ open, onClose, onChanged }: { open: boolean
   const allScanned = items.length > 0 && items.every((i) => i.scanned);
 
   return (
-    <Modal open={open} onClose={onClose} title="Inbox" wide>
+    <Modal open={open} onClose={onClose} title="AI inbox scan (demo)" wide>
       <div className="space-y-5">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted">Finds events, deadlines and invites in your email, Brightspace and calendar, and flags phishing. Connected to demo accounts.</p>
+          <p className="text-sm text-muted">Finds events, deadlines and invites in your email, Brightspace and calendar, and flags phishing. Runs on demo emails; real email access would need Google&apos;s approval.</p>
           <Button className="shrink-0" disabled={!!busy || allScanned} onClick={scan}>{busy === "scan" ? "Scanning..." : allScanned ? "Scanned" : "Scan inbox"}</Button>
         </div>
 
@@ -83,20 +74,10 @@ export default function InboxModal({ open, onClose, onChanged }: { open: boolean
           })}
         </ul>
 
-        <div className="grid grid-cols-2 gap-6 border-t border-line pt-4">
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Brightspace calendar</div>
-            <p className="text-xs text-muted">In Brightspace, open Calendar, choose Subscribe and paste the link here. Any .ics link works.</p>
-            <div className="flex gap-2">
-              <input className={inputCls} placeholder="webcal:// or https:// link" value={ical} onChange={(e) => setIcal(e.target.value)} />
-              <Button variant="secondary" disabled={!!busy || ical.length < 10} onClick={importIcal}>{busy === "ical" ? "Syncing" : "Sync"}</Button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Public USC events</div>
-            <p className="text-xs text-muted">Pulls events from public usc.edu event pages.</p>
-            <Button variant="secondary" disabled={!!busy} onClick={scrape}>{busy === "scrape" ? "Importing" : "Import events"}</Button>
-          </div>
+        <div className="space-y-2 border-t border-line pt-4">
+          <div className="text-sm font-medium">Public USC events</div>
+          <p className="text-xs text-muted">Pulls events from public usc.edu event pages.</p>
+          <Button variant="secondary" disabled={!!busy} onClick={scrape}>{busy === "scrape" ? "Importing" : "Import events"}</Button>
         </div>
         {msg && <p className="text-sm text-muted">{msg}</p>}
       </div>
