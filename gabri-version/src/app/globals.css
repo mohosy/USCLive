@@ -214,8 +214,11 @@ html, body {
 .map-menu-button svg { filter: drop-shadow(0 1px 3px #fff) drop-shadow(0 -1px 2px #fff); }
 .map-menu-button:hover, .map-menu-button[aria-expanded="true"] { background: rgba(255,255,255,0.9); }
 /* Top-right: the cardinal initials button (gold dot = unread notifications) and the account panel it opens */
-.account-area { position: absolute; right: 24px; top: calc(20px + var(--sat)); z-index: 35; }
-.map-profile { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--cardinal); color: #fff; font-size: 12px; font-weight: 650; box-shadow: 0 4px 14px rgba(65,0,0,0.22); cursor: pointer; }
+.account-area { position: absolute; right: 24px; top: calc(20px + var(--sat)); z-index: 35; display: flex; align-items: center; gap: 10px; }
+.map-bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.92); color: #1d1d1f; box-shadow: 0 4px 14px rgba(20,20,30,0.16); border: 0.5px solid rgba(0,0,0,0.08); }
+.map-bell:hover { background: #fff; }
+.bell-unread { position: absolute; right: 8px; top: 8px; width: 9px; height: 9px; background: var(--cardinal); border: 2px solid #fff; border-radius: 50%; }
+.map-profile { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--cardinal); color: #fff; font-size: 14.5px; font-weight: 650; box-shadow: 0 4px 14px rgba(65,0,0,0.22); cursor: pointer; }
 .map-profile::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
 .map-profile:hover { background: var(--cardinal-hover); }
 .profile-unread { position: absolute; right: -1px; top: -1px; width: 8px; height: 8px; background: var(--gold); border: 2px solid var(--cardinal); border-radius: 50%; }
@@ -278,10 +281,17 @@ html, body {
 
 /* The menu slides in from the left and covers only its own area: map dragging stays available beside it.
    It stops above the bottom-left view switch so that stays reachable. */
-.side { position: absolute; left: 16px; top: calc(84px + var(--sat)); bottom: 96px; z-index: 25; width: 360px; border-radius: 16px; visibility: hidden;
-  transform: translateX(calc(-100% - 24px)); transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1), visibility 0.28s; }
-.side-open { transform: none; visibility: visible; }
-.side-inner { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; background: rgba(255,255,255,0.98); box-shadow: 0 8px 28px rgba(30,20,20,0.14); }
+/* Side panel: an always-visible icon bar top-left; opening unfolds it downward (clip-path: no layout, no map resize). */
+.side { position: absolute; left: 16px; top: calc(20px + var(--sat)); bottom: 96px; z-index: 25; width: 360px; border-radius: 18px;
+  clip-path: inset(0 0 calc(100% - 50px) 0 round 18px); transition: clip-path 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.side-open { clip-path: inset(0 0 0 0 round 18px); }
+.side-inner { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; background: rgba(255,255,255,0.97); box-shadow: 0 8px 28px rgba(30,20,20,0.14); }
+.side-bar { display: flex; align-items: center; gap: 2px; flex-shrink: 0; height: 50px; padding: 0 6px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
+.side-tab { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 999px; font-size: 13.5px; font-weight: 550; color: #1d1d1f; white-space: nowrap; }
+.side-tab:hover { background: rgba(0,0,0,0.05); }
+.side-tab-on, .side-tab-on:hover { background: var(--foreground); color: #fff; }
+.side-chevron { margin-left: auto; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; color: #6e6e73; }
+.side-chevron:hover { background: rgba(0,0,0,0.05); color: #1d1d1f; }
 .side-grip { display: none; }
 .side .text-muted { color: #626267; }
 @media (min-width: 901px) { .side-on .map-dock { left: 400px; } }
@@ -296,11 +306,10 @@ html, body {
   .dock-search-row { gap: 8px; }
   /* phones: the switch sits at the left of the dock's top row, beside the locate button */
   .view-switch { left: 16px; bottom: calc(max(32px, calc(env(safe-area-inset-bottom) + 20px)) + 125px); }
-  .side { position: fixed; left: 12px; right: 12px; top: auto; bottom: max(212px, calc(env(safe-area-inset-bottom) + 200px)); width: auto; height: min(53dvh, calc(100dvh - 280px)); border-radius: 20px; transform: translateY(calc(100% + 200px)); }
-  .side-open { transform: none; }
-  .side-grip { display: block; flex-shrink: 0; width: 100%; height: 22px; padding-top: 9px; touch-action: none; cursor: grab; }
-  .side-grip::before { content: ""; display: block; width: 36px; height: 4px; margin: 0 auto; border-radius: 3px; background: #c6bebe; }
-  .side-inner > .side-grip + div { padding-top: 0; }
+  .side { position: fixed; left: 12px; right: 112px; top: calc(16px + var(--sat)); bottom: auto; width: auto; height: min(62dvh, calc(100dvh - 300px)); }
+  .side-open { right: 12px; z-index: 40; }
+  .side-tab { padding: 0 10px; }
+  @media (max-width: 430px) { .side:not(.side-open) .side-tab span { display: none; } }
   .map-layer-chip { min-height: 44px; padding: 9px 14px; }
   .search-results, .chat-thread, .chat-suggestions { bottom: calc(100% + 120px); }
   .search-results { max-height: calc(100dvh - 320px); }
@@ -364,15 +373,14 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { position: absolute; top: calc(90px + var(--sat)); right: 24px; z-index: 10; min-width: 108px; padding: 10px 14px 8px; border-radius: 18px; background: rgba(255,255,255,0.55); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 4px 16px rgba(20,20,30,0.12); color: #17171a; text-align: center; text-shadow: 0 0 6px rgba(255,255,255,0.55); }
-.weather-current { display: flex; justify-content: center; align-items: center; gap: 8px; }
-.weather-sun { color: #8f4e00; }
-.weather-temperature { font-size: 30px; line-height: 1.15; font-weight: 500; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.weather-condition { margin-top: 2px; font-size: 12px; font-weight: 650; }
-.weather-range { margin-top: 1px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.weather-range span { margin-left: 4px; color: #2e2e33; }
-.weather-source { margin-top: 4px; font-size: 9.5px; font-weight: 500; color: #2e2e33; }
-.weather-credit { font-size: 9px; font-weight: 500; color: #2e2e33; text-underline-offset: 2px; }
+.weather-pill { position: absolute; top: calc(90px + var(--sat)); right: 24px; z-index: 10; display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px 0 12px; border-radius: 999px;
+  background: rgba(255,255,255,0.9); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid rgba(0,0,0,0.08); box-shadow: 0 4px 16px rgba(20,20,30,0.12); color: #1d1d1f; white-space: nowrap; }
+.weather-sun { color: #e8a200; }
+.weather-temperature { font-size: 16px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
+.weather-range { font-size: 12px; font-weight: 500; color: #6e6e73; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) { .weather-condition { display: none; } }
 .weather-credit:hover { text-decoration: underline; }
 /* Sun, cloud and rain canvas: above the map, below every bubble, popup and control. */
 .map-weather-effects { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
@@ -399,3 +407,5 @@ button:active:not(:disabled) { transform: scale(0.97); }
   .map-app .mapboxgl-ctrl-bottom-right { bottom: calc(198px + var(--dock-lift)); }
   .map-app .satellite-credit { bottom: calc(212px + var(--dock-lift)); }
 }
+/* the 20px ⓘ sits 2px high next to the 23px Mapbox mark: center them */
+.mapboxgl-ctrl-attrib.mapboxgl-compact:not(.mapboxgl-compact-show) { transform: translateY(2px); }

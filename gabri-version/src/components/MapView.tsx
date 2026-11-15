@@ -3,7 +3,6 @@
 import mapboxgl from "mapbox-gl";
 import type { CampusWeather } from "@/lib/weather";
 import WeatherEffects from "./weather/WeatherEffects";
-import MapControls from "./MapControls";
 import type { Feature, FeatureCollection } from "geojson";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
@@ -533,8 +532,10 @@ export default function MapView(props: Props) {
     });
     map.current = m;
     m.touchZoomRotate.enableRotation();
-    m.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
-    // zoom, rotate and compass live in our own control column (MapControls), so Mapbox's own zoom buttons are not added
+    // weather on the map comes from Open-Meteo (CC BY 4.0): credited here with the map's own credits
+    m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a>' }), "bottom-right");
+    // Mapbox's own zoom + compass (drag the compass to tilt); phones pinch instead (hidden there in CSS)
+    m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
     const turnNeedle = () => { if (needle.current) needle.current.style.transform = `rotate(${-m.getBearing()}deg)`; };
     m.on("rotate", turnNeedle);
     turnNeedle();
@@ -822,10 +823,7 @@ export default function MapView(props: Props) {
     <div className="absolute inset-0">
       <div ref={el} className="h-full w-full" />
       <WeatherEffects weather={props.weather} />
-      <MapControls needle={needle}
-        onRotate={(by) => { const m = map.current; if (m && !props.walk) m.easeTo({ bearing: m.getBearing() + by, duration: 500 }); }}
-        onZoom={(by) => { const m = map.current; if (m && !props.walk) m.easeTo({ zoom: m.getZoom() + by, duration: 300 }); }}
-        onNorth={() => { const m = map.current; if (m && !props.walk) m.easeTo({ bearing: 0, pitch: 60, duration: 600 }); }} />
+
       {rotateHint && !props.walk && (
         <div className="glass fade-in pointer-events-none absolute left-1/2 top-[calc(1.25rem+var(--sat))] z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
           Swipe sideways with two fingers to turn the map · <span className="text-muted">⌥ + swipe to tilt</span>

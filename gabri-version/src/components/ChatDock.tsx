@@ -148,7 +148,7 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
         }}>
         <Search size={21} className="search-icon" aria-hidden="true" />
         <input value={text} onChange={(e) => { setText(e.target.value); setPick(0); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-          placeholder="Search or ask anything about campus…" aria-label="Search campus or ask the assistant" autoComplete="off" className="campus-search-input" />
+          placeholder="What do you want to do today?" aria-label="Search campus or ask the assistant" autoComplete="off" className="campus-search-input" />
         <div className="search-actions">
           {msgs.length > 0 && !open && (
             <button type="button" onClick={() => setOpen(true)} title="Show the conversation" aria-label="Show the conversation" className="icon-action"><ChevronUp size={18} /></button>

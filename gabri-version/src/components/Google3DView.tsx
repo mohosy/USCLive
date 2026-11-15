@@ -1,4 +1,5 @@
 "use client";
+import { Compass, RotateCcw, RotateCw } from "lucide-react";
 
 /**
  * Photorealistic 3D view (Google Map Tiles API, rendered with deck.gl).
@@ -14,7 +15,6 @@ import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
 import type { CampusWeather } from "@/lib/weather";
 import WeatherEffects from "./weather/WeatherEffects";
-import MapControls from "./MapControls";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { calloutHTML } from "@/lib/calloutHtml";
@@ -811,7 +811,11 @@ export default function Google3DView(props: Props) {
       <div className="satellite-credit pointer-events-none absolute bottom-3 right-14 z-10 max-w-[60%] truncate rounded bg-white/80 px-2 py-0.5 text-[10px] text-gray-700">
         <span className="font-semibold">Google</span>{credits ? ` · ${credits}` : ""}
       </div>
-      <MapControls needle={needle} onRotate={rotate} onZoom={zoomBy} onNorth={resetNorth} />
+      <div className="absolute bottom-10 right-3 z-10 flex flex-col overflow-hidden rounded-lg border border-line bg-white shadow-sm">
+        <button onClick={() => rotate(-45)} className="p-2 text-foreground hover:bg-surface" title="Rotate left" aria-label="Rotate left"><RotateCcw size={16} /></button>
+        <button onClick={resetNorth} className="border-y border-line p-2 text-foreground hover:bg-surface" title="Reset view" aria-label="Face north and reset the tilt"><Compass size={16} /></button>
+        <button onClick={() => rotate(45)} className="p-2 text-foreground hover:bg-surface" title="Rotate right" aria-label="Rotate right"><RotateCw size={16} /></button>
+      </div>
       <div className="glass pointer-events-none absolute left-1/2 top-5 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-muted max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
       {walkP && props.walk && (
         <WalkHUD

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
+import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
 import { loadMapLighting, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
-import { api, applyFilters, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
+import { api, applyFilters, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Hotspot, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
 import AlertDetail from "./AlertDetail";
@@ -34,6 +34,8 @@ import { AccountBadge, Avatar, Button, cx } from "./ui";
 
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
+
+const NO_HOTSPOTS: Hotspot[] = [];
 
 type Tab = "menu" | "events" | "study";
 const START_LOC: Loc = { lat: BUILDING_BY_ID.gin.lat, lng: BUILDING_BY_ID.gin.lng, label: "Ginsburg Hall", buildingId: "gin" };
@@ -85,7 +87,8 @@ export default function App() {
   // the Map lighting setting wins; then demo weather (W key: its "night" turns the map to night); otherwise the real sun
   const light: LightPreset = lightTest !== "auto" ? lightTest : weatherDemo ? (weather.isDay ? "day" : "night") : sunLight;
   const coolSat = useRef<ReturnType<typeof setTimeout>>(undefined); // ...and unloads 5s after you move away
-  const [intro, setIntro] = useState(true); // campus glide on first load (bubbles wait for it)
+  // campus glide on first load (bubbles wait for it); phones skip it and land straight on the map
+  const [intro, setIntro] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches);
   useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
   const threeReady = view === "3d" && satLoaded;
   const [flatGone, setFlatGone] = useState(false); // flat satellite placeholder removed after the fade
@@ -183,11 +186,15 @@ export default function App() {
       if (gq === "error") setTimeout(() => alert(`Google sign-in didn't work: ${reason ?? "unknown error"}`), 0);
     } else setTimeout(() => void loadGoogle(), 0);
     // one data load at startup: after the saved sign-in is re-applied, or straight away for the sign-in screen
-    const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(async () => {
-      setSignedIn(true);
-      if (saved.calendarUrl) await syncCalendar(saved.calendarUrl).catch(() => null); // the demo store forgets imports on restart (duplicates are skipped)
+    // load the data right away: the session cookie already says who you are; the saved sign-in is re-checked alongside
+    const t = setTimeout(() => {
       refresh();
-    }, () => { setSignedIn(false); refresh(); }); }, 0);
+      if (!saved) { setSignedIn(false); return; }
+      setSignedIn(true);
+      signIn(saved).then(async () => {
+        if (saved.calendarUrl) { await syncCalendar(saved.calendarUrl).catch(() => null); refresh(); } // re-sync if the server forgot it
+      }, () => { setSignedIn(false); refresh(); });
+    }, 0);
     return () => clearTimeout(t);
   }, [refresh, loadGoogle]);
   useEffect(() => {
@@ -298,6 +305,23 @@ export default function App() {
     else if (a.type === "walk_point") { setSelEvent(null); setSelBuilding(null); setWalk({ toId: "point", to: { id: "point", code: "", name: a.name, lat: a.lat, lng: a.lng, kind: "outdoor", capacity: 0, minor: true }, key: ++focusSeq.current }); }
     else { const b = BUILDING_BY_ID[a.buildingId]; if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 17, key: ++focusSeq.current }); }
   }
+  // Live location: once signed in, ask for location (the phone shows its Allow prompt) and keep following you.
+  // On campus your spot updates as you move (and the map centers on you once); off campus keeps the demo spot.
+  useEffect(() => {
+    if (!signedIn || typeof navigator === "undefined" || !navigator.geolocation) return;
+    let centered = false;
+    const id = navigator.geolocation.watchPosition((p) => {
+      const here = { lat: p.coords.latitude, lng: p.coords.longitude };
+      const nearest = [...BUILDINGS].sort((a, b) => distanceMeters(here, a) - distanceMeters(here, b))[0];
+      if (distanceMeters(here, nearest) > 1500) { setGps("off"); return; } // off campus: keep the demo location
+      // small GPS jitter doesn't re-render everything
+      setLoc((prev) => (prev.buildingId === nearest.id && distanceMeters(prev, here) < 15 ? prev : { ...here, label: `near ${nearest.name}`, buildingId: nearest.id }));
+      setGps("on");
+      if (!centered) { centered = true; setFocus({ lat: here.lat, lng: here.lng, zoom: 17, key: ++focusSeq.current }); }
+    }, () => setGps("off"), { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 });
+    return () => navigator.geolocation.clearWatch(id);
+  }, [signedIn]);
+
   /** Locate button: with a fix, just re-center; otherwise ask the browser once. Off campus or denied keeps the demo spot. */
   function locateMe() {
     const center = (l: { lat: number; lng: number }) => setFocus({ lat: l.lat, lng: l.lng, zoom: 17, key: ++focusSeq.current });
@@ -326,11 +350,14 @@ export default function App() {
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
-      <button ref={menuButton} onClick={() => setMenuOpen((o) => !o)} className="map-menu-button" aria-label="Menu" aria-expanded={menuOpen} aria-controls="campus-menu"><Menu size={28} strokeWidth={2} /></button>
       <div ref={accountArea} className="account-area">
+        {/* notifications, beside your profile; opens the same panel on its Notifications tab */}
+        <button onClick={() => { setAccountOpen((o) => !(o && accountTab === "notifications")); setAccountTab("notifications"); }} className="map-bell" aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}>
+          <Bell size={18} strokeWidth={2} />
+          {unread > 0 && <span className="bell-unread" />}
+        </button>
         <button ref={accountButton} onClick={() => { setAccountOpen((o) => !o); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label="Account" aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
           {state?.me.avatar ?? <UserRound size={16} />}
-          {unread > 0 && <span className="profile-unread" aria-label={`${unread} unread notifications`} />}
         </button>
         {accountOpen && state && (
           <section id="account-panel" className="account-panel" aria-label="Your account">
@@ -394,22 +421,26 @@ export default function App() {
       <div className="absolute inset-0">
         {/* Sidebar */}
         {/* Menu panel (see .side in globals.css): opened by the menu button, pushes the map on desktop, bottom sheet on phones */}
-        <aside id="campus-menu" aria-label="Campus menu" className={cx("side", menuOpen && "side-open")} aria-hidden={!menuOpen} inert={!menuOpen}>
+        <aside id="campus-menu" aria-label="Campus menu" className={cx("side", menuOpen && "side-open")}>
           <div className="side-inner">
           <button className="side-grip" aria-label="Collapse menu" onClick={() => setMenuOpen(false)}
             onPointerDown={(e) => { grip.current = e.clientY; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerUp={(e) => { if (grip.current != null && e.clientY - grip.current > 50) setMenuOpen(false); grip.current = null; }} />
-          <div className="flex shrink-0 items-center justify-between px-5 pb-2 pt-4">
-            <Link href="/" className="text-xl font-semibold tracking-tight">USC<span className="text-cardinal">Live</span></Link>
-            <button onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }} className="icon-action" aria-label="Close menu"><X size={20} /></button>
-          </div>
-          {!detailOpen && (
-            <nav className="flex items-center gap-4 border-b border-line px-4">
-              {([["menu", "Home"], ["events", "Events"], ["study", "Study spots"]] as const).map(([t, l]) => (
-                <button key={t} onClick={() => setTab(t)} className={cx("-mb-px border-b-2 py-3 text-sm font-medium", tab === t ? "border-cardinal text-foreground" : "border-transparent text-muted hover:text-foreground")}>{l}</button>
-              ))}
-            </nav>
-          )}
-          <div className={cx("min-h-0 flex-1 p-4", !detailOpen && tab === "events" ? "overflow-hidden" : "scroll-thin overflow-y-auto")}>
+          {/* always-visible bar: tap a tab to unfold the panel on it, tap the open tab (or the chevron) to fold it */}
+          <nav className="side-bar" aria-label="Panel sections">
+            {([["menu", "Home", House], ["events", "Events", CalendarDays], ["study", "Study spots", BookOpen]] as const).map(([t, l, Icon]) => {
+              const on = tab === t && menuOpen && !detailOpen;
+              return (
+                <button key={t} aria-pressed={on} onClick={() => { closeDetail(); if (on) setMenuOpen(false); else { setTab(t); setMenuOpen(true); } }}
+                  className={cx("side-tab", on && "side-tab-on")}>
+                  <Icon size={15} aria-hidden="true" /> <span>{l}</span>
+                </button>
+              );
+            })}
+            <button ref={menuButton} onClick={() => setMenuOpen((o) => !o)} className="side-chevron" aria-label={menuOpen ? "Fold up the panel" : "Open the panel"} aria-expanded={menuOpen} aria-controls="campus-menu-content">
+              <ChevronDown size={18} className={cx("transition-transform duration-300", menuOpen && "rotate-180")} />
+            </button>
+          </nav>
+          <div id="campus-menu-content" inert={!menuOpen} className={cx("min-h-0 flex-1 p-4", !detailOpen && tab === "events" ? "overflow-hidden" : "scroll-thin overflow-y-auto")}>
             {!state ? (
               <div className="space-y-2"><div className="skeleton h-24" /><div className="skeleton h-16" /><div className="skeleton h-16" /></div>
             ) : openAlert ? (
@@ -417,7 +448,7 @@ export default function App() {
             ) : event ? (
               <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
-              <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
+              <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} />
             ) : tab === "menu" ? (
               <>
                 <NowPanel compact active={menuOpen} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
@@ -445,11 +476,12 @@ export default function App() {
         {/* Map */}
         <main className={cx("absolute inset-0", menuOpen && "side-on")}>
           {/* Flat map. In 3D mode it shows satellite as a placeholder until the 3D campus has loaded. */}
-          {state && (view === "map" || !flatGone) && (
+          {/* the map starts loading immediately, in parallel with the data (it fills in when the data arrives) */}
+          {(view === "map" || !flatGone) && (
             <MapView
               weather={weather}
               events={shownEvents}
-              hotspots={state.hotspots}
+              hotspots={state?.hotspots ?? NO_HOTSPOTS}
               buildings={BUILDINGS}
               me={loc}
               layers={mapLayers}
@@ -472,7 +504,7 @@ export default function App() {
               onWalkEnd={endWalk}
             />
           )}
-          {state && (view === "3d" || warmSat) && (
+          {(view === "3d" || warmSat) && (
             <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
               <Google3DView
                 weather={weather}
@@ -492,7 +524,7 @@ export default function App() {
                 onWalkEnd={endWalk}
                 callouts={walk ? noCallouts : callouts}
                 alerts={shownAlerts}
-                hotspots={state.hotspots}
+                hotspots={state?.hotspots ?? NO_HOTSPOTS}
                 showHeat={chips.crowds}
                 onCallout={onCallout}
               />

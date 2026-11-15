@@ -34,6 +34,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* start talking to Mapbox while the app's code is still loading (saves a round trip on phones) */}
+        <link rel="preconnect" href="https://api.mapbox.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://events.mapbox.com" />
+      </head>
       <body className="h-full overflow-hidden">{children}</body>
     </html>
   );
