@@ -8,10 +8,17 @@ import type { Callout } from "@/lib/callouts";
 import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
 import { calloutHTML } from "@/lib/calloutHtml";
 import { declutter } from "@/lib/declutter";
+import { alertStyle } from "@/lib/alertStyle";
 import { allIconKeys, iconCanvas, iconKey, ICON_PX, ICON_RATIO } from "@/lib/eventIcons";
 
 /** the 3D film camera that stands on the map at every live webcam */
 const CAM_MODEL = "/models/film-camera.glb";
+/** the red police beacon that stands at every DPS alert */
+const BEACON_MODEL = "/models/dps-beacon.glb";
+
+function alertPoints(alerts: SafetyAlert[]): FC {
+  return { type: "FeatureCollection", features: alerts.map((a) => ({ type: "Feature", properties: { id: `al:${a.id}`, title: a.title }, geometry: { type: "Point", coordinates: [a.lng, a.lat] } })) };
+}
 import { LEVEL_COLOR } from "./ui";
 import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
@@ -121,7 +128,10 @@ function buildingLabelGeo(buildings: Building[]): FC {
 function alertGeo(alerts: SafetyAlert[]): FC {
   return {
     type: "FeatureCollection",
-    features: alerts.map((a) => ({ type: "Feature", properties: { id: a.id }, geometry: { type: "Polygon", coordinates: [circlePolygon(a.lng, a.lat, a.radiusM, 40)] } })),
+    features: alerts.map((a) => {
+      const st = alertStyle(a);
+      return { type: "Feature", properties: { id: a.id, color: `rgb(${st.rgb.join(",")})`, fill: st.fill, line: st.line }, geometry: { type: "Polygon", coordinates: [circlePolygon(a.lng, a.lat, st.radiusM, 40)] } };
+    }),
   };
 }
 
@@ -164,7 +174,7 @@ export default function MapView(props: Props) {
   const ready = useRef(false);
   const styleRef = useRef<MapStyle>(props.mapStyle);
   const meMarker = useRef<mapboxgl.Marker | null>(null);
-  const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC; alerts: FC; cams: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings), alerts: EMPTY, cams: EMPTY });
+  const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC; alerts: FC; cams: FC; alertPts: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings), alerts: EMPTY, cams: EMPTY, alertPts: EMPTY });
   const bubbles = useRef(new Map<string, { m: mapboxgl.Marker; el: HTMLDivElement; html: string; c: Callout }>());
   const cb = useRef(props);
   useEffect(() => { cb.current = props; });
@@ -214,6 +224,7 @@ export default function MapView(props: Props) {
     m.addSource("building-labels", { type: "geojson", data: data.current.buildings });
     m.addSource("alerts", { type: "geojson", data: data.current.alerts });
     m.addSource("cams", { type: "geojson", data: data.current.cams });
+    m.addSource("alert-pts", { type: "geojson", data: data.current.alertPts });
     // event type icons, drawn once on a canvas and uploaded as sprites
     for (const k of allIconKeys()) {
       if (m.hasImage(k)) continue;
@@ -221,9 +232,10 @@ export default function MapView(props: Props) {
       m.addImage(k, cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height), { pixelRatio: ICON_RATIO });
     }
     if (!m.hasModel("film-cam")) m.addModel("film-cam", CAM_MODEL);
+    if (!m.hasModel("dps-beacon")) m.addModel("dps-beacon", BEACON_MODEL);
     // DPS alert zones
-    m.addLayer({ id: "alert-fill", type: "fill", source: "alerts", slot: "middle", paint: { "fill-color": "#dc2626", "fill-opacity": 0.16, "fill-emissive-strength": 1 } });
-    m.addLayer({ id: "alert-line", type: "line", source: "alerts", slot: "middle", paint: { "line-color": "#dc2626", "line-width": 1.5, "line-opacity": 0.6, "line-emissive-strength": 1 } });
+    m.addLayer({ id: "alert-fill", type: "fill", source: "alerts", slot: "middle", paint: { "fill-color": ["get", "color"], "fill-opacity": ["get", "fill"], "fill-emissive-strength": 1 } });
+    m.addLayer({ id: "alert-line", type: "line", source: "alerts", slot: "middle", paint: { "line-color": ["get", "color"], "line-width": 1.5, "line-opacity": ["get", "line"], "line-emissive-strength": 1 } });
 
 
     m.addLayer({
@@ -302,6 +314,17 @@ export default function MapView(props: Props) {
         "model-type": "common-3d",
         "model-cast-shadows": true,
         "model-emissive-strength": 0.6,
+      },
+    } as mapboxgl.LayerSpecification);
+    // DPS alerts: a red police beacon standing in the zone (click for details)
+    m.addLayer({
+      id: "alerts-3d", type: "model", source: "alert-pts", slot: "top",
+      layout: { "model-id": "dps-beacon" },
+      paint: {
+        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [60, 60, 60]], 19, ["literal", [5, 5, 5]]],
+        "model-type": "common-3d",
+        "model-cast-shadows": true,
+        "model-emissive-strength": 1,
       },
     } as mapboxgl.LayerSpecification);
     m.addLayer({
@@ -385,6 +408,13 @@ export default function MapView(props: Props) {
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
     m.on("mouseenter", "ev-pins", () => (m.getCanvas().style.cursor = "pointer"));
     m.on("mouseleave", "ev-pins", () => (m.getCanvas().style.cursor = ""));
+    m.on("mouseenter", "alerts-3d", () => (m.getCanvas().style.cursor = "pointer"));
+    m.on("mouseleave", "alerts-3d", () => (m.getCanvas().style.cursor = ""));
+    m.on("click", "alerts-3d", (e) => {
+      const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
+      const c = id ? cb.current.callouts.find((x) => x.id === id) : undefined;
+      if (c) cb.current.onCallout(c);
+    });
     m.on("mouseenter", "cams-3d", () => (m.getCanvas().style.cursor = "pointer"));
     m.on("mouseleave", "cams-3d", () => (m.getCanvas().style.cursor = ""));
     m.on("click", "cams-3d", (e) => {
@@ -444,7 +474,8 @@ export default function MapView(props: Props) {
   useEffect(() => {
     const fc = alertGeo(props.alerts);
     data.current.alerts = fc;
-    if (ready.current) setSource("alerts", fc);
+    data.current.alertPts = alertPoints(props.alerts);
+    if (ready.current) { setSource("alerts", fc); setSource("alert-pts", data.current.alertPts); }
   }, [props.alerts]);
 
   // webcams -> points for the 3D camera layer

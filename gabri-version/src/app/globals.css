@@ -137,17 +137,27 @@ html, body {
 .co-busy .co-foot::after { width: 70px; height: 70px; border: 2px solid rgba(234, 88, 12, 0.55); animation: co-breathe calc(3s - var(--intensity, 0.5) * 1.6s) ease-in-out infinite; }
 
 /* DPS alert: red card, red pulse */
-.co-alert { --co-edge: #991b1b; }
-.co-alert .co-card { background: #991b1b; border-color: #991b1b; }
-.co-alert .co-eyebrow, .co-alert .co-meta { color: #fecaca; }
-.co-alert .co-title { color: #fff; }
-.co-alert .co-foot::after { width: 120px; height: 120px; background: rgba(220, 38, 38, 0.12); border: 2px solid rgba(220, 38, 38, 0.6); animation: co-ring 2s ease-out infinite; }
 
 /* next class / office hours: cardinal border */
 /* your schedule = blue, same as your location dot */
 .co-schedule { --co-edge: #2563eb; }
 .co-schedule .co-card { border-color: #2563eb; }
 .co-schedule .co-eyebrow { color: #2563eb; }
+
+/* DPS alert tag at the foot of the 3D beacon (the zone's redness shows how serious it is) */
+.al-tag {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap; margin-bottom: -10px;
+  padding: 3px 9px 3px 7px; border-radius: 99px; font-size: 11px; font-weight: 600; color: #fff;
+  background: #b91c1c; box-shadow: 0 2px 8px rgba(127, 29, 29, 0.35);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.al-high { background: #991b1b; }
+.al-low { background: #ef4444; }
+.al-tag i { width: 6px; height: 6px; border-radius: 99px; background: #fff; }
+.al-high i { animation: co-blink 1.4s steps(2) infinite; }
+.al-tag span { font-weight: 500; color: rgba(255, 255, 255, 0.85); max-width: 0; overflow: hidden; transition: max-width 0.25s ease; }
+.co-alert:hover .al-tag span, .co-alertmini:hover .al-tag span { max-width: 200px; margin-left: 2px; }
+.co-alert:hover .al-tag, .co-alertmini:hover .al-tag { transform: translateY(-2px); }
 
 /* webcam name tag (the 3D film camera itself is a map model layer) */
 .co-webcam { transform-origin: center; }
@@ -176,11 +186,6 @@ html, body {
 @keyframes cam-zoom { 0% { transform: scale(0.6) translateY(40px); opacity: 0; filter: blur(8px) } 100% { transform: none; opacity: 1; filter: none } }
 
 /* compact DPS tag for older crime-log incidents */
-.co-alertmini { --co-edge: #dc2626; }
-.co-alertmini .co-card { background: #fff; border: 1.5px solid #dc2626; padding: 2px 7px; border-radius: 7px; }
-.co-alertmini .co-eyebrow { color: #b91c1c; font-size: 8px; }
-.co-alertmini .co-title { font-size: 11px; font-weight: 600; color: #7f1d1d; }
-.co-alertmini .co-stem { border-width: 5px; border-bottom: 0; }
 
 /* ---------- Menu panel ---------- */
 /* Desktop: opening it takes 360px on the left and the map shrinks to fit, still draggable. */

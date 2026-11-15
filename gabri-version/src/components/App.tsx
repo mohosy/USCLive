@@ -52,7 +52,7 @@ export default function App() {
   const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
-  const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: false, crowds: true, safety: true, schedule: true, webcams: true });
+  const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: true, crowds: true, safety: true, schedule: true, webcams: true });
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
   const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
@@ -149,12 +149,13 @@ export default function App() {
   const visible = useMemo(() => (state ? applyFilters(state.events, filters, now) : []), [state, filters, now]);
   // everything the maps receive is memoized: unrelated re-renders (typing, polls, toasts) never re-send map data
   const mapEvents = useMemo(() => (askRes ? state?.events.filter((e) => askRes.eventIds.includes(e.id) || visible.some((v) => v.id === e.id)) ?? [] : visible), [askRes, state, visible]);
-  const shownEvents = useMemo(() => (chipState.events ? mapEvents : []), [chipState.events, mapEvents]);
+  // chips are layers that add up: Events shows every event; Free food (on its own) shows just the food ones
+  const shownEvents = useMemo(() => (chipState.events ? mapEvents : chipState.food ? mapEvents.filter((e) => e.freeFood) : []), [chipState.events, chipState.food, mapEvents]);
   const highlight = useMemo(() => (askRes && askRes.eventIds.length ? askRes.eventIds : null), [askRes]);
   const shownAlerts = useMemo(() => (chipState.safety && state ? state.alerts : []), [chipState.safety, state]);
   const event = state?.events.find((e) => e.id === selEvent) ?? null;
   const openAlert = state?.alerts.find((a) => a.id === selAlert) ?? null;
-  const chips = useMemo(() => ({ ...chipState, food: filters.freeFood }), [chipState, filters.freeFood]);
+  const chips = chipState;
   const callouts = useMemo(() => (state ? buildCallouts(state, chips, now) : []), [state, chips, now]);
   const mapLayers = useMemo(() => ({ ...layers, hotspots: chips.crowds, places: false }), [layers, chips.crowds]);
   const noCallouts = useMemo(() => [], []);
@@ -445,7 +446,7 @@ export default function App() {
           <div className="side-shift chip-row absolute left-3 right-3 top-[128px] md:right-[236px] md:top-[80px] z-10 flex gap-1.5 overflow-x-auto pb-1">
             {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
               <button key={k} aria-pressed={chips[k]}
-                onClick={() => (k === "food" ? setFilters((f) => ({ ...f, freeFood: !f.freeFood })) : setChips((c) => ({ ...c, [k]: !c[k] })))}
+                onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
                 className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors", chips[k] ? "bg-foreground text-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]" : "bg-white/85 text-foreground shadow-[0_0_0_0.5px_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.06)] hover:bg-white")}>{l}</button>
             ))}
           </div>

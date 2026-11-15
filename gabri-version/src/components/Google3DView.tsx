@@ -9,6 +9,7 @@ import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import { Tile3DLayer, TileLayer } from "@deck.gl/geo-layers";
 import { BitmapLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { iconCanvas, iconKey, ICON_PX } from "@/lib/eventIcons";
+import { alertStyle } from "@/lib/alertStyle";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
 import { RotateCcw, RotateCw, Compass } from "lucide-react";
@@ -102,6 +103,7 @@ interface Pin { id: string; position: [number, number]; color: [number, number, 
 
 /** the 3D film camera that stands at every live webcam (same model as the Explore map) */
 const CAM_MODEL = "/models/film-camera.glb";
+const BEACON_MODEL = "/models/dps-beacon.glb";
 const iconUrls = new Map<string, string>();
 const iconUrl = (key: string) => { let u = iconUrls.get(key); if (!u) { u = iconCanvas(key).toDataURL(); iconUrls.set(key, u); } return u; };
 
@@ -223,10 +225,10 @@ export default function Google3DView(props: Props) {
         id: "alert-zones",
         data: p.alerts,
         getPosition: (a) => [a.lng, a.lat],
-        getRadius: (a) => a.radiusM,
+        getRadius: (a) => alertStyle(a).radiusM,
         radiusUnits: "meters",
-        getFillColor: [220, 38, 38, 60],
-        getLineColor: [220, 38, 38, 200],
+        getFillColor: (a) => [...alertStyle(a).rgb, Math.round(alertStyle(a).fill * 255)] as [number, number, number, number],
+        getLineColor: (a) => [...alertStyle(a).rgb, Math.round(alertStyle(a).line * 255)] as [number, number, number, number],
         stroked: true,
         getLineWidth: 2,
         lineWidthUnits: "pixels",
@@ -246,6 +248,20 @@ export default function Google3DView(props: Props) {
         pickable: true,
         parameters: { depthCompare: "always" },
         updateTriggers: { getIcon: p.selectedEventId, getSize: p.selectedEventId },
+      }),
+      // DPS alerts: a red police beacon standing in the zone
+      new ScenegraphLayer<SafetyAlert>({
+        id: "alerts-3d",
+        data: w ? [] : p.alerts,
+        scenegraph: BEACON_MODEL,
+        getPosition: (a) => [a.lng, a.lat, zAt.current.get(`al:${a.id}`) ?? gz],
+        getOrientation: [0, 0, 90],
+        sizeScale: 400,
+        sizeMinPixels: 36,
+        sizeMaxPixels: 48,
+        _lighting: "pbr",
+        pickable: true,
+        updateTriggers: { getPosition: camZ.current },
       }),
       // live webcams: a 3D film camera standing on the spot
       new ScenegraphLayer<Callout>({
@@ -519,7 +535,7 @@ export default function Google3DView(props: Props) {
       picks++;
       if (z == null) continue; // off screen: try again when it's in view
       zAt.current.set(b.c.id, z);
-      if (b.c.kind === "webcam" && (prev == null || Math.abs(prev - z) > 0.5)) { camZ.current++; deck.current?.setProps({ layers: layers() }); }
+      if ((b.c.kind === "webcam" || b.c.kind === "alert" || b.c.kind === "alertmini") && (prev == null || Math.abs(prev - z) > 0.5)) { camZ.current++; deck.current?.setProps({ layers: layers() }); }
       if (prev != null && Math.abs(prev - z) < 0.5) settled.current.add(b.c.id);
     }
   }
@@ -592,6 +608,7 @@ export default function Google3DView(props: Props) {
       onClick: (info: PickingInfo) => {
         if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent((info.object as Pin).id);
         if (info.layer?.id === "cams-3d" && info.object) cb.current.onCallout(info.object as Callout);
+        if (info.layer?.id === "alerts-3d" && info.object) { const a = info.object as SafetyAlert; cb.current.onCallout({ id: `al:${a.id}`, kind: "alert", lng: a.lng, lat: a.lat, eyebrow: "", title: a.title }); }
       },
       onAfterRender: positionBubbles,
       getCursor: ({ isHovering, isDragging }) => (isDragging ? "grabbing" : isHovering ? "pointer" : "grab"),
