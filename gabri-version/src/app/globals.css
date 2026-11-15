@@ -258,23 +258,8 @@ html, body {
 /* Bottom dock: locate button and red layer chips, then the one search + assistant bar */
 .map-dock { position: absolute; bottom: max(32px, calc(env(safe-area-inset-bottom) + 20px)); left: 200px; right: 200px; z-index: 30; display: flex; justify-content: center; pointer-events: none; }
 .dock-inner { width: min(100%, 940px); min-width: 0; }
-.dock-options-open { padding-bottom: 10px; }
-.chip-row { display: flex; justify-content: safe center; gap: 8px; width: 100%; overflow-x: auto; padding: 3px 2px 6px; scrollbar-width: none; pointer-events: auto; }
-.chip-row::-webkit-scrollbar { display: none; }
-.map-layer-chip { flex-shrink: 0; white-space: nowrap; border-radius: 999px; min-height: 40px; padding: 8px 15px; background: rgba(255,255,255,0.94); color: var(--cardinal); font-size: 13px; font-weight: 600; box-shadow: 0 2px 8px rgba(40,20,20,0.12); cursor: pointer; }
-.map-layer-chip[aria-pressed="true"] { color: #fff; background: var(--cardinal); }
-.map-layer-chip:hover { background: #fff; }
-.map-layer-chip[aria-pressed="true"]:hover { background: var(--cardinal-hover); }
 .dock-search-row { display: flex; align-items: center; justify-content: center; gap: 12px; pointer-events: none; }
-/* filter button left of the search bar: shows the layer chips */
-.dock-filter { flex-shrink: 0; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
-  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease, color 180ms ease; }
-.dock-filter:hover { background: rgba(255,255,255,0.5); }
-.dock-filter-on, .dock-filter-on:hover { background: var(--cardinal); color: #fff; }
 /* the chip row slides up out of the dock when the filter button opens it */
-.dock-options { display: grid; grid-template-rows: 0fr; opacity: 0; transform: translateY(8px); transition: grid-template-rows 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.dock-options > .chip-row { min-height: 0; overflow-y: hidden; }
-.dock-options-open { grid-template-rows: 1fr; opacity: 1; transform: none; }
 /* locate: a glass circle right above the zoom / rotate column (centered on its 33px width) */
 .map-locate { position: absolute; right: 24px; bottom: 202px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
@@ -299,7 +284,6 @@ html, body {
 .search-submit:disabled { background: #e7dddd; color: #715c5c; cursor: default; }
 /* instant place results, the assistant's conversation and its suggestions all open above the chip row */
 .search-results, .chat-thread, .chat-suggestions { position: absolute; left: 0; right: 0; bottom: calc(100% + 12px); transition: bottom 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.dock-options-open + .dock-search-row :is(.search-results, .chat-thread, .chat-suggestions) { bottom: calc(100% + 72px); }
 .search-results { max-height: min(48dvh, 420px); overflow-y: auto; padding: 8px; background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(30,20,20,0.17); }
 .search-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; font-size: 14px; text-align: left; cursor: pointer; }
 .search-row[aria-selected="true"] { background: #fbefef; }
@@ -310,7 +294,7 @@ html, body {
 .map-app[data-night="true"] .chat-suggestion { color: #fff; }
 .map-app[data-night="true"] .chat-suggestion:hover { background: rgba(255,255,255,0.2); }
 .map-app :is(button, a, [role="tabpanel"]):focus-visible { outline: 2px solid var(--cardinal); outline-offset: 3px; }
-.map-app .map-layer-chip[aria-pressed="true"]:focus-visible, .map-app .view-switch button[aria-pressed="true"]:focus-visible { outline-color: #fff; box-shadow: 0 0 0 5px var(--cardinal); }
+.map-app .view-switch button[aria-pressed="true"]:focus-visible { outline-color: #fff; box-shadow: 0 0 0 5px var(--cardinal); }
 .map-app input::selection { background: #f2cbcb; color: #590000; }
 
 /* Explore / Satellite: icon-only switch in the bottom-left corner; the active view is cardinal, names show as tooltips */
@@ -352,7 +336,6 @@ html, body {
   .account-area { right: 16px; top: calc(16px + var(--sat)); }
   .account-content { max-height: calc(100dvh - 370px - var(--sat)); }
   .map-dock { left: 16px; right: 16px; }
-  .dock-options-open { padding-bottom: 6px; }
   .dock-search-row { gap: 8px; }
   /* phones: the switch sits at the left of the dock's top row, beside the locate button */
   .view-switch { left: 16px; bottom: calc(max(32px, calc(env(safe-area-inset-bottom) + 20px)) + 125px); }
@@ -360,9 +343,7 @@ html, body {
   .side-open { right: 12px; z-index: 40; }
   .side-tab { padding: 0 10px; }
   @media (max-width: 430px) { .side:not(.side-open) .side-tab span { display: none; } }
-  .map-layer-chip { min-height: 44px; padding: 9px 14px; }
-  .search-results, .chat-thread, .chat-suggestions { bottom: calc(100% + 10px); }
-  .dock-options-open + .dock-search-row :is(.search-results, .chat-thread, .chat-suggestions) { bottom: calc(100% + 70px); }
+    .search-results, .chat-thread, .chat-suggestions { bottom: calc(100% + 10px); }
   .search-results { max-height: calc(100dvh - 320px); }
 }
 @media (max-width: 540px) {
@@ -382,7 +363,6 @@ html, body {
 .map-app[data-night="true"] .campus-search .campus-search-input::placeholder,
 .map-app[data-night="true"] .campus-search .search-icon,
 .map-app[data-night="true"] .campus-search .icon-action,
-.map-app[data-night="true"] .dock-filter:not(.dock-filter-on),
 .map-app[data-night="true"] .map-locate { color: #fff; }
 .map-app[data-night="true"] .campus-search .campus-search-input::placeholder { color: rgba(255,255,255,0.8); }
 /* the rest of the glass (tab bar, bell, weather, account/notification dropdown) follows the chat box at night */
@@ -623,7 +603,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .map-app[data-night="true"] .mapboxgl-ctrl-play { color: #e8e8ea; }
 .mapboxgl-ctrl-play[aria-pressed="true"] { color: #990000; }
 .map-app[data-night="true"] .mapboxgl-ctrl-play[aria-pressed="true"] { color: #ffc72c; }
-.play-hud { position: absolute; top: calc(70px + var(--sat, 0px)); left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 99px;
+.play-hud { position: absolute; bottom: calc(max(32px, calc(env(safe-area-inset-bottom) + 20px)) + 106px); left: 50%; transform: translateX(-50%); z-index: 31; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 99px;
   background: rgba(28, 28, 30, 0.82); color: #fff; font: 500 12.5px var(--font-apple); white-space: nowrap; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); backdrop-filter: blur(12px); }
 .play-hud button { padding: 5px 12px; border-radius: 99px; background: #fff; color: #1d1d1f; font-weight: 600; }
 .play-stick { position: absolute; left: 24px; bottom: calc(120px + var(--sab, 0px)); z-index: 20; width: 120px; height: 120px; border-radius: 99px; touch-action: none;
@@ -643,3 +623,34 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .evt-tail { width: 8px; height: 8px; bottom: -4px; }
 .evt .evb-plus { left: 19px; }
 
+
+/* ---------- What's on the map: a slim banner attached to the top of the prompt bar ---------- */
+.filter-tray { position: absolute; left: 14px; right: 14px; bottom: 100%; z-index: 0; border-radius: 14px 14px 0 0; overflow: hidden; pointer-events: auto;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 -4px 14px rgba(30, 20, 20, 0.06);
+  transition: opacity 0.2s ease, transform 0.25s ease; }
+.campus-chat-open .filter-tray { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.filter-tab { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 12px 0 14px; color: #1d1d1f; font-size: 12px; cursor: pointer; }
+.filter-tab:hover { background: rgba(255, 255, 255, 0.25); }
+.filter-tab-label { flex-shrink: 0; font-weight: 650; }
+.filter-tab-label { flex: 1; text-align: left; }
+.filter-tab-count { flex-shrink: 0; padding: 1px 7px; border-radius: 99px; background: rgba(0, 0, 0, 0.06); color: #55555a; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.filter-tab-chev { flex-shrink: 0; transform: rotate(180deg); transition: transform 0.25s ease; color: #55555a; }
+.filter-tray-open .filter-tab-chev { transform: none; }
+.filter-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.filter-tray-open .filter-body { grid-template-rows: 1fr; }
+.filter-grid { min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 2px 8px; padding: 0 12px; transition: padding 0.3s ease; }
+.filter-tray-open .filter-grid { padding: 2px 12px 10px; }
+.filter-check { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px; border-radius: 8px; font-size: 12.5px; font-weight: 550; color: #1d1d1f; cursor: pointer; user-select: none; }
+.filter-check:hover { background: rgba(255, 255, 255, 0.3); }
+.filter-check input { position: absolute; opacity: 0; pointer-events: none; }
+.filter-box { display: grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0; border-radius: 5px; color: transparent; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.22); transition: background-color 0.15s ease, box-shadow 0.15s ease; }
+.filter-check input:checked + .filter-box { background: var(--cardinal); color: #fff; box-shadow: none; }
+.filter-check input:focus-visible + .filter-box { outline: 2px solid var(--cardinal); outline-offset: 2px; }
+.map-app[data-night="true"] .filter-tab, .map-app[data-night="true"] .filter-check { color: #fff; }
+.map-app[data-night="true"] .filter-tab-count, .map-app[data-night="true"] .filter-tab-chev { color: rgba(255, 255, 255, 0.75); }
+.map-app[data-night="true"] .filter-tab-count { background: rgba(255, 255, 255, 0.14); }
+.map-app[data-night="true"] .filter-box { background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.45); }
+.map-app[data-night="true"] .filter-check input:checked + .filter-box { background: #fff; color: var(--cardinal); box-shadow: none; }
+.play-hud .play-follow { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.play-hud .play-follow:hover { background: rgba(255, 255, 255, 0.26); }
+.play-hud .play-follow-on, .play-hud .play-follow-on:hover { background: #990000; color: #fff; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, SlidersHorizontal, UserPlus, UserRound, X } from "lucide-react";
+import { Bell, BookOpen, Check, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
 import { loadMapLighting, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
@@ -50,6 +50,9 @@ function mergeState(prev: AppState | null, next: AppState): AppState {
   for (const k of Object.keys(out)) if (k !== "now" && JSON.stringify(old[k]) === JSON.stringify(out[k])) out[k] = old[k];
   return out as unknown as AppState;
 }
+
+/** Map layers you can switch on and off (each is a layer on the map and its own legend). */
+const LAYERS = [["events", "Events"], ["food", "Free food"], ["games", "Live games"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My classes"], ["webcams", "Cams"]] as const;
 
 export default function App() {
   const { weather, demo: weatherDemo } = useCampusWeather(); // live campus weather; W cycles demo weather, Shift+W goes back to live
@@ -570,21 +573,30 @@ export default function App() {
           {/* Bottom dock: locate + one filter row (each chip is a layer on the map and its legend), then search and assistant in one bar */}
           <div className="map-dock">
             <div className="dock-inner">
-              {/* map layers (each chip is a layer and its legend), hidden until the filter button opens them */}
-              <div id="map-layer-chips" className={cx("dock-options", filtersOpen && "dock-options-open")} inert={!filtersOpen}>
-                <div className="chip-row" role="group" aria-label="Map layers">
-                  {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
-                    <button key={k} aria-pressed={chips[k]} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))} className="map-layer-chip">{l}</button>
-                  ))}
-                </div>
-              </div>
               <div className="dock-search-row">
-                <button type="button" onClick={() => setFiltersOpen((o) => !o)} aria-expanded={filtersOpen} aria-controls="map-layer-chips"
-                  aria-label={filtersOpen ? "Hide map filters" : "Show map filters"} title="Map filters" className={cx("dock-filter", filtersOpen && "dock-filter-on")}>
-                  <SlidersHorizontal size={19} aria-hidden="true" />
-                </button>
                 {state && (
                   <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction} onOpenBuilding={openBuilding}
+                    tray={
+                      // what's on the map: a slim banner on top of the bar; click it for the checkboxes
+                      <div className={cx("filter-tray", filtersOpen && "filter-tray-open")}>
+                        <button type="button" className="filter-tab" onClick={() => setFiltersOpen((o) => !o)} aria-expanded={filtersOpen} aria-controls="map-layer-chips">
+                          <span className="filter-tab-label">Map layers</span>
+                          <span className="filter-tab-count">{LAYERS.filter(([k]) => chips[k]).length} of {LAYERS.length}</span>
+                          <ChevronDown size={14} className="filter-tab-chev" aria-hidden="true" />
+                        </button>
+                        <div id="map-layer-chips" className="filter-body" inert={!filtersOpen}>
+                          <div className="filter-grid" role="group" aria-label="Map layers">
+                            {LAYERS.map(([k, l]) => (
+                              <label key={k} className="filter-check">
+                                <input type="checkbox" checked={chips[k]} onChange={() => setChips((c) => ({ ...c, [k]: !c[k] }))} />
+                                <span className="filter-box" aria-hidden="true"><Check size={11} strokeWidth={3.2} /></span>
+                                {l}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    }
                     onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
                     onChanged={() => { refresh(); pollNotifs(); }} />
                 )}

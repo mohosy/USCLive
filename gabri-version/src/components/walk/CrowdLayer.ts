@@ -317,9 +317,9 @@ export class CrowdLayer implements mapboxgl.CustomLayerInterface {
     if (!this.people.length) return; // nothing to draw: no repaint loop, zero cost
     this.t += dt;
 
-    // characters stay ~40px tall on screen (never smaller than life), so they read at any zoom
+    // same size as the people walking the paths (~24px on screen, real size up close), so the whole crowd matches
     const mpp = (40_075_016.686 * Math.cos((this.originLL.lat * Math.PI) / 180)) / (512 * 2 ** m.getZoom());
-    this.height = Math.min(16, Math.max(3.6, 46 * mpp));
+    this.height = Math.min(16, Math.max(2.4, 24 * mpp));
     const show = this.enabled && m.getZoom() >= CROWD_MIN_ZOOM - 0.3;
 
     for (let i = this.people.length - 1; i >= 0; i--) {

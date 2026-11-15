@@ -372,6 +372,7 @@ export default function MapView(props: Props) {
   const walkers = useRef<CampusCrowd | null>(null); // people walking the campus paths to events
   const play = useRef<PlayMode | null>(null); // "play as your Trojan"
   const [playing, setPlaying] = useState(false);
+  const [following, setFollowing] = useState(false); // play mode: is the camera locked behind your Trojan?
   const togglePlay = useRef<() => void>(() => {});
   const onArrive = useRef<(eventId: string) => void>(() => {}); // set below, once popArrival exists
 
@@ -855,6 +856,7 @@ export default function MapView(props: Props) {
     play.current?.destroy();
     play.current = null;
     setPlaying(false);
+    setFollowing(false);
   }
   // the walk button in the zoom pill turns cardinal while you're playing
   useEffect(() => { map.current?.getContainer().querySelector(".mapboxgl-ctrl-play")?.setAttribute("aria-pressed", String(playing)); }, [playing]);
@@ -868,7 +870,7 @@ export default function MapView(props: Props) {
       // the 3D character engine loads on demand (same as tours), so the page stays light until you play
       void import("./walk/PlayMode").then(({ PlayMode }) => {
         if (map.current !== m || play.current) return;
-        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay);
+        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay, setFollowing);
       });
     };
   });
@@ -1035,6 +1037,9 @@ export default function MapView(props: Props) {
       {playing && (
         <div className="play-hud">
           <span>{TOUCH ? "Push up to walk, sideways to turn" : "↑ walk · ← → turn · Shift to run · Esc to stop"}</span>
+          <button type="button" className={following ? "play-follow play-follow-on" : "play-follow"} aria-pressed={following}
+            title={following ? "The camera is following your Trojan (drag the map to look around)" : "Lock the camera behind your Trojan (or click your Trojan)"}
+            onClick={() => play.current?.setFollow(!following)}>{following ? "Following" : "Follow"}</button>
           <button type="button" onClick={stopPlay}>Done</button>
         </div>
       )}

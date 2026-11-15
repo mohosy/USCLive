@@ -1,6 +1,7 @@
 /**
  * Play as your Trojan: the walking-tour character stands where you are. Up/W walks forward, left/right turn,
- * Shift runs, and the camera rides behind the character like a game chase cam. It can't walk through
+ * Shift runs. The map stays yours to pan and turn; click the character (or Follow) and the camera locks on,
+ * riding behind it like a game chase cam, until you drag the map away again. It can't walk through
  * buildings: it slides along the walls instead. Esc (or the button) ends it.
  */
 import mapboxgl from "mapbox-gl";
@@ -77,8 +78,10 @@ export class PlayMode {
   /** where the character faces (compass degrees); the camera looks the same way, from behind */
   private hdg = 0;
   private started = false;
+  /** camera locked behind the character (click the character to lock, drag the map to let go) */
+  private follow = false;
 
-  constructor(private map: mapboxgl.Map, start: LL, buildings: (FeatureCollection | null | undefined)[], private onExit: () => void) {
+  constructor(private map: mapboxgl.Map, start: LL, buildings: (FeatureCollection | null | undefined)[], private onExit: () => void, private onFollow: (on: boolean) => void = () => {}) {
     this.walls = new Walls(start.lat, start.lng);
     for (const fc of buildings) this.walls.add(fc);
     // if "you" are standing inside a building's footprint, step out to the nearest open spot
@@ -114,6 +117,10 @@ export class PlayMode {
     window.addEventListener("keydown", this.down, true);
     window.addEventListener("keyup", this.up, true);
     window.addEventListener("blur", this.clear);
+    map.on("dragstart", this.letGo);
+    map.on("rotatestart", this.letGo);
+    map.on("click", this.clickChar);
+    map.on("mousemove", this.hoverChar);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.tick);
   }
@@ -159,14 +166,43 @@ export class PlayMode {
     if (going !== this.moving) { this.moving = going; this.layer.play(going ? "Walk" : "Idle"); }
     const p = this.walls.toLL(this.x, this.z);
     this.layer.pos = p;
-    // chase cam: stays on the character and swings round behind it as it turns (zoom and tilt stay yours)
-    if (now > this.followAt && !this.map.isEasing()) {
+    // chase cam (once you've clicked the character): stays on it and swings round behind it as it turns
+    if (this.follow && now > this.followAt && !this.map.isEasing()) {
       const b = this.map.getBearing();
       const diff = ((this.hdg - b + 540) % 360) - 180;
       const bearing = Math.abs(diff) < 0.05 ? this.hdg : b + diff * Math.min(1, dt * 6);
       this.map.jumpTo({ center: [p.lng, p.lat], bearing });
     } else this.map.triggerRepaint();
     this.raf = requestAnimationFrame(this.tick);
+  };
+
+  /** lock the camera behind the character, or let the map go free */
+  setFollow(on: boolean) {
+    if (this.gone || on === this.follow) return;
+    this.follow = on;
+    if (on) {
+      const p = this.position();
+      this.map.easeTo({ center: [p.lng, p.lat], bearing: this.hdg, pitch: Math.max(this.map.getPitch(), 62), duration: 600, essential: true });
+      this.followAt = performance.now() + 620;
+    }
+    this.onFollow(on);
+  }
+  // you grabbed the map: the camera stops chasing (only real drags, not the chase cam's own moves)
+  private letGo = (e: { originalEvent?: unknown }) => { if (e.originalEvent) this.setFollow(false); };
+  /** is a screen point on the character? (it's drawn standing up from its feet, so the box reaches up) */
+  private onChar(pt: { x: number; y: number }) {
+    const p = this.position();
+    const s = this.map.project([p.lng, p.lat]);
+    const mpp = (78_271.517 * Math.cos((p.lat * Math.PI) / 180)) / 2 ** this.map.getZoom();
+    const tall = Math.max(28, (2 * DRAW_SCALE) / mpp);
+    return Math.abs(pt.x - s.x) < Math.max(18, tall * 0.35) && pt.y < s.y + 12 && pt.y > s.y - tall - 8;
+  }
+  private clickChar = (e: mapboxgl.MapMouseEvent) => { if (this.onChar(e.point)) this.setFollow(true); };
+  private hoverChar = (e: mapboxgl.MapMouseEvent) => {
+    const on = this.onChar(e.point);
+    const c = this.map.getCanvas();
+    if (on) c.style.cursor = "pointer";
+    else if (c.style.cursor === "pointer" && !this.map.getCanvasContainer().matches(":active")) c.style.cursor = "";
   };
 
   /** where the character stands now (a tour started while playing begins here) */
@@ -178,6 +214,10 @@ export class PlayMode {
     window.removeEventListener("keydown", this.down, true);
     window.removeEventListener("keyup", this.up, true);
     window.removeEventListener("blur", this.clear);
+    this.map.off("dragstart", this.letGo);
+    this.map.off("rotatestart", this.letGo);
+    this.map.off("click", this.clickChar);
+    this.map.off("mousemove", this.hoverChar);
     try {
       this.map.keyboard.enable();
       this.map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, pitch: Math.min(this.map.getPitch(), 60), duration: 600 });
