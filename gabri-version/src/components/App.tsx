@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
-import { api, applyFilters, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Hotspot, type Loc, type Notification } from "@/lib/client-types";
+import { api, applyFilters, conflictsIn, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Hotspot, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
 import { DINING_HALLS } from "@/lib/dining";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
@@ -24,6 +24,8 @@ import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
 import type { Camera, MapLayers, MeLive } from "./MapView";
 import MeCard from "./MeCard";
+import ConflictSheet from "./ConflictSheet";
+import type { Conflict } from "@/lib/conflicts";
 import MenuPanel from "./MenuPanel";
 import WeatherPill from "./weather/WeatherPill";
 import { useCampusWeather } from "./weather/useCampusWeather";
@@ -341,11 +343,18 @@ export default function App() {
     else if (kind === "cam") setCam(WEBCAMS.find((w) => w.id === id) ?? null);
   }
 
-  async function rsvp(id: string) {
+  // an RSVP that clashes with your schedule: the conflicts, then "Go anyway" or "Cancel"
+  const [clash, setClash] = useState<{ id: string; title: string; conflicts: Conflict[] } | null>(null);
+  async function rsvp(id: string, anyway = false) {
     try {
-      const r = await api<{ event: EventView }>(`/api/events/${id}/rsvp`, { method: "POST" });
+      const r = await api<{ event: EventView }>(`/api/events/${id}/rsvp`, { json: anyway ? { anyway: true } : {} });
       setState((s) => (s ? { ...s, events: s.events.map((e) => (e.id === id ? r.event : e)) } : s));
-    } catch (e) { alert((e as Error).message); }
+      setClash(null);
+    } catch (e) {
+      const conflicts = conflictsIn(e);
+      if (conflicts && !anyway) setClash({ id, title: state?.events.find((x) => x.id === id)?.title ?? "", conflicts });
+      else { setClash(null); alert((e as Error).message); }
+    }
   }
   async function invite(id: string, userIds: string[]) {
     const r = await api<{ event: EventView }>(`/api/events/${id}/invite`, { json: { userIds } });
@@ -518,6 +527,7 @@ export default function App() {
           </section>
         )}
       </div>
+      {clash && <ConflictSheet title={clash.title} conflicts={clash.conflicts} goLabel="Go anyway" onGo={() => rsvp(clash.id, true)} onCancel={() => setClash(null)} />}
       {findOpen && <FindFriends me={state?.me.username} initialQuery={findQuery} onClose={() => { setFindOpen(false); setFindQuery(undefined); }} onChanged={() => { refresh(); pollNotifs(); }} />}
 
       <div className="absolute inset-0">

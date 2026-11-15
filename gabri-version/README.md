@@ -72,6 +72,16 @@ What is real, what only opens another site, and what would need USC.
   an agreement with USC and those platforms' official APIs. It is not built and not faked.
 - Adding a registered event to your Google Calendar. The Google connection here is read-only.
 
+**Schedule conflicts**
+- Registering, confirming "Did you register?" for a Handshake or Engage event, and RSVPing all check the event against your
+  classes that day and the events you are already going to. An overlap ("Conflicts with FBE 403, 2:00-3:20 PM, JKP 112") or
+  a back-to-back pair too far apart to walk ("Starts 5 min after BUAD 307 ends, 12 min walk") comes back as a 409 with the
+  list, and nothing is saved. "Register anyway" sends `{ anyway: true }`; the event is then marked on its card, in the list
+  and on your profile ("Overlaps FBE 403"). No conflict: it registers straight away.
+- The assistant mentions a conflict when it suggests an event, and opens the event without joining it for you when it clashes.
+- Rules in `src/lib/conflicts.ts`, checked by `node scripts/check-conflicts.mjs`. Walk times are the app's straight-line
+  estimate (distance x 1.3), not a routed path.
+
 **Demo data and limits**
 - The orgs are real USC orgs and offices (names, descriptions, sites and logos from the EngageSC directory and each
   org's own site, in `src/lib/orgs.ts`). The people, the events and every headcount are made-up demo data: these orgs

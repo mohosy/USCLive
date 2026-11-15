@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { selfReport } from "@/lib/registration";
-import { guard, readBody, respond } from "@/lib/registrationApi";
+import { conflictStop, guard, readBody, respond } from "@/lib/registrationApi";
 import { withState } from "@/lib/state";
 import { db, newId } from "@/lib/store";
 
@@ -11,8 +11,13 @@ import { db, newId } from "@/lib/store";
 async function POST_(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const g = await guard(req, ctx, "write");
   if (!g.ok) return g.res;
-  const b = await readBody(req, z.object({ confirmed: z.literal(true) }).strict(), true);
+  const b = await readBody(req, z.object({ confirmed: z.literal(true), anyway: z.literal(true).optional() }).strict(), true);
   if (!b.ok) return b.res;
+  // the same schedule check as a registration here: it goes on your schedule, so a clash is worth knowing about
+  if (g.ev.registrationType && g.ev.registrationType !== "native") {
+    const stop = conflictStop(g.ev, g.me, !!b.data?.anyway);
+    if (stop) return stop;
+  }
   return respond(g.ev, g.me, selfReport(g.ev, g.me.id, db().registrations, Date.now(), () => newId("reg")));
 }
 

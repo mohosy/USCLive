@@ -92,6 +92,14 @@ export function fmtWhen(iso: string, endIso?: string, now = new Date()) {
 }
 export const isLive = (e: { start: string; end: string }, now = new Date()) => +new Date(e.start) <= +now && +new Date(e.end) > +now;
 
+/** A failed request: the message, plus the status and what the server sent (a 409 "conflict" lists the schedule conflicts). */
+export type ApiError = Error & { status: number; data: unknown };
+/** The schedule conflicts in a failed sign-up, or null when it failed for another reason. */
+export function conflictsIn(e: unknown): import("./conflicts").Conflict[] | null {
+  const d = (e as Partial<ApiError>)?.data as { code?: string; conflicts?: import("./conflicts").Conflict[] } | undefined;
+  return (e as Partial<ApiError>)?.status === 409 && d?.code === "conflict" && Array.isArray(d.conflicts) ? d.conflicts : null;
+}
+
 export async function api<T>(url: string, init?: RequestInit & { json?: unknown }): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -100,6 +108,6 @@ export async function api<T>(url: string, init?: RequestInit & { json?: unknown 
     body: init?.json !== undefined ? JSON.stringify(init.json) : init?.body,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error ?? `Request failed (${res.status})`), { status: res.status, data }) as ApiError;
   return data as T;
 }

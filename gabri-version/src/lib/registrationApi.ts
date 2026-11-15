@@ -6,6 +6,8 @@ import { z } from "zod";
 import { BUILDING_BY_ID } from "./campus";
 import { rateLimit } from "./rateLimit";
 import type { RegResult } from "./registration";
+import { conflictsFor } from "./conflictCheck";
+import { conflictDecision } from "./conflicts";
 import { addNotification, canSee, currentUserId, db, getUser, publicEvent } from "./store";
 import type { CampusEvent, User } from "./types";
 
@@ -46,6 +48,20 @@ export async function readBody<S extends z.ZodType>(req: Request, schema: S, req
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return { ok: false, res: json({ error: "Invalid input", issues: parsed.error.issues }, 400) };
   return { ok: true, data: parsed.data };
+}
+
+/** What a sign-up may send: nothing, or "anyway" after the person saw the schedule conflicts and chose to go ahead. */
+export const SignUpBody = z.object({ anyway: z.literal(true).optional() }).strict();
+
+/**
+ * Before signing someone up: does this event clash with their classes or with events they are already going to?
+ * Returns the 409 answer listing the conflicts, or null to go ahead (no conflicts, or they said "Register anyway").
+ */
+export function conflictStop(ev: CampusEvent, me: User, anyway: boolean): Response | null {
+  if (ev.attendees.includes(me.id)) return null; // already going: nothing new to warn about
+  const conflicts = conflictsFor(me, ev, db().events);
+  if (conflictDecision(conflicts, anyway) === "go") return null;
+  return json({ error: conflicts[0].text, code: "conflict", conflicts }, 409);
 }
 
 const whenWhere = (ev: CampusEvent) => {

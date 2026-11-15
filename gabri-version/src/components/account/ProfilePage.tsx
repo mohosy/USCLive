@@ -172,6 +172,7 @@ function GoingRow({ e }: { e: EventView }) {
     fmtWhen(e.start, e.end),
     e.buildingCode,
     e.registration?.status === "registered" ? "Registered" : null,
+    e.conflict ?? null,
     friends.length ? `with ${friends.join(", ")}` : null,
   ].filter(Boolean).join(" · ");
   return (

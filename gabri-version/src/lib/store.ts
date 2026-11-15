@@ -12,6 +12,7 @@ import { ME, ORGS, seedAlerts, seedEvents, seedHistory, seedInbox, seedNotificat
 import type { CampusEvent, FriendRequest, InboxItem, Notification, Registration, SafetyAlert, User } from "./types";
 import { DEFAULT_PREFS, notifySwitch, prefsOf } from "./prefs";
 import { settleDemoRequests } from "./friends";
+import { myConflictMark } from "./conflictCheck";
 import { backfill, closesSoon, counts, findRegistration, isClosed, reapply } from "./registration";
 import type { GoogleSession } from "./google";
 
@@ -265,6 +266,8 @@ export function publicEvent(e: CampusEvent, viewer: User) {
       return { id, name: u?.name ?? id, avatar: u?.avatar ?? "?", photo: u?.photo?.startsWith("/") ? u.photo : undefined };
     }),
     going: e.attendees.includes(viewer.id),
+    // you are going and it clashes with a class or another event of yours: "Overlaps FBE 403" (you chose "Register anyway")
+    conflict: myConflictMark(viewer, e, db().events),
     // registration: the viewer's own status plus counts; never anyone else's identity
     registration: e.registrationType ? registrationView(e, viewer.id) : undefined,
     invited: e.invitees.includes(viewer.id),

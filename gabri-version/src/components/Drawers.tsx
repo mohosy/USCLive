@@ -169,6 +169,8 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onUpdated, onInvi
             {action.kind === "leave" ? "Going · Leave" : action.label}
           </Button>
         )}
+        {/* you are going and it clashes with a class or another event of yours */}
+        {!ev.registration && ev.conflict && <p className="text-xs font-medium text-cardinal">{ev.conflict}</p>}
         <div className="flex gap-2">
           <Button variant="secondary" className="flex-1 whitespace-nowrap !rounded-full" onClick={() => onDirections(ev.buildingId)}><Navigation size={14} /> Directions</Button>
           {canSend && <Button variant="secondary" className={cx("flex-1 whitespace-nowrap !rounded-full", picking && "!bg-surface")} onClick={() => setPicking((p) => !p)} title="Send to friends or share a link"><Send size={14} /> Send</Button>}

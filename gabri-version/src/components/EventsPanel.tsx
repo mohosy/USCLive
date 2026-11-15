@@ -55,6 +55,7 @@ export function EventRow({ e, loc, onOpen, now }: { e: EventView; loc: Loc; onOp
           )}
           {e.freeFood && <span className="shrink-0"><Tag tone="food">{e.foodDetail ?? "Free food"}</Tag></span>}
           {by && <span className="shrink-0 font-semibold text-cardinal">{by}</span>}
+          {e.conflict && <span className="shrink-0 font-semibold text-cardinal">{e.conflict}</span>}
         </div>
       </div>
       {/* friends who are going, and how far it is on foot */}
