@@ -220,7 +220,7 @@ html, body {
 /* Top-right: the cardinal initials button (gold dot = unread notifications) and the account panel it opens */
 .account-area { position: absolute; right: 24px; top: calc(20px + var(--sat)); z-index: 35; display: flex; align-items: center; gap: 10px; }
 .map-bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: #1d1d1f; box-shadow: var(--glass-shadow); }
-.map-bell:hover { background: rgba(255,255,255,0.5); }
+.map-bell:hover, .weather-pill:hover, .side:not(.side-open) .side-inner:hover { background: rgba(255,255,255,0.5); }
 .bell-unread { position: absolute; right: 8px; top: 8px; width: 9px; height: 9px; background: var(--cardinal); border: 2px solid #fff; border-radius: 50%; }
 .map-profile { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--cardinal); color: #fff; font-size: 14.5px; font-weight: 650; box-shadow: 0 4px 14px rgba(65,0,0,0.22); cursor: pointer; }
 .map-profile::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
@@ -306,7 +306,7 @@ html, body {
 @media (max-width: 900px) {
   .map-menu-button { left: 16px; top: calc(16px + var(--sat)); }
   .account-area { right: 16px; top: calc(16px + var(--sat)); }
-  .weather-pill { top: calc(84px + var(--sat)); right: 16px; }
+  .weather-pill { top: calc(66px + var(--sat)); right: 16px; }
   .account-content { max-height: calc(100dvh - 370px - var(--sat)); }
   .map-dock { left: 16px; right: 16px; }
   .dock-options { flex-direction: column; gap: 6px; padding-bottom: 6px; }
@@ -338,6 +338,26 @@ html, body {
 .map-app[data-night="true"] .campus-search:not(:focus-within) .campus-search-input,
 .map-app[data-night="true"] .campus-search:not(:focus-within) .campus-search-input::placeholder,
 .map-app[data-night="true"] .campus-search:not(:focus-within) .search-icon { color: #fff; }
+/* the rest of the glass (tab bar, bell, weather, account/notification dropdown) follows the chat box at night */
+.map-app[data-night="true"] .side:not(.side-open) .side-tab:not(.side-tab-on),
+.map-app[data-night="true"] .side:not(.side-open) .side-chevron,
+.map-app[data-night="true"] .map-bell,
+.map-app[data-night="true"] .weather-pill,
+.map-app[data-night="true"] .weather-condition,
+.map-app[data-night="true"] .account-panel { color: #fff; }
+.map-app[data-night="true"] .weather-range,
+.map-app[data-night="true"] .account-panel .text-muted { color: rgba(255,255,255,0.72); }
+.map-app[data-night="true"] .side:not(.side-open) .side-tab:not(.side-tab-on):hover,
+.map-app[data-night="true"] .side:not(.side-open) .side-chevron:hover,
+.map-app[data-night="true"] .account-panel .menu-item:hover { background: rgba(255,255,255,0.14); }
+.map-app[data-night="true"] .side:not(.side-open) .side-tab-on { background: #fff; color: var(--foreground); }
+.map-app[data-night="true"] .account-panel .menu-sep { background: rgba(255,255,255,0.2); }
+.map-app[data-night="true"] .account-panel .text-cardinal { color: #ff9b9b; }
+.map-app[data-night="true"] .account-tabs { border-bottom-color: rgba(255,255,255,0.2); }
+.map-app[data-night="true"] .account-tabs [role="tab"], .map-app[data-night="true"] .account-panel .icon-action { color: rgba(255,255,255,0.85); }
+.map-app[data-night="true"] .account-tabs button:hover, .map-app[data-night="true"] .account-panel .icon-action:hover { background: rgba(255,255,255,0.14); color: #fff; }
+.map-app[data-night="true"] .account-tabs [aria-selected="true"] { background: rgba(255,255,255,0.2); color: #fff; }
+.map-app[data-night="true"] .account-panel .unread-count { color: #ff9b9b; }
 
 .co-alertmini .co-foot { width: 6px; height: 6px; border-color: #dc2626; }
 
@@ -381,14 +401,15 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { position: absolute; top: calc(22px + var(--sat)); right: 124px; z-index: 10; display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px 0 12px; border-radius: 999px;
+.weather-pill { position: absolute; top: calc(70px + var(--sat)); right: 24px; z-index: 10; display: grid; grid-template-columns: auto auto; column-gap: 6px; justify-items: end; align-items: center; padding: 8px 12px; border-radius: 14px;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; }
+  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; text-align: right; transition: background-color 180ms ease; }
+.weather-pill .weather-condition, .weather-pill .weather-range { grid-column: 1 / -1; }
 .weather-sun { color: #e8a200; }
 .weather-temperature { font-size: 16px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
 .weather-range { font-size: 12px; font-weight: 500; color: #6e6e73; font-variant-numeric: tabular-nums; }
-@media (max-width: 420px) { .weather-condition { display: none; } }
+
 .weather-credit:hover { text-decoration: underline; }
 /* Sun, cloud and rain canvas: above the map, below every bubble, popup and control. */
 .map-weather-effects { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
