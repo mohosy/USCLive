@@ -30,6 +30,8 @@ export interface Callout {
   food?: string;
   /** DPS alerts: how serious (sets the tag color) */
   severity?: "high" | "medium" | "low";
+  /** your classes / office hours: the mini ticket and its hover card */
+  sched?: { kind: "class" | "office_hours"; code: string; room: string; place: string; when: string; whenShort: string; live: boolean };
   /** events: what the small photo ring and its hover card show */
   ev?: {
     photo?: string; color: string; full: string; place: string;
@@ -100,6 +102,15 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
       out.push({
         id: `b:${bd.id}:${c.code}:${c.kind}`, kind: "schedule", lng: bd.lng, lat: bd.lat,
         eyebrow: `${c.kind === "class" ? "Class" : "Office hours"} · ${c.room}`, title: c.code, meta: `${fmtTime(c.start)}–${fmtTime(c.end)}`,
+        sched: (() => {
+          const live = +new Date(c.start) <= +now;
+          const mins = Math.max(1, Math.round((+new Date(c.start) - +now) / 60_000));
+          return {
+            kind: c.kind === "class" ? "class" as const : "office_hours" as const, code: c.code, room: c.room, place: bd.name, live,
+            when: `${live ? "Now" : mins < 60 ? `In ${mins} min` : "Today"} · ${fmtTime(c.start)}–${fmtTime(c.end)}`,
+            whenShort: live ? "Now" : mins < 60 ? `In ${mins} min` : fmtTime(c.start),
+          };
+        })(),
       });
     }
   }

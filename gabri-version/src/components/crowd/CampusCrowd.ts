@@ -209,9 +209,9 @@ class CrowdLayer implements mapboxgl.CustomLayerInterface {
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
-    // people stay ~22 px tall on screen when zoomed out (toy-sized next to buildings), real size up close
+    // people stay ~24 px tall on screen when zoomed out (same as the Trojans at busy spots) (toy-sized next to buildings), real size up close
     const mpp = (78_271.517 * Math.cos((this.sim.lat0 * Math.PI) / 180)) / 2 ** this.map.getZoom();
-    const k = Math.min(8, Math.max(1.2, (22 * mpp) / H));
+    const k = Math.min(8, Math.max(1.2, (24 * mpp) / H));
     this.sim.step(dt, k);
 
     const P = this.parts;

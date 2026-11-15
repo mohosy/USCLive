@@ -376,6 +376,7 @@ export default function MapView(props: Props) {
   const play = useRef<PlayMode | null>(null); // "play as your Trojan"
   const locateEl = useRef<HTMLDivElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [following, setFollowing] = useState(false); // play mode: is the camera locked behind your Trojan?
   const togglePlay = useRef<() => void>(() => {});
   const recallPlay = useRef<() => void>(() => {});
   const onArrive = useRef<(eventId: string) => void>(() => {}); // set below, once popArrival exists
@@ -624,23 +625,22 @@ export default function MapView(props: Props) {
     // weather on the map comes from Open-Meteo (CC BY 4.0): credited here with the map's own credits
     m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a>' }), "bottom-right");
     // Mapbox's own zoom + compass (drag the compass to tilt); phones pinch instead (hidden there in CSS)
-    // "Play as your Trojan" sits just under the zoom buttons (bottom corners stack newest on top, so add it first)
-    const playBtn: mapboxgl.IControl = {
-      onAdd: () => {
-        const box = document.createElement("div");
-        box.className = "mapboxgl-ctrl mapboxgl-ctrl-group play-ctrl";
-        box.innerHTML = `<button type="button" aria-label="Walk around as your Trojan" title="Walk around as your Trojan"><span class="play-ic"><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5C3 6 7 2 12.5 1.6c4-.3 7 1.2 8.5 3.6-3.2-.4-6 .1-8 1.4-3.5 0-6.7 2-9 5.9z" fill="#FFC72C"/><path d="M5.6 13c0-4.4 3-7 6.9-7 4 0 7 2.8 7 6.5V14h-4.4v2.4l3.4 1-1 3.6h-4.4c-1-2-2.1-3-4.1-3H6.6c-.7-1.5-1-3-1-5z" fill="#fff"/></svg></span><span class="play-tip">Play as your Trojan</span></button>`;
-        // one tap: go to your Trojan (or park it); two taps: pick it up and fly it back to you
-        let pending: ReturnType<typeof setTimeout> | undefined;
-        const btn = box.querySelector("button")!;
-        btn.addEventListener("click", () => { clearTimeout(pending); pending = setTimeout(() => togglePlay.current(), 230); });
-        btn.addEventListener("dblclick", () => { clearTimeout(pending); recallPlay.current(); });
-        return box;
-      },
-      onRemove: () => {},
-    };
-    m.addControl(playBtn, "bottom-right");
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
+    // "Play as your Trojan": one more button at the bottom of that same pill, drawn like the zoom icons
+    const navGroup = m.getContainer().querySelector(".mapboxgl-ctrl-zoom-in")?.closest(".mapboxgl-ctrl-group");
+    if (navGroup) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mapboxgl-ctrl-play";
+      b.setAttribute("aria-label", "Walk around as your Trojan");
+      b.title = "Walk around as your Trojan (double-click to bring it back to you)";
+      b.innerHTML = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="1.6"/><path d="m9 20 3-6 3 6"/><path d="m6 8.5 6 1.5 6-1.5"/><path d="M12 10v4"/></svg>';
+      // one tap: go to your Trojan (or park it); two taps: pick it up and fly it back to you
+      let pending: ReturnType<typeof setTimeout> | undefined;
+      b.addEventListener("click", () => { clearTimeout(pending); pending = setTimeout(() => togglePlay.current(), 230); });
+      b.addEventListener("dblclick", () => { clearTimeout(pending); recallPlay.current(); });
+      navGroup.appendChild(b);
+    }
     // locate: its own glass circle at the top of the column (one stack: locate, zoom, play), so it can never drift or overlap
     const locateBtn: mapboxgl.IControl = {
       onAdd: () => {
@@ -877,6 +877,7 @@ export default function MapView(props: Props) {
   function stopPlay() {
     play.current?.park();
     setPlaying(false);
+    setFollowing(false);
   }
   // the walk button in the zoom pill turns cardinal while you're playing
   useEffect(() => { map.current?.getContainer().querySelector(".mapboxgl-ctrl-play")?.setAttribute("aria-pressed", String(playing)); }, [playing]);
@@ -891,12 +892,13 @@ export default function MapView(props: Props) {
       // the 3D character engine loads on demand (same as tours), so the page stays light until you play
       void import("./walk/PlayMode").then(({ PlayMode }) => {
         if (map.current !== m || play.current) return;
-        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay);
+        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay, setFollowing);
         play.current.setLight(cb.current.light);
         // while playing, tap anywhere on the map (not on a pin or a bubble) to jump your Trojan there
         const jump = (e: mapboxgl.MapMouseEvent) => {
           if (!play.current) { m.off("click", jump); return; }
           if (!play.current.isActive) return; // parked: taps on the map are just taps
+          if (play.current.onChar(e.point)) return; // a click on your Trojan locks the camera on it instead
           const hit = m.queryRenderedFeatures(e.point, { layers: ["ev-pins", "cams-3d", "alerts-3d", "building-names", "building-names-minor"].filter((id) => m.getLayer(id)) });
           if (!hit.length) play.current.moveTo({ lat: e.lngLat.lat, lng: e.lngLat.lng });
         };
@@ -1081,6 +1083,9 @@ export default function MapView(props: Props) {
       {playing && (
         <div className="play-hud">
           <span>{TOUCH ? "Push up to walk · tap the map to jump" : "↑ walk · ← → turn · Shift to run · click the map to jump · Esc to stop"}</span>
+          <button type="button" className={following ? "play-follow play-follow-on" : "play-follow"} aria-pressed={following}
+            title={following ? "The camera is following your Trojan (drag the map to look around)" : "Lock the camera behind your Trojan (or click your Trojan)"}
+            onClick={() => play.current?.setFollow(!following)}>{following ? "Following" : "Follow"}</button>
           <button type="button" onClick={stopPlay}>Done</button>
         </div>
       )}
