@@ -18,7 +18,7 @@ import type { ChatAction } from "@/lib/agent";
 import CalendarSync, { syncCalendar } from "./CalendarSync";
 import WebcamViewer from "./WebcamViewer";
 import AddEventModal from "./AddEventModal";
-import { BuildingDetail, EventDetail } from "./Drawers";
+import { BuildingDetail, EventDetail, OrgDetail, type HostRef } from "./Drawers";
 import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
 import type { Camera, MapLayers } from "./MapView";
@@ -108,6 +108,8 @@ export default function App() {
   const [startCam, setStartCam] = useState<Camera | null>(null); // camera snapshot taken when switching views
   const [selEvent, setSelEvent] = useState<string | null>(null);
   const [selBuilding, setSelBuilding] = useState<string | null>(null);
+  // a host's page (club, org, department): opened from an event's Host line; Back returns to that event
+  const [selHost, setSelHost] = useState<{ host: HostRef; from: string | null } | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number; key: number } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -261,15 +263,16 @@ export default function App() {
 
   const openEvent = (id: string) => {
     const e = state?.events.find((x) => x.id === id);
-    setSelBuilding(null); setSelEvent(id); setMenuOpen(true); // details show in the side panel
+    setSelBuilding(null); setSelHost(null); setSelEvent(id); setMenuOpen(true); // details show in the side panel
     if (e?.lat != null && e.lng != null) setFocus({ lat: e.lat, lng: e.lng, key: ++focusSeq.current });
   };
   const openBuilding = (id: string) => {
     const b = BUILDING_BY_ID[id];
-    setSelEvent(null); setSelBuilding(id); setMenuOpen(true);
+    setSelEvent(null); setSelHost(null); setSelBuilding(id); setMenuOpen(true);
     if (b) setFocus({ lat: b.lat, lng: b.lng, key: ++focusSeq.current });
   };
-  const closeDetail = () => { setSelEvent(null); setSelBuilding(null); setSelAlert(null); };
+  const closeDetail = () => { setSelEvent(null); setSelBuilding(null); setSelAlert(null); setSelHost(null); };
+  const openHost = (host: HostRef) => { setSelHost({ host, from: selEvent }); setSelEvent(null); setSelBuilding(null); setSelAlert(null); setMenuOpen(true); };
 
   // Only Student Creator accounts can post; students are pointed to Settings to switch.
   const router = useRouter();
@@ -353,7 +356,7 @@ export default function App() {
   }
 
   const unread = notifs.filter((n) => !n.read).length;
-  const detailOpen = !!(event || selBuilding || openAlert);
+  const detailOpen = !!(event || selBuilding || openAlert || selHost);
 
   return (
     <div className={cx("map-app relative h-dvh w-full overflow-hidden bg-background", filtersOpen && "filters-open")} data-night={light === "night"}>
@@ -455,8 +458,11 @@ export default function App() {
               <div className="space-y-2"><div className="skeleton h-24" /><div className="skeleton h-16" /><div className="skeleton h-16" /></div>
             ) : openAlert ? (
               <AlertDetail alert={openAlert} now={now} onClose={closeDetail} />
+            ) : selHost ? (
+              <OrgDetail host={selHost.host} state={state} loc={loc} onOpenEvent={openEvent}
+                onClose={() => { const from = selHost.from; setSelHost(null); if (from) openEvent(from); }} />
             ) : event ? (
-              <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
+              <EventDetail ev={event} state={state} loc={loc} onOpenHost={openHost} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} />
             ) : tab === "menu" ? (
@@ -586,12 +592,17 @@ export default function App() {
             </div>
           </div>
 
-          <div className="pointer-events-none absolute bottom-44 right-14 z-20 flex w-80 max-w-[calc(100vw-32px)] flex-col gap-2">
+          {/* new notifications: top right, just left of the bell (and the weather under it); clicking one opens it and clears it */}
+          <div className="toast-stack" aria-live="polite">
             {toasts.map((n) => (
-              <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setToasts((t) => t.filter((x) => x.id !== n.id)); }}
-                className="glass glass-strong fade-in pointer-events-auto rounded-2xl p-3 text-left">
-                <div className="text-sm font-medium">{n.title}</div>
-                <div className="text-xs text-muted">{n.body}</div>
+              <button key={n.id} type="button" className="toast"
+                onClick={() => {
+                  if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId);
+                  setToasts((t) => t.filter((x) => x.id !== n.id));
+                  void api("/api/notifications", { json: { ids: [n.id] } }).then(() => pollNotifs(), () => {}); // read, so the bell's dot updates
+                }}>
+                <div className="text-sm font-semibold">{n.title}</div>
+                {n.body && <div className="toast-body">{n.body}</div>}
               </button>
             ))}
           </div>

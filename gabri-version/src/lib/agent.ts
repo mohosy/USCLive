@@ -5,7 +5,7 @@
  */
 import OpenAI from "openai";
 import { BUILDING_BY_ID, CORE_BUILDINGS, matchBuilding } from "./campus";
-import { computeHotspots } from "./hotspots";
+import { computeHotspots, hotspotFor } from "./hotspots";
 import { parseNavQuery } from "./nav";
 import { candidateEvents, hotspotLabel, studySpots, todaysClasses } from "./planner";
 import { activeAlerts, addNotification, canSee, db, getMe, getUser, myNotifications } from "./store";
@@ -173,12 +173,20 @@ const TOOLS: Record<string, { description: string; parameters: Record<string, un
     },
   },
   crowds: {
-    description: "How busy campus places are right now (gyms, libraries, dining, student center).",
-    parameters: { type: "object", properties: {} },
-    run: () => {
-      const hs = computeHotspots(db().events, new Date());
-      return CORE_BUILDINGS.filter((b) => ["gym", "library", "dining", "student_center"].includes(b.kind))
-        .map((b) => ({ place: b.name, kind: b.kind, level: hotspotLabel(hs.find((h) => h.buildingId === b.id)!) }));
+    description: "How busy campus places are right now, with about how many people are inside and how many usually are at this hour. Pass `place` for one building (any campus building); leave it out for the gyms, libraries, dining halls and student center.",
+    parameters: { type: "object", properties: { place: { type: "string", description: "A building name or code, e.g. Leavey or THH" } } },
+    run: (a) => {
+      const now = new Date();
+      const hs = computeHotspots(db().events, now);
+      const row = (b: (typeof CORE_BUILDINGS)[number]) => {
+        const h = hs.find((x) => x.buildingId === b.id) ?? hotspotFor(b, db().events, now);
+        return { place: b.name, kind: b.kind, level: hotspotLabel(h), people_now: h.suppressed ? "fewer than 5" : h.count, usual_now: h.baseline, vs_usual: `${h.ratio.toFixed(1)}x` };
+      };
+      if (a.place) {
+        const id = matchBuilding(String(a.place));
+        return id ? row(BUILDING_BY_ID[id]) : { error: "I don't know that place." };
+      }
+      return CORE_BUILDINGS.filter((b) => ["gym", "library", "dining", "student_center"].includes(b.kind)).map(row);
     },
   },
   study_spots: {

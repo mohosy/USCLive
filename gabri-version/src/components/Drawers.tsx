@@ -37,9 +37,50 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindFriends, onOpenBuilding, onDirections }: {
+export type HostRef = EventView["host"];
+
+/** A club, org, department or other host: who they are and everything they have on (opened from an event's Host line). */
+export function OrgDetail({ host, state, loc, onClose, onOpenEvent }: { host: HostRef; state: AppState; loc: Loc; onClose: () => void; onOpenEvent: (id: string) => void }) {
+  const now = new Date(state.now);
+  const org = state.orgs.find((o) => (host.id && o.id === host.id) || o.name.toLowerCase() === host.name.toLowerCase());
+  const same = (e: EventView) => (host.id && e.host.id === host.id) || e.host.name.toLowerCase() === host.name.toLowerCase();
+  const all = state.events.filter(same).sort((a, b) => a.start.localeCompare(b.start));
+  const upcoming = all.filter((e) => +new Date(e.end) > +now);
+  const past = all.filter((e) => +new Date(e.end) <= +now).reverse();
+  const school = org && org.school !== "all" ? SCHOOLS.find((x) => x.id === org.school)?.name : null;
+  const kind = org ? (org.kind === "club" ? "Student org" : org.kind === "usg" ? "Student government" : "Department") : HOST_LABEL[host.kind];
+  const going = upcoming.reduce((n, e) => n + e.attendeeCount, 0);
+  return (
+    <div>
+      <Back onClose={onClose} />
+      <div className="text-xs font-medium text-muted">{kind}</div>
+      <h2 className="mt-1 text-xl font-semibold leading-tight">{host.name}</h2>
+      <p className="mt-1 text-sm text-muted">
+        {[org ? `${org.members.toLocaleString()} members` : null, school, upcoming.length ? `${upcoming.length} upcoming ${upcoming.length === 1 ? "event" : "events"}` : null, going ? `${going} going` : null].filter(Boolean).join(" · ")}
+      </p>
+
+      <h3 className="mt-6 text-sm font-semibold">Coming up</h3>
+      <div className="-mx-2 mt-1">
+        {upcoming.map((e) => <EventRow key={e.id} e={e} loc={loc} now={now} onOpen={() => onOpenEvent(e.id)} />)}
+        {!upcoming.length && <p className="px-2 py-3 text-sm text-muted">Nothing else scheduled yet.</p>}
+      </div>
+      {past.length > 0 && (
+        <>
+          <h3 className="mt-5 text-sm font-semibold text-muted">Earlier</h3>
+          <div className="-mx-2 mt-1 opacity-70">
+            {past.slice(0, 5).map((e) => <EventRow key={e.id} e={e} loc={loc} now={now} onOpen={() => onOpenEvent(e.id)} />)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindFriends, onOpenBuilding, onDirections, onOpenHost }: {
   ev: EventView; state: AppState; loc: Loc; onClose: () => void; onRsvp: (id: string) => Promise<void>; onInvite: (id: string, userIds: string[]) => Promise<void>; onFindFriends: () => void; onOpenBuilding: (id: string) => void;
   onDirections: (buildingId: string) => void;
+  /** open the host's page (their other events) */
+  onOpenHost?: (host: HostRef) => void;
 }) {
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -66,7 +107,12 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
       <div className="mt-4 border-t border-line pt-2">
         <Row label="When">{fmtWhen(ev.start, ev.end, now)} <span className="text-muted">({fmtTime(ev.start)} – {fmtTime(ev.end)})</span></Row>
         <Row label="Where"><button className="text-left hover:underline" onClick={() => onOpenBuilding(ev.buildingId)}>{ev.buildingName}{ev.room ? `, ${ev.room}` : ""}</button>{walk != null && <span className="text-muted"> · {walk} min walk</span>}</Row>
-        <Row label="Host">{ev.host.name} <span className="text-muted">· {HOST_LABEL[ev.host.kind]}</span></Row>
+        <Row label="Host">
+          {onOpenHost && ev.host.kind !== "user"
+            ? <button className="inline-flex items-center gap-0.5 text-left font-medium hover:underline" onClick={() => onOpenHost(ev.host)}>{ev.host.name}<ArrowUpRight size={13} className="text-muted" aria-hidden="true" /></button>
+            : ev.host.name}
+          <span className="text-muted"> · {HOST_LABEL[ev.host.kind]}</span>
+        </Row>
         <Row label="Who">{VIS_LABEL[ev.visibility]}{ev.course ? ` · ${ev.course}` : ""}{schools.length ? ` · ${schools.join(", ")}` : ""}</Row>
         {ev.freeFood && <Row label="Food">{ev.foodDetail ?? "Free food"}</Row>}
         <Row label="Going">{ev.attendeeCount}{ev.capacity ? ` of ${ev.capacity}` : ""}</Row>
