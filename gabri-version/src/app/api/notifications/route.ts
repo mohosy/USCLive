@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { body } from "@/lib/http";
-import { tickLive } from "@/lib/live";
+import { remindSignups, tickLive } from "@/lib/live";
 import { db } from "@/lib/store";
 
 
 export async function GET(req: Request) {
-  if (new URL(req.url).searchParams.get("live") !== "0") tickLive();
+  if (new URL(req.url).searchParams.get("live") !== "0") { tickLive(); remindSignups(); }
   // `since`: only what's newer than the client's latest, so the 8s poll is usually empty
   const since = new URL(req.url).searchParams.get("since");
   const n = db().notifications;

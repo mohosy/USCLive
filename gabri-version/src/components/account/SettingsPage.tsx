@@ -1,14 +1,16 @@
 "use client";
 
-import { Camera, Check, Lock, LogOut, Trash2, UserRound } from "lucide-react";
+import { Camera, Check, Lock, LogOut, Moon, Sun, Sunrise, Sunset, Trash2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { api } from "@/lib/client-types";
 import { INTERESTS } from "@/lib/directory";
+import { loadMapLighting, saveMapLighting, type MapLighting } from "@/lib/mapLighting";
 import { AccountTypePicker, clearSession, updateSavedSession, type AccountType } from "../SignIn";
 import { Avatar, cx, inputCls } from "../ui";
+import { UsernameInput, useUsernameStatus } from "../UsernameField";
 import AccountShell from "./AccountShell";
 import { useAccount, type ProfileView } from "./useAccount";
 
@@ -49,6 +51,8 @@ export default function SettingsPage() {
 function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: ProfileView) => void }) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
+  const [username, setUsername] = useState(initial.username);
+  const uStatus = useUsernameStatus(username, initial.username);
   const [pronounChoice, setPronounChoice] = useState(PRONOUNS.includes(initial.pronouns) ? initial.pronouns : initial.pronouns ? "custom" : "");
   const [customPronouns, setCustomPronouns] = useState(PRONOUNS.includes(initial.pronouns) ? "" : initial.pronouns);
   const [bio, setBio] = useState(initial.bio);
@@ -56,6 +60,8 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
   const [interests, setInterests] = useState(initial.interests);
   const [accountType, setAccountType] = useState<AccountType>(initial.accountType);
   const [orgId, setOrgId] = useState(initial.creatorOrgId ?? "");
+  // a preference kept in this browser; it applies straight away, without the Save bar (this form only renders in the browser)
+  const [lighting, setLighting] = useState<MapLighting>(loadMapLighting);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -75,7 +81,7 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
 
   const pronouns = pronounChoice === "custom" ? customPronouns.trim() : pronounChoice;
   const dirty =
-    name !== initial.name || pronouns !== initial.pronouns || bio !== initial.bio || photo !== initial.photo ||
+    name !== initial.name || uStatus.u !== initial.username || pronouns !== initial.pronouns || bio !== initial.bio || photo !== initial.photo ||
     interests.join() !== initial.interests.join() || accountType !== initial.accountType || (orgId || null) !== initial.creatorOrgId;
   const edit = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setSaved(false); };
 
@@ -87,11 +93,12 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
 
   async function save() {
     if (!name.trim()) return setErr("Your name can't be empty.");
+    if (uStatus.state !== "ok") return setErr(uStatus.state === "checking" ? "Still checking that username…" : `Username: ${uStatus.msg || "pick one"}.`);
     setBusy(true); setErr(null);
     try {
-      const patch = { name: name.trim(), pronouns, bio: bio.trim(), photo, interests, accountType, creatorOrgId: accountType === "creator" ? orgId || null : null };
+      const patch = { name: name.trim(), username: uStatus.u, pronouns, bio: bio.trim(), photo, interests, accountType, creatorOrgId: accountType === "creator" ? orgId || null : null };
       const r = await api<{ profile: ProfileView }>("/api/profile", { method: "PATCH", json: patch });
-      updateSavedSession({ interests, accountType, creatorOrgId: patch.creatorOrgId, profile: { name: patch.name, pronouns, bio: patch.bio, photo } });
+      updateSavedSession({ username: uStatus.u, interests, accountType, creatorOrgId: patch.creatorOrgId, profile: { name: patch.name, pronouns, bio: patch.bio, photo } });
       onSaved(r.profile);
       setSaved(true);
       setPostReason(false);
@@ -129,6 +136,10 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
           <Field label="Name" hint="Use the name you go by.">
             <input className={inputCls} value={name} maxLength={60} onChange={(e) => edit(setName)(e.target.value)} />
           </Field>
+          <div className="sm:col-span-2">
+            <div className="mb-1 text-xs font-medium text-muted">Username</div>
+            <UsernameInput value={username} onChange={edit(setUsername)} status={uStatus} />
+          </div>
           <Field label="Pronouns" hint="Shown next to your name.">
             <select className={inputCls} value={pronounChoice} onChange={(e) => edit(setPronounChoice)(e.target.value)}>
               <option value="">Don&apos;t show pronouns</option>
@@ -173,6 +184,21 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
           </div>
         )}
         <AccountTypePicker type={accountType} orgId={orgId} onType={edit(setAccountType)} onOrg={edit(setOrgId)} />
+      </Card>
+
+      <Card title="Map">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm font-medium" id="map-lighting-label">Map lighting</div>
+          {/* Auto follows the real time at USC; the others hold the map at one time of day */}
+          <div role="group" aria-labelledby="map-lighting-label" className="flex items-center gap-0.5 rounded-full bg-surface p-1 text-xs">
+            {([["auto", null, "Auto"], ["dawn", Sunrise, "Dawn"], ["day", Sun, "Day"], ["dusk", Sunset, "Dusk"], ["night", Moon, "Night"]] as const).map(([k, Icon, label]) => (
+              <button key={k} type="button" onClick={() => { setLighting(k); saveMapLighting(k); }} aria-label={label} aria-pressed={lighting === k} title={k === "auto" ? "Auto: follows the real time at USC" : label}
+                className={cx("grid h-7 place-items-center rounded-full font-medium", Icon ? "w-7" : "px-2.5", lighting === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>
+                {Icon ? <Icon size={14} /> : "Auto"}
+              </button>
+            ))}
+          </div>
+        </div>
       </Card>
 
       <div className="mt-6">

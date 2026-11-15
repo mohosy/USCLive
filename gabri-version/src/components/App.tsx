@@ -1,6 +1,8 @@
 "use client";
 
-import { Bell, Inbox, LayoutDashboard, LogOut, Menu, Navigation, Plus, Settings, UserRound, X } from "lucide-react";
+import { Bell, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
+import { lightFor, type LightPreset } from "@/lib/sun";
+import { loadMapLighting, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,10 +10,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
-import { parseNavQuery } from "@/lib/nav";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
 import AlertDetail from "./AlertDetail";
-import AskBar, { type AskRes } from "./AskBar";
+import type { AskRes } from "./AskBar";
+import ChatDock from "./ChatDock";
+import type { ChatAction } from "@/lib/agent";
+import CalendarSync, { syncCalendar } from "./CalendarSync";
 import WebcamViewer from "./WebcamViewer";
 import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
@@ -21,7 +25,8 @@ import type { Camera, MapLayers } from "./MapView";
 import MenuPanel from "./MenuPanel";
 import WeatherPill from "./weather/WeatherPill";
 import { useCampusWeather } from "./weather/useCampusWeather";
-import SignIn, { clearSession, loadSession, signIn } from "./SignIn";
+import SignIn, { clearSession, loadSession, signIn, type GooglePrefill } from "./SignIn";
+import FindFriends from "./FindFriends";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
@@ -43,27 +48,42 @@ function mergeState(prev: AppState | null, next: AppState): AppState {
 }
 
 export default function App() {
-  const { weather } = useCampusWeather();
+  const { weather, demo: weatherDemo } = useCampusWeather(); // live campus weather; W cycles demo weather, Shift+W goes back to live
   const [state, setState] = useState<AppState | null>(null);
   const [tab, setTab] = useState<Tab>("menu");
   const [menuOpen, setMenuOpen] = useState(false); // the side panel: pushes the map on desktop, bottom sheet on phones
   const [signedIn, setSignedIn] = useState<boolean | null>(null); // null while the saved session is being checked
   const [accountOpen, setAccountOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false); // Find friends sheet
+  const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
+  const menuButton = useRef<HTMLButtonElement>(null);
   const [accountTab, setAccountTab] = useState<"account" | "inbox" | "notifications">("account");
   const accountArea = useRef<HTMLDivElement>(null);
   const accountButton = useRef<HTMLButtonElement>(null);
-  const menuButton = useRef<HTMLButtonElement>(null);
-  const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
-  const [layers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
+  const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
-  const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: false, crowds: true, safety: true, schedule: true, webcams: true });
+  const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: true, crowds: true, safety: true, schedule: true, webcams: true });
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
   const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
   const [warmSat, setWarmSat] = useState(false); // Satellite pre-loads while you hover its button
+  // map lighting follows the real sun over campus; rechecked every minute
+  // (read in the browser, not during the prerender; the map mounts after the first data load, so it starts in the right light)
+  const [sunLight, setSunLight] = useState<LightPreset>("day");
+  useEffect(() => {
+    const tick = () => setSunLight(lightFor(new Date()));
+    const first = setTimeout(tick, 0);
+    const t = setInterval(tick, 60_000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, []);
+  // "Map lighting" in Settings: Auto follows the real sun, or hold one time of day (read in the browser, after the prerender)
+  const [lightTest, setLightTest] = useState<MapLighting>("auto");
+  useEffect(() => { const t = setTimeout(() => setLightTest(loadMapLighting()), 0); return () => clearTimeout(t); }, []);
+  // the Map lighting setting wins; then demo weather (W key: its "night" turns the map to night); otherwise the real sun
+  const light: LightPreset = lightTest !== "auto" ? lightTest : weatherDemo ? (weather.isDay ? "day" : "night") : sunLight;
   const coolSat = useRef<ReturnType<typeof setTimeout>>(undefined); // ...and unloads 5s after you move away
   const [intro, setIntro] = useState(true); // campus glide on first load (bubbles wait for it)
   useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
@@ -76,11 +96,12 @@ export default function App() {
   const [selBuilding, setSelBuilding] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number; key: number } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [toasts, setToasts] = useState<Notification[]>([]);
-  const [askKey, setAskKey] = useState(0); // bump to clear the search box
+  const [google, setGoogle] = useState<{ configured: boolean; connected: boolean; lastSync: string | null } | null>(null);
+  const [googlePrefill, setGooglePrefill] = useState<GooglePrefill | null>(null);
   const [askRes, setAskRes] = useState<AskRes | null>(null);
-  const [askBusy, setAskBusy] = useState(false);
   const [tick, setTick] = useState(0);
   const [walk, setWalk] = useState<{ toId: string; key: number } | null>(null);
   const seenNotifs = useRef<Set<string> | null>(null);
@@ -99,6 +120,21 @@ export default function App() {
     camera.current = c;
     camBus.listeners.forEach((fn) => fn(c));
   };
+
+  const loadGoogle = useCallback(async () => {
+    try {
+      const st = await api<{ configured: boolean; connected: boolean; lastSync: string | null; profile: GooglePrefill | null }>("/api/auth/google/status");
+      setGoogle(st);
+      return st;
+    } catch { return null; }
+  }, []);
+  /** Pull Google Calendar into the map (replaces what came from it before, so edits show up). */
+  const syncGoogle = useCallback(async (first = false) => {
+    try {
+      const r = await api<{ lastSync: string }>(`/api/calendar/google${first ? "?first=1" : ""}`, { method: "POST" });
+      setGoogle((g) => (g ? { ...g, lastSync: r.lastSync } : g));
+    } catch { /* not connected or Google is unreachable: try again next round */ }
+  }, []);
 
   const refresh = useCallback(async () => {
     try { const next = await api<AppState>("/api/state"); setState((prev) => mergeState(prev, next)); setTick((t) => t + 1); } catch { /* keep last state */ }
@@ -128,10 +164,22 @@ export default function App() {
   // restore a saved sign-in (the demo store forgets it when the server restarts, so it is re-applied)
   useEffect(() => {
     const saved = loadSession();
+    // back from Google's sign-in: new here -> finish the account (name prefilled); already signed in -> just sync
+    const gq = new URLSearchParams(window.location.search).get("google");
+    if (gq) {
+      const reason = new URLSearchParams(window.location.search).get("reason");
+      window.history.replaceState(null, "", "/");
+      if (gq === "connected") setTimeout(() => void loadGoogle().then((st) => { if (!saved && st?.profile) setGooglePrefill(st.profile); }), 0);
+      else if (gq === "error") setTimeout(() => alert(`Google sign-in didn't work: ${reason ?? "unknown error"}`), 0);
+    } else setTimeout(() => void loadGoogle(), 0);
     // one data load at startup: after the saved sign-in is re-applied, or straight away for the sign-in screen
-    const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(() => { setSignedIn(true); refresh(); }, () => { setSignedIn(false); refresh(); }); }, 0);
+    const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(async () => {
+      setSignedIn(true);
+      if (saved.calendarUrl) await syncCalendar(saved.calendarUrl).catch(() => null); // the demo store forgets imports on restart (duplicates are skipped)
+      refresh();
+    }, () => { setSignedIn(false); refresh(); }); }, 0);
     return () => clearTimeout(t);
-  }, [refresh]);
+  }, [refresh, loadGoogle]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") {
       if (accountOpen) { setAccountOpen(false); accountButton.current?.focus(); }
@@ -140,7 +188,7 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [accountOpen, menuOpen]);
-
+  // the account panel closes when you click the map or anything else outside it
   useEffect(() => {
     if (!accountOpen) return;
     const dismiss = (e: PointerEvent) => { if (!accountArea.current?.contains(e.target as Node)) setAccountOpen(false); };
@@ -157,6 +205,15 @@ export default function App() {
     document.addEventListener("visibilitychange", back);
     return () => { clearTimeout(first); clearInterval(a); clearInterval(b); document.removeEventListener("visibilitychange", back); };
   }, [refresh, pollNotifs]);
+  // Google Calendar stays live: sync when signed in, then every 3 minutes while the tab is visible
+  const googleOn = !!(signedIn && google?.connected);
+  useEffect(() => {
+    if (!googleOn) return;
+    const run = (first = false) => { if (!document.hidden) void syncGoogle(first).then(() => { refresh(); if (first) pollNotifs(); }); };
+    const t0 = setTimeout(() => run(true), 0);
+    const t = setInterval(() => run(), 3 * 60_000);
+    return () => { clearTimeout(t0); clearInterval(t); };
+  }, [googleOn, syncGoogle, refresh, pollNotifs]);
   // start downloading the map code right away instead of after the first data load
   useEffect(() => { void import("./MapView"); }, []);
 
@@ -164,12 +221,13 @@ export default function App() {
   const visible = useMemo(() => (state ? applyFilters(state.events, filters, now) : []), [state, filters, now]);
   // everything the maps receive is memoized: unrelated re-renders (typing, polls, toasts) never re-send map data
   const mapEvents = useMemo(() => (askRes ? state?.events.filter((e) => askRes.eventIds.includes(e.id) || visible.some((v) => v.id === e.id)) ?? [] : visible), [askRes, state, visible]);
-  const shownEvents = useMemo(() => (chipState.events ? mapEvents : []), [chipState.events, mapEvents]);
+  // chips are layers that add up: Events shows every event; Free food (on its own) shows just the food ones
+  const shownEvents = useMemo(() => (chipState.events ? mapEvents : chipState.food ? mapEvents.filter((e) => e.freeFood) : []), [chipState.events, chipState.food, mapEvents]);
   const highlight = useMemo(() => (askRes && askRes.eventIds.length ? askRes.eventIds : null), [askRes]);
   const shownAlerts = useMemo(() => (chipState.safety && state ? state.alerts : []), [chipState.safety, state]);
   const event = state?.events.find((e) => e.id === selEvent) ?? null;
   const openAlert = state?.alerts.find((a) => a.id === selAlert) ?? null;
-  const chips = useMemo(() => ({ ...chipState, food: filters.freeFood }), [chipState, filters.freeFood]);
+  const chips = chipState;
   const callouts = useMemo(() => (state ? buildCallouts(state, chips, now) : []), [state, chips, now]);
   const mapLayers = useMemo(() => ({ ...layers, hotspots: chips.crowds, places: false }), [layers, chips.crowds]);
   const noCallouts = useMemo(() => [], []);
@@ -223,28 +281,11 @@ export default function App() {
     const r = await api<{ event: EventView }>(`/api/events/${id}/invite`, { json: { userIds } });
     setState((s) => (s ? { ...s, events: s.events.map((e) => (e.id === id ? r.event : e)) } : s));
   }
-  async function runAsk(q: string) {
-    if (q.trim().length < 2) return;
-    // "how do I get to THH" -> animated 3D walk instead of a text answer
-    const nav = parseNavQuery(q);
-    if (nav) {
-      const none = { eventIds: [], buildingIds: [], focusBuildingId: "none", ai: false };
-      if (!nav.buildingId) { setAskRes({ ...none, answer: "Which building? Try a name or code, like Taper Hall (THH), Leavey (LVL) or SGM." }); return; }
-      if (nav.buildingId === loc.buildingId) { setAskRes({ ...none, answer: `You're already at ${BUILDING_BY_ID[nav.buildingId].name}.` }); return; }
-      setAskRes(null);
-      setSelEvent(null);
-      setSelBuilding(null);
-      setWalk({ toId: nav.buildingId, key: ++focusSeq.current }); // plays in whichever view is open (Map or 3D)
-      return;
-    }
-    setAskBusy(true);
-    try {
-      const r = await api<AskRes>("/api/ai/ask", { json: { question: q, lat: loc.lat, lng: loc.lng } });
-      setAskRes(r);
-      const b = r.focusBuildingId !== "none" ? BUILDING_BY_ID[r.focusBuildingId] : r.buildingIds[0] ? BUILDING_BY_ID[r.buildingIds[0]] : null;
-      if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 16.6, key: ++focusSeq.current });
-    } catch (e) { setAskRes({ answer: (e as Error).message, eventIds: [], buildingIds: [], focusBuildingId: "none", ai: false }); }
-    setAskBusy(false);
+  /** The assistant asked the map to do something: open an event, walk somewhere, look at a place. */
+  function chatAction(a: ChatAction) {
+    if (a.type === "open_event") openEvent(a.eventId);
+    else if (a.type === "walk") { if (a.buildingId !== loc.buildingId) { setSelEvent(null); setSelBuilding(null); setWalk({ toId: a.buildingId, key: ++focusSeq.current }); } }
+    else { const b = BUILDING_BY_ID[a.buildingId]; if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 17, key: ++focusSeq.current }); }
   }
   /** Locate button: with a fix, just re-center; otherwise ask the browser once. Off campus or denied keeps the demo spot. */
   function locateMe() {
@@ -260,7 +301,7 @@ export default function App() {
       center(here);
     }, () => { setGps("off"); center(loc); }, { enableHighAccuracy: true, timeout: 8000 });
   }
-  const endWalk = useCallback(() => { setWalk(null); setAskKey((k) => k + 1); }, []);
+  const endWalk = useCallback(() => setWalk(null), []);
   async function markAllRead() {
     await api("/api/notifications", { json: { all: true } });
     setNotifs((n) => n.map((x) => ({ ...x, read: true })));
@@ -270,70 +311,73 @@ export default function App() {
   const detailOpen = !!(event || selBuilding || openAlert);
 
   return (
-    <div className="map-app relative h-dvh w-full overflow-hidden bg-background" data-night={!weather.isDay}>
-      <header className="map-header" aria-label="Map navigation">
-        <button ref={menuButton} onClick={() => setMenuOpen((o) => !o)} className="map-menu-button" aria-label="Menu" aria-expanded={menuOpen} aria-controls="campus-menu"><Menu size={28} strokeWidth={2} /></button>
-        <div ref={accountArea} className="account-area">
-          <button ref={accountButton} onClick={() => { setAccountOpen((o) => !o); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label="Account" aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
-            {state?.me.avatar ?? <UserRound size={16} />}
-            {unread > 0 && <span className="profile-unread" aria-label={`${unread} unread notifications`} />}
-          </button>
-          {accountOpen && state && (
-            <section id="account-panel" className="account-panel" aria-label="Your account">
-              <div className="flex items-center gap-2.5 px-3 pb-2 pt-3">
-                <Avatar initials={state.me.avatar} photo={state.me.photo} size={32} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{state.me.name}</div>
-                  <div className="truncate text-xs text-muted">{state.me.major || SCHOOLS.find((x) => x.id === state.me.school)?.name}</div>
-                </div>
-                <button aria-label="Close account" className="icon-action" onClick={() => { setAccountOpen(false); accountButton.current?.focus(); }}><X size={18} /></button>
+    <div className="map-app relative h-dvh w-full overflow-hidden bg-background" data-night={light === "night"}>
+      {/* Header */}
+      {/* Floating glass header over the full-screen map */}
+      {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
+      <button ref={menuButton} onClick={() => setMenuOpen((o) => !o)} className="map-menu-button" aria-label="Menu" aria-expanded={menuOpen} aria-controls="campus-menu"><Menu size={28} strokeWidth={2} /></button>
+      <div ref={accountArea} className="account-area">
+        <button ref={accountButton} onClick={() => { setAccountOpen((o) => !o); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label="Account" aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
+          {state?.me.avatar ?? <UserRound size={16} />}
+          {unread > 0 && <span className="profile-unread" aria-label={`${unread} unread notifications`} />}
+        </button>
+        {accountOpen && state && (
+          <section id="account-panel" className="account-panel" aria-label="Your account">
+            <div className="flex items-center gap-2.5 px-3 pb-2 pt-3">
+              <Avatar initials={state.me.avatar} photo={state.me.photo} size={32} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-semibold">{state.me.name}</div>
+                <div className="truncate text-xs text-muted">{state.me.major || SCHOOLS.find((x) => x.id === state.me.school)?.name}</div>
               </div>
-              <div className="account-tabs" role="tablist" aria-orientation="vertical" aria-label="Account sections" onKeyDown={(e) => {
-                const tabs = ["account", "inbox", "notifications"] as const;
-                let index = tabs.indexOf(accountTab);
-                if (e.key === "ArrowDown") index = (index + 1) % tabs.length;
-                else if (e.key === "ArrowUp") index = (index + tabs.length - 1) % tabs.length;
-                else if (e.key === "Home") index = 0;
-                else if (e.key === "End") index = tabs.length - 1;
-                else return;
-                e.preventDefault(); setAccountTab(tabs[index]);
-                e.currentTarget.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
-              }}>
-                {([["account", "Profile", UserRound], ["inbox", "Inbox", Inbox], ["notifications", "Notifications", Bell]] as const).map(([key, label, Icon]) => (
-                  <button key={key} role="tab" id={`account-tab-${key}`} aria-selected={accountTab === key} aria-controls={`account-content-${key}`} tabIndex={accountTab === key ? 0 : -1} onClick={() => setAccountTab(key)}>
-                    <Icon size={15} /><span>{label}</span>{key === "notifications" && unread > 0 && <span className="unread-count">{unread}</span>}
+              <button aria-label="Close account" className="icon-action" onClick={() => { setAccountOpen(false); accountButton.current?.focus(); }}><X size={18} /></button>
+            </div>
+            <div className="account-tabs" role="tablist" aria-orientation="vertical" aria-label="Account sections" onKeyDown={(e) => {
+              const tabs = ["account", "inbox", "notifications"] as const;
+              let index = tabs.indexOf(accountTab);
+              if (e.key === "ArrowDown") index = (index + 1) % tabs.length;
+              else if (e.key === "ArrowUp") index = (index + tabs.length - 1) % tabs.length;
+              else if (e.key === "Home") index = 0;
+              else if (e.key === "End") index = tabs.length - 1;
+              else return;
+              e.preventDefault(); setAccountTab(tabs[index]);
+              e.currentTarget.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
+            }}>
+              {([["account", "Profile", UserRound], ["inbox", "Inbox", Inbox], ["notifications", "Notifications", Bell]] as const).map(([key, label, Icon]) => (
+                <button key={key} role="tab" id={`account-tab-${key}`} aria-selected={accountTab === key} aria-controls={`account-content-${key}`} tabIndex={accountTab === key ? 0 : -1} onClick={() => setAccountTab(key)}>
+                  <Icon size={15} /><span>{label}</span>{key === "notifications" && unread > 0 && <span className="unread-count">{unread}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="account-content scroll-thin" role="tabpanel" id={`account-content-${accountTab}`} aria-labelledby={`account-tab-${accountTab}`} tabIndex={0}>
+              {accountTab === "account" && <div className="p-2 text-sm">
+                <div className="px-3 py-2"><AccountBadge type={state.me.accountType} /></div>
+                <Link href="/profile" onClick={() => setAccountOpen(false)} className="menu-item"><UserRound size={17} /> View profile</Link>
+                <button onClick={() => { setAccountOpen(false); setFindOpen(true); }} className="menu-item"><UserPlus size={17} /> Find friends</button>
+                <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item"><Settings size={17} /> Settings</Link>
+                <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item"><LayoutDashboard size={17} /> Organizer dashboard</Link>
+                <div className="menu-sep" />
+                <button className="menu-item text-cardinal" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={17} /> Sign out</button>
+              </div>}
+              {accountTab === "inbox" && <div className="p-4"><InboxModal open embedded onClose={() => setAccountOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} /></div>}
+              {accountTab === "notifications" && <div className="p-2">
+                {unread > 0 && <div className="flex justify-end px-2 pb-2"><button onClick={markAllRead} className="min-h-10 text-sm font-medium text-cardinal">Mark all read</button></div>}
+                {!notifs.length && <p className="px-3 py-8 text-center text-sm text-muted">You&apos;re all caught up.</p>}
+                {notifs.map((n) => (
+                  <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setAccountOpen(false); }} className="menu-item !items-start">
+                    <span className={cx("mt-[7px] h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-cardinal")} />
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className={cx("block text-sm", n.read ? "font-medium" : "font-semibold")}>{n.title}</span>
+                      <span className="mt-1 block text-[13px] leading-relaxed text-muted">{n.body}</span>
+                      <span className="mt-1 block text-xs text-muted">{new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+                    </span>
                   </button>
                 ))}
-              </div>
-              <div className="account-content scroll-thin" role="tabpanel" id={`account-content-${accountTab}`} aria-labelledby={`account-tab-${accountTab}`} tabIndex={0}>
-                {accountTab === "account" && <div className="p-2 text-sm">
-                  <div className="px-3 py-2"><AccountBadge type={state.me.accountType} /></div>
-                  <Link href="/profile" onClick={() => setAccountOpen(false)} className="menu-item"><UserRound size={17} /> View profile</Link>
-                  <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item"><Settings size={17} /> Settings</Link>
-                  <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item"><LayoutDashboard size={17} /> Organizer dashboard</Link>
-                  <div className="menu-sep" />
-                  <button className="menu-item text-cardinal" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={17} /> Sign out</button>
-                </div>}
-                {accountTab === "inbox" && <div className="p-4"><InboxModal open embedded onClose={() => setAccountOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} /></div>}
-                {accountTab === "notifications" && <div className="p-2">
-                  {unread > 0 && <div className="flex justify-end px-2 pb-2"><button onClick={markAllRead} className="min-h-10 text-sm font-medium text-cardinal">Mark all read</button></div>}
-                  {!notifs.length && <p className="px-3 py-8 text-center text-sm text-muted">You&apos;re all caught up.</p>}
-                  {notifs.map((n) => (
-                    <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setAccountOpen(false); }} className="menu-item !items-start">
-                      <span className={cx("mt-[7px] h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-cardinal")} />
-                      <span className="min-w-0 flex-1 text-left">
-                        <span className={cx("block text-sm", n.read ? "font-medium" : "font-semibold")}>{n.title}</span>
-                        <span className="mt-1 block text-[13px] leading-relaxed text-muted">{n.body}</span>
-                        <span className="mt-1 block text-xs text-muted">{new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>}
-              </div>
-            </section>
-          )}
-        </div>
-      </header>
+              </div>}
+            </div>
+          </section>
+        )}
+      </div>
+      {findOpen && <FindFriends me={state?.me.username} onClose={() => setFindOpen(false)} onChanged={refresh} />}
       <WeatherPill weather={weather} />
 
       <div className="absolute inset-0">
@@ -360,13 +404,16 @@ export default function App() {
             ) : openAlert ? (
               <AlertDetail alert={openAlert} now={now} onClose={closeDetail} />
             ) : event ? (
-              <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
+              <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (
               <>
-                <NowPanel compact active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
-                <div className="mt-4"><MenuPanel active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
+                <NowPanel compact active={menuOpen} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
+                <div className="mt-4"><MenuPanel active={menuOpen} deadlines={notifs.filter((n) => n.kind === "deadline")} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
+                <div className="mt-4"><CalendarSync demo={!!state.me.verified} google={google} onSyncGoogle={async () => { await syncGoogle(true); refresh(); pollNotifs(); }}
+                  onDisconnectGoogle={async () => { await api("/api/auth/google/disconnect", { method: "POST" }); setGoogle((g) => (g ? { ...g, connected: false, lastSync: null } : g)); refresh(); }}
+                  onSynced={() => { refresh(); pollNotifs(); }} onOpenInbox={() => setInboxOpen(true)} /></div>
               </>
             ) : tab === "events" ? (
               <EventsPanel events={visible} filters={filters} setFilters={setFilters} loc={loc} onOpen={openEvent} now={now} />
@@ -397,6 +444,7 @@ export default function App() {
               layers={mapLayers}
               leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 384 : 0}
               mapStyle="map"
+              light={light}
               selectedEventId={selEvent}
               highlightIds={highlight}
               focus={focus}
@@ -443,36 +491,40 @@ export default function App() {
             <div className="glass absolute left-1/2 top-24 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
           )}
 
+          {/* Explore / Satellite: icon-only switch in the bottom-left corner (names show as tooltips) */}
+          <div className="view-switch" role="group" aria-label="Map view">
+            {([["map", "Explore", MapIcon], ["3d", "Satellite", Satellite]] as const).map(([k, l, Icon]) => (
+              <button key={k} type="button" aria-label={l} aria-pressed={view === k} data-tip={l} onClick={() => switchView(k)}
+                onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
+                onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }}>
+                <Icon size={19} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
 
+          {/* Bottom dock: locate + one filter row (each chip is a layer on the map and its legend), then search and assistant in one bar */}
           <div className="map-dock">
             <div className="dock-inner">
               <div className="dock-options">
-          <div className="map-view-controls">
-            <div className="glass flex rounded-full p-1 text-xs">
-              {([["map", "Explore"], ["3d", "Satellite"]] as const).map(([k, l]) => (
-                <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
-                  onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }} className={cx("rounded-full px-3.5 py-1.5 font-medium", view === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>{l}</button>
-              ))}
-            </div>
-            {/* Maps-style locate button: centers on you, asks for location the first time */}
-            <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
-              className={cx("glass grid h-11 w-11 place-items-center rounded-full", gps === "on" ? "text-[#0a84ff]" : "text-foreground")}>
-              {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={15} className={cx(gps === "on" && "fill-current")} />}
-            </button>
-          </div>
-
-              <div className="chip-row" role="group" aria-label="Map layers">
-                {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
-                  <button key={k} aria-pressed={chips[k]}
-                    onClick={() => (k === "food" ? setFilters((f) => ({ ...f, freeFood: !f.freeFood })) : setChips((c) => ({ ...c, [k]: !c[k] })))}
-                    className="map-layer-chip">{l}</button>
-                ))}
-              </div>
+                <div className="map-view-controls">
+                  {/* Maps-style locate button: centers on you, asks for location the first time */}
+                  <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
+                    className={cx("glass grid h-11 w-11 place-items-center rounded-full", gps === "on" ? "text-[#0a84ff]" : "text-foreground")}>
+                    {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={15} className={cx(gps === "on" && "fill-current")} />}
+                  </button>
+                </div>
+                <div className="chip-row" role="group" aria-label="Map layers">
+                  {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
+                    <button key={k} aria-pressed={chips[k]} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))} className="map-layer-chip">{l}</button>
+                  ))}
+                </div>
               </div>
               <div className="dock-search-row">
-
-              <AskBar key={askKey} res={askRes} busy={askBusy} events={state?.events ?? []} onAsk={runAsk} onClear={() => setAskRes(null)} onOpenEvent={openEvent} onOpenBuilding={openBuilding} />
-
+                {state && (
+                  <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction} onOpenBuilding={openBuilding}
+                    onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
+                    onChanged={() => { refresh(); pollNotifs(); }} />
+                )}
               </div>
             </div>
           </div>
@@ -491,7 +543,8 @@ export default function App() {
 
       {cam && <WebcamViewer key={cam.id} cam={cam} onClose={() => setCam(null)} />}
       {state && <AddEventModal open={addOpen} onClose={() => setAddOpen(false)} state={state} onCreated={(e) => { refresh(); setTimeout(() => openEvent(e.id), 300); }} />}
-      {signedIn === false && <SignIn onDone={() => { setSignedIn(true); refresh(); }} />}
+      <InboxModal open={inboxOpen} onClose={() => setInboxOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} />
+      {signedIn === false && <SignIn key={googlePrefill?.email ?? "plain"} google={googlePrefill} onDone={() => { setSignedIn(true); setGooglePrefill(null); refresh(); }} />}
     </div>
   );
 }

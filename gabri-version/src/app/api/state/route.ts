@@ -26,7 +26,7 @@ export async function GET() {
       photo: me.photo ? `/api/profile/photo?v=${photoVersion(me.photo)}` : undefined,
       friends: me.friends.map((id) => {
         const u = getUser(id)!;
-        return { id, name: u.name, avatar: u.avatar, school: u.school };
+        return { id, name: u.name, avatar: u.avatar, school: u.school, username: u.username ?? "" };
       }),
       today: todaysClasses(me, now).map((c) => ({ ...c, start: c.start.toISOString(), end: c.end.toISOString() })),
       freeMinutes: fw.minutes,

@@ -123,6 +123,8 @@ export interface User {
   interests: string[];
   orgs: string[];
   // account + profile (set at sign-in / in Settings)
+  /** unique @handle (lowercase), how friends find each other */
+  username?: string;
   email?: string;
   /** school/major come from the (demo) USC directory rather than what the student typed */
   verified?: boolean;

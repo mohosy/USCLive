@@ -7,13 +7,14 @@
 import { Deck, FlyToInterpolator, type MapViewState, type PickingInfo } from "@deck.gl/core";
 import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import { Tile3DLayer, TileLayer } from "@deck.gl/geo-layers";
-import { BitmapLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { BitmapLayer, IconLayer, PathLayer, PolygonLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { iconCanvas, iconKey, ICON_PX } from "@/lib/eventIcons";
+import { alertStyle } from "@/lib/alertStyle";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
-import { RotateCcw, RotateCw, Compass } from "lucide-react";
 import type { CampusWeather } from "@/lib/weather";
 import WeatherEffects from "./weather/WeatherEffects";
+import MapControls from "./MapControls";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { calloutHTML } from "@/lib/calloutHtml";
@@ -45,7 +46,22 @@ function satelliteSession() {
     .catch(() => null);
   return sessionPromise;
 }
-const BOUNDS = { west: -118.2995, south: 34.0115, east: -118.2715, north: 34.0305 };
+const BOUNDS = { west: -118.3035, south: 34.0045, east: -118.2712, north: 34.0382 }; // same as the Explore map
+
+/** Same neighborhood as the Explore map: full detail inside, washed out beyond (draped on the 3D tiles). */
+const AREA = { south: 34.0065, west: -118.3012, north: 34.0362, east: -118.2735 };
+const FADE_RING: [number, number][][] = [
+  [[AREA.west - 0.15, AREA.south - 0.15], [AREA.east + 0.15, AREA.south - 0.15], [AREA.east + 0.15, AREA.north + 0.15], [AREA.west - 0.15, AREA.north + 0.15], [AREA.west - 0.15, AREA.south - 0.15]],
+  [[AREA.west, AREA.south], [AREA.west, AREA.north], [AREA.east, AREA.north], [AREA.east, AREA.south], [AREA.west, AREA.south]],
+];
+/** USC's outline (UPC + Village), from the same file the Explore map uses. */
+let outlinePromise: Promise<[number, number][][]> | null = null;
+const loadOutline = () =>
+  (outlinePromise ??= fetch("/data/usc-campus.json").then((r) => r.json()).then((d: { campus: { geometry: { type: string; coordinates: number[][][] | number[][][][] } } }) => {
+    const g = d.campus.geometry;
+    const polys = (g.type === "MultiPolygon" ? g.coordinates : [g.coordinates]) as [number, number][][][];
+    return polys.map((p) => p[0]); // outer rings
+  }).catch((e) => { outlinePromise = null; throw e; }));
 
 /** Walker avatar clips (from the procedural Trojan, exported to .glb at runtime). */
 const WALKER_CLIPS = ["Idle", "Walk", "Wave", "Happy"] as const;
@@ -105,6 +121,7 @@ interface Pin { id: string; position: [number, number]; color: [number, number, 
 
 /** the 3D film camera that stands at every live webcam (same model as the Explore map) */
 const CAM_MODEL = "/models/film-camera.glb";
+const BEACON_MODEL = "/models/dps-beacon.glb";
 const iconUrls = new Map<string, string>();
 const iconUrl = (key: string) => { let u = iconUrls.get(key); if (!u) { u = iconCanvas(key).toDataURL(); iconUrls.set(key, u); } return u; };
 
@@ -149,6 +166,7 @@ export default function Google3DView(props: Props) {
   // surface height right under each bubble / the walker (measured by picking the 3D tiles)
   const zAt = useRef(new Map<string, number>());
   const overlay = useRef<HTMLDivElement>(null);
+  const needle = useRef<SVGSVGElement>(null); // the compass needle in the control column
   const bubbles = useRef(new Map<string, { el: HTMLDivElement; html: string; c: Callout }>());
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
   // the Trojan walker as a .glb blob URL (null until built; falls back to a gold dot)
@@ -222,14 +240,26 @@ export default function Google3DView(props: Props) {
         getFillColor: (h) => [...(LEVEL_RGB[h.level] ?? [120, 120, 120]), h.level === "quiet" || h.level === "normal" ? 0 : 55] as [number, number, number, number],
         extensions: [terrain],
       }),
+      // beyond the neighborhood: washed out, like the Explore map
+      new PolygonLayer({
+        id: "area-fade", data: [{ polygon: FADE_RING }], getPolygon: (d: { polygon: [number, number][][] }) => d.polygon,
+        getFillColor: [247, 245, 242, 150], stroked: false, extensions: [terrain],
+      }),
+      // USC's cardinal outline: a soft glow plus a crisp line
+      new PathLayer<[number, number][]>({
+        id: "usc-edge-glow", data: outline.current, getPath: (r) => r, getColor: [153, 0, 0, 45], getWidth: 9, widthUnits: "pixels", jointRounded: true, extensions: [terrain],
+      }),
+      new PathLayer<[number, number][]>({
+        id: "usc-edge", data: outline.current, getPath: (r) => r, getColor: [153, 0, 0, 220], getWidth: 2.5, widthUnits: "pixels", jointRounded: true, extensions: [terrain],
+      }),
       new ScatterplotLayer<SafetyAlert>({
         id: "alert-zones",
         data: p.alerts,
         getPosition: (a) => [a.lng, a.lat],
-        getRadius: (a) => a.radiusM,
+        getRadius: (a) => alertStyle(a).radiusM,
         radiusUnits: "meters",
-        getFillColor: [220, 38, 38, 60],
-        getLineColor: [220, 38, 38, 200],
+        getFillColor: (a) => [...alertStyle(a).rgb, Math.round(alertStyle(a).fill * 255)] as [number, number, number, number],
+        getLineColor: (a) => [...alertStyle(a).rgb, Math.round(alertStyle(a).line * 255)] as [number, number, number, number],
         stroked: true,
         getLineWidth: 2,
         lineWidthUnits: "pixels",
@@ -250,17 +280,31 @@ export default function Google3DView(props: Props) {
         parameters: { depthCompare: "always" },
         updateTriggers: { getIcon: p.selectedEventId, getSize: p.selectedEventId },
       }),
+      // DPS alerts: a red police beacon standing in the zone
+      new ScenegraphLayer<SafetyAlert>({
+        id: "alerts-3d",
+        data: w ? [] : p.alerts,
+        scenegraph: BEACON_MODEL,
+        getPosition: (a) => [a.lng, a.lat, zAt.current.get(`al:${a.id}`) ?? gz],
+        getOrientation: [0, 0, 90],
+        sizeScale: 400,
+        sizeMinPixels: 36,
+        sizeMaxPixels: 48,
+        _lighting: "pbr",
+        pickable: true,
+        updateTriggers: { getPosition: camZ.current },
+      }),
       // live webcams: a 3D film camera standing on the spot
       new ScenegraphLayer<Callout>({
         id: "cams-3d",
         data: w ? [] : p.callouts.filter((c) => c.kind === "webcam"),
         scenegraph: CAM_MODEL,
         getPosition: (c) => [c.lng, c.lat, zAt.current.get(c.id) ?? gz],
-        getOrientation: [0, 200, 90],
-        // Snap Map style: big, and about the same size on screen at every zoom (~70-90 px tall)
+        getOrientation: (c) => [0, 90 - (c.heading ?? 180), 90], // deck turns counter-clockwise: lens (east) -> the camera's heading
+        // Snap Map style: about the same size on screen at every zoom (~45-60 px tall)
         sizeScale: 400,
-        sizeMinPixels: 60,
-        sizeMaxPixels: 80,
+        sizeMinPixels: 40,
+        sizeMaxPixels: 52,
         _lighting: "pbr",
         pickable: true,
         updateTriggers: { getPosition: camZ.current },
@@ -315,7 +359,13 @@ export default function Google3DView(props: Props) {
   const placedFor = useRef(""); // the camera the bubbles were last positioned for
   const bubblesDirty = useRef(true); // a bubble was added, removed or got a new height
   const activeRef = useRef(props.active !== false); // false while pre-loading behind Explore
-  useEffect(() => { activeRef.current = props.active !== false; }, [props.active]);
+  const outline = useRef<[number, number][][]>([]);
+  // shown at last: start exactly where the Explore map was looking
+  useEffect(() => {
+    activeRef.current = props.active !== false;
+    if (props.active && props.initialCamera) setView({ ...viewState.current, ...props.initialCamera });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.active]);
   function tileLayer() {
     tiles.current ??= new Tile3DLayer({
         id: "google-3d",
@@ -458,7 +508,7 @@ export default function Google3DView(props: Props) {
     if (walk.current) cancelAnimationFrame(walk.current.raf);
     walk.current = null;
     setWalkP(null);
-    deck.current?.setProps({ controller: { touchRotate: true, inertia: 250 }, layers: layers() });
+    deck.current?.setProps({ controller: { dragRotate: true, touchRotate: true, inertia: 250 }, layers: layers() });
   }
 
   /** Measure the photoreal ground height by picking a few open spaces (fields, the quad). */
@@ -531,7 +581,7 @@ export default function Google3DView(props: Props) {
       tries.current.set(b.c.id, n);
       zAt.current.set(b.c.id, z);
       if (prev == null || Math.abs(prev - z) >= 0.5) bubblesDirty.current = true;
-      if (b.c.kind === "webcam" && (prev == null || Math.abs(prev - z) > 0.5)) { camZ.current++; deck.current?.setProps({ layers: layers() }); }
+      if ((b.c.kind === "webcam" || b.c.kind === "alert" || b.c.kind === "alertmini") && (prev == null || Math.abs(prev - z) > 0.5)) { camZ.current++; deck.current?.setProps({ layers: layers() }); }
       // done when two looks agree. A spot on a roof edge can flip forever, so three looks is the limit:
       // without it this timer kept re-rendering the scene 8-12 times a second while nothing moved.
       if ((prev != null && Math.abs(prev - z) < 0.5) || n >= 3) settled.current.add(b.c.id);
@@ -577,20 +627,28 @@ export default function Google3DView(props: Props) {
     const z = (viewState.current.zoom ?? 0) >= ZOOM_LABELS;
     if (z !== zoomedIn.current) { zoomedIn.current = z; deck.current?.setProps({ layers: layers() }); }
     const { longitude, latitude, zoom, pitch = 0, bearing = 0 } = viewState.current;
+    if (needle.current) needle.current.style.transform = `rotate(${-bearing}deg)`;
     if (ready.current) cb.current.onCamera({ longitude, latitude, zoom, pitch, bearing });
   }
 
+  // the control column (the walk owns the camera while it plays)
   function rotate(by: number) {
+    if (walk.current) return;
     setView({ ...viewState.current, bearing: (viewState.current.bearing ?? 0) + by, transitionDuration: 500 } as MapViewState);
   }
+  function zoomBy(by: number) {
+    if (walk.current) return;
+    setView({ ...viewState.current, zoom: Math.min(20, Math.max(15, (viewState.current.zoom ?? 16.6) + by)), transitionDuration: 300 } as MapViewState);
+  }
   function resetNorth() {
+    if (walk.current) return;
     setView({ ...viewState.current, bearing: 0, pitch: 60, transitionDuration: 600 } as MapViewState);
   }
 
   // follow the flat map's camera until the 3D campus is ready; give up waiting after 15s
   useEffect(() => {
     const bus = props.follow;
-    const fn = (c: Camera) => { if (!ready.current) setView({ ...viewState.current, ...c }); };
+    const fn = (c: Camera) => { if (!ready.current || !activeRef.current) setView({ ...viewState.current, ...c }); };
     bus?.listeners?.add(fn);
     const t = setTimeout(markReady, 15_000);
     const mb = setInterval(measureBubbles, 1000);
@@ -602,6 +660,31 @@ export default function Google3DView(props: Props) {
     if (!el.current || !KEY || deck.current) return;
     const host = el.current;
     host.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Trackpad orbit, same as the Explore map: two-finger swipe sideways turns the view; with ⌥ held, swiping
+    // left/right turns it and up/down tilts it. Capture phase, so deck.gl's scroll-zoom never sees these.
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || walk.current) return; // pinch-zoom, or the walk owns the camera
+      const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+      const v = viewState.current;
+      if (e.altKey && ay > ax) {
+        e.preventDefault(); e.stopPropagation();
+        setView({ ...v, pitch: Math.max(0, Math.min(80, (v.pitch ?? 0) - e.deltaY * 0.2)), transitionDuration: 0 } as MapViewState);
+      } else if (e.altKey || ax > ay * 1.2) {
+        e.preventDefault(); e.stopPropagation();
+        setView({ ...v, bearing: (v.bearing ?? 0) - e.deltaX * 0.25, transitionDuration: 0 } as MapViewState);
+      }
+    };
+    host.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    // Safari reports the two-finger trackpad twist itself
+    let twistFrom = 0;
+    const onGestureStart = (e: Event) => { e.preventDefault(); twistFrom = viewState.current.bearing ?? 0; };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      if (walk.current) return;
+      setView({ ...viewState.current, bearing: twistFrom - (e as Event & { rotation: number }).rotation, transitionDuration: 0 } as MapViewState);
+    };
+    host.addEventListener("gesturestart", onGestureStart);
+    host.addEventListener("gesturechange", onGestureChange);
     // Create the engine on the next tick: React dev mode mounts twice, and a Deck finalized before it
     // finished starting keeps rendering as an orphan. Deferring means only one Deck is ever created.
     let created: Deck | null = null;
@@ -611,11 +694,13 @@ export default function Google3DView(props: Props) {
       // retina at 2-3x renders 4-9x the pixels; 1.5x looks the same on campus imagery and is much smoother
       useDevicePixels: Math.min(typeof window !== "undefined" ? window.devicePixelRatio : 1, 1.5),
       viewState: viewState.current,
-      controller: { touchRotate: true, inertia: 250 },
+      // right-click drag and Ctrl + drag rotate and tilt; two fingers on a phone twist to rotate
+      controller: { dragRotate: true, touchRotate: true, inertia: 250 },
       onViewStateChange: ({ viewState: v }) => setView(v as MapViewState),
       onClick: (info: PickingInfo) => {
         if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent((info.object as Pin).id);
         if (info.layer?.id === "cams-3d" && info.object) cb.current.onCallout(info.object as Callout);
+        if (info.layer?.id === "alerts-3d" && info.object) { const a = info.object as SafetyAlert; cb.current.onCallout({ id: `al:${a.id}`, kind: "alert", lng: a.lng, lat: a.lat, eyebrow: "", title: a.title }); }
       },
       onAfterRender: positionBubbles,
       getCursor: ({ isHovering, isDragging }) => (isDragging ? "grabbing" : isHovering ? "pointer" : "grab"),
@@ -627,9 +712,13 @@ export default function Google3DView(props: Props) {
       layers: layers(),
     });
     satelliteSession().then((sess) => { session.current = sess; created?.setProps({ layers: layers() }); });
+    loadOutline().then((rings) => { outline.current = rings; created?.setProps({ layers: layers() }); }, () => {});
     }, 0);
     return () => {
       clearTimeout(t);
+      host.removeEventListener("wheel", onWheel, { capture: true });
+      host.removeEventListener("gesturestart", onGestureStart);
+      host.removeEventListener("gesturechange", onGestureChange);
       created?.finalize();
       if (deck.current === created) deck.current = null;
       host.querySelectorAll("canvas").forEach((c) => c.remove());
@@ -717,15 +806,11 @@ export default function Google3DView(props: Props) {
       <div ref={el} className="absolute inset-0" />
       <WeatherEffects weather={props.weather} active={props.active !== false} />
       <div ref={overlay} className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" />
-      <div className="pointer-events-none absolute bottom-2 right-14 z-10 max-w-[60%] truncate rounded bg-white/80 px-2 py-0.5 text-[10px] text-gray-700">
+      <div className="satellite-credit pointer-events-none absolute bottom-3 right-14 z-10 max-w-[60%] truncate rounded bg-white/80 px-2 py-0.5 text-[10px] text-gray-700">
         <span className="font-semibold">Google</span>{credits ? ` · ${credits}` : ""}
       </div>
-      <div className="satellite-controls absolute bottom-10 right-3 z-10 flex flex-col overflow-hidden rounded-lg border border-line bg-white shadow-sm">
-        <button onClick={() => rotate(-45)} className="p-2 text-foreground hover:bg-surface" title="Rotate left"><RotateCcw size={16} /></button>
-        <button onClick={resetNorth} className="border-y border-line p-2 text-foreground hover:bg-surface" title="Reset view"><Compass size={16} /></button>
-        <button onClick={() => rotate(45)} className="p-2 text-foreground hover:bg-surface" title="Rotate right"><RotateCw size={16} /></button>
-      </div>
-      <div className="glass pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-muted max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
+      <MapControls needle={needle} onRotate={rotate} onZoom={zoomBy} onNorth={resetNorth} />
+      <div className="glass pointer-events-none absolute left-1/2 top-5 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-muted max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}

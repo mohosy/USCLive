@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCw } from "lucide-react";
+import { Navigation, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { BUILDING_BY_ID } from "@/lib/campus";
 import { api, fmtTime, type AppState, type EventView, type Loc } from "@/lib/client-types";
@@ -21,8 +21,10 @@ let cache: { key: string; at: number; res: NowRes } | null = null;
 
 const ACTION_LABEL: Record<string, string> = { join: "Join", go: "Go", study: "View", eat: "Join", rest: "View", prep: "View" };
 
-export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRsvp, compact, active = true }: {
+export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRsvp, onWalk, compact, active = true }: {
   state: AppState; loc: Loc; onOpenEvent: (id: string) => void; onOpenBuilding: (id: string) => void; onRsvp: (id: string) => Promise<void>;
+  /** start walking directions to a building */
+  onWalk?: (buildingId: string) => void;
   /** only fetch while the panel is on screen */
   active?: boolean;
   /** only the "Right now" suggestions (the Home tab shows the schedule itself) */
@@ -74,11 +76,21 @@ export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRs
         ) : res ? (
           <div className={cx("space-y-3", loading && "opacity-50")}>
             <p className="text-[15px] leading-snug">{res.plan.headline}</p>
-            {res.nextClass && res.leaveBy && (
-              <p className="text-xs text-muted">
-                {res.nextClass.code} at {fmtTime(res.nextClass.start)} in {res.nextClass.room}. Leave by <span className="font-medium text-foreground">{fmtTime(res.leaveBy)}</span>.
-              </p>
-            )}
+            {res.nextClass && res.leaveBy && (() => {
+              const bId = state.me.today.find((c) => c.code === res.nextClass!.code)?.buildingId;
+              return (
+                <div className="flex items-center gap-3">
+                  <p className="min-w-0 flex-1 text-xs text-muted">
+                    {res.nextClass.code} at {fmtTime(res.nextClass.start)} in {res.nextClass.room}. Leave by <span className="font-medium text-foreground">{fmtTime(res.leaveBy)}</span>.
+                  </p>
+                  {bId && onWalk && (
+                    <button type="button" onClick={() => onWalk(bId)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
+                      <Navigation size={12} /> Take me there
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             <ol className="divide-y divide-line rounded-lg border border-line">
               {res.plan.suggestions.map((s, i) => {
                 const ev = s.eventId ? eventsById[s.eventId] : undefined;

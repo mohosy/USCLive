@@ -8,6 +8,7 @@ import { loadSession, signIn } from "../SignIn";
 export interface ProfileView {
   id: string;
   name: string;
+  username: string;
   avatar: string;
   photo: string | null;
   pronouns: string;

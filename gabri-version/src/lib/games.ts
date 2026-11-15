@@ -1,6 +1,14 @@
 /** Live score simulation for demo games. Deterministic from the start time, so every viewer sees the same score. */
 import type { GameInfo } from "./types";
 
+/** Team badges: school colors and a short name (drawn as colored badges, not official logos). */
+export const TEAMS: Record<string, { name: string; bg: string; fg: string }> = {
+  USC: { name: "USC Trojans", bg: "#990000", fg: "#FFCC00" },
+  UCLA: { name: "UCLA Bruins", bg: "#2D68C4", fg: "#F2A900" },
+  ORE: { name: "Oregon Ducks", bg: "#154733", fg: "#FEE123" },
+};
+export const team = (abbr: string) => TEAMS[abbr] ?? { name: abbr, bg: "#3a3a3c", fg: "#ffffff" };
+
 const RULES = {
   football: { periods: 4, periodMin: 15, realPerGameMin: 3.2, label: (p: number) => `Q${p}` },
   basketball: { periods: 2, periodMin: 20, realPerGameMin: 2, label: (p: number) => `${p}H` },

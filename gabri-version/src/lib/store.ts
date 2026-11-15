@@ -21,6 +21,9 @@ interface DB {
   dps: { lastSync: number; lastUrl: string | null; error: string | null; syncing: boolean };
   lastLiveTick: number;
   liveScriptIndex: number;
+  /** events we already gave you a "sign up before it fills" heads-up for */
+  reminded: string[];
+  lastReminder: number;
 }
 
 const g = globalThis as unknown as { __usclive?: DB };
@@ -42,6 +45,8 @@ function fresh(): DB {
     dps: { lastSync: 0, lastUrl: null, error: null, syncing: false },
     lastLiveTick: +now,
     liveScriptIndex: 0,
+    reminded: [],
+    lastReminder: 0,
   };
 }
 
@@ -52,6 +57,8 @@ export function db(): DB {
   d.alerts ??= seedAlerts(new Date());
   d.history ??= seedHistory(new Date());
   d.dps ??= { lastSync: 0, lastUrl: null, error: null, syncing: false };
+  d.reminded ??= [];
+  d.lastReminder ??= 0;
   return d;
 }
 
@@ -69,7 +76,16 @@ export function activeAlerts(now = new Date()) {
   const d = db();
   const dayAgo = +now - 24 * 3600_000;
   if (d.alerts.some((a) => +new Date(a.expiresAt) < dayAgo)) d.alerts = d.alerts.filter((a) => +new Date(a.expiresAt) >= dayAgo);
-  return d.alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now);
+  const today = campusMidnight(now);
+  // only today's incidents: older crime-log entries are history, not something to steer around now
+  return d.alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now && +new Date(a.createdAt) >= today);
+}
+
+/** Start of today on campus (Los Angeles time), whatever time zone the server runs in. */
+function campusMidnight(now: Date) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "numeric", second: "numeric", hourCycle: "h23" })
+    .formatToParts(now).map((x) => [x.type, Number(x.value)]));
+  return +now - ((p.hour * 60 + p.minute) * 60 + p.second) * 1000 - now.getMilliseconds();
 }
 
 const MAX_NOTIFICATIONS = 200;
@@ -96,6 +112,19 @@ export async function syncDps(force = false) {
 }
 
 export const currentUserId = () => ME;
+export const findByUsername = (u: string) => db().users.find((x) => x.username === u);
+/** Is this @username free for `forId` (taken by anyone else = not free)? */
+export const usernameFree = (u: string, forId: string) => { const owner = findByUsername(u); return !owner || owner.id === forId; };
+/** `base`, or base2, base3… if someone else has it. */
+export function uniqueUsername(base: string, forId: string) {
+  if (usernameFree(base, forId)) return base;
+  for (let i = 2; ; i++) if (usernameFree(`${base.slice(0, 18)}${i}`, forId)) return `${base.slice(0, 18)}${i}`;
+}
+/** Make two users friends (both ways) or unfriend them. */
+export function setFriends(a: User, b: User, on: boolean) {
+  const link = (x: User, y: User) => { x.friends = on ? Array.from(new Set([...x.friends, y.id])) : x.friends.filter((f) => f !== y.id); };
+  link(a, b); link(b, a);
+}
 export const getUser = (id: string) => db().users.find((u) => u.id === id);
 export const getMe = () => getUser(ME)!;
 export const orgs = () => ORGS;

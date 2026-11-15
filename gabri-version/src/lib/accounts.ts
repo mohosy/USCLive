@@ -6,7 +6,8 @@
  */
 import type { SchoolId } from "./types";
 
-export interface CreatedAccount { firstName: string; lastName: string; school: SchoolId }
+/** `username` is the latest @username, kept so a returning sign-in does not have to re-type it (only name and school are locked). */
+export interface CreatedAccount { firstName: string; lastName: string; school: SchoolId; username?: string }
 
 // kept apart from the demo store so a demo reset does not unlock anyone's school
 const g = globalThis as unknown as { __uscliveAccounts?: Map<string, CreatedAccount> };

@@ -1,13 +1,15 @@
 import { connection } from "next/server";
 import { applyProfile, creatorOrg, ProfileInput } from "@/lib/account";
 import { body } from "@/lib/http";
-import { db, getMe, publicEvent } from "@/lib/store";
+import { db, getMe, publicEvent, usernameFree } from "@/lib/store";
+import { normalizeUsername, usernameProblem } from "@/lib/username";
 import type { CampusEvent, User } from "@/lib/types";
 
 function profileOf(me: User) {
   return {
     id: me.id,
     name: me.name,
+    username: me.username ?? "",
     avatar: me.avatar,
     photo: me.photo ?? null,
     pronouns: me.pronouns ?? "",
@@ -46,6 +48,13 @@ export async function PATCH(req: Request) {
   const b = await body(req, ProfileInput);
   if (!b.ok) return b.res;
   const me = getMe();
+  if (b.data.username !== undefined) {
+    const u = normalizeUsername(b.data.username);
+    const problem = usernameProblem(u);
+    if (problem) return Response.json({ error: `Username: ${problem.toLowerCase()}.` }, { status: 400 });
+    if (!usernameFree(u, me.id)) return Response.json({ error: `@${u} is taken.` }, { status: 409 });
+    me.username = u;
+  }
   applyProfile(me, b.data);
   return Response.json({ profile: profileOf(me) });
 }

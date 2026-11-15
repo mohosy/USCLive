@@ -21,9 +21,15 @@ export interface Callout {
   game?: { info: GameInfo; start: string };
   /** busy/quiet ring intensity 0..1 */
   intensity?: number;
+  /** webcams: compass direction the camera looks */
+  heading?: number;
+  /** events with free food: what's offered (shown as a small badge, whatever the filters are) */
+  food?: string;
+  /** DPS alerts: how serious (sets the tag color) */
+  severity?: "high" | "medium" | "low";
 }
 
-/** The one filter row on the map. Free food narrows Events; Crowds covers busy/quiet places and the heat glow. */
+/** The one filter row on the map. Each chip adds a layer; none hides another (Free food adds food highlights, it never hides sports). */
 export interface ChipState { games: boolean; events: boolean; food: boolean; crowds: boolean; safety: boolean; schedule: boolean; webcams: boolean }
 
 const ago = (iso: string, now: Date) => {
@@ -68,10 +74,10 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     for (const a of s.alerts) {
       // crime-log entries: full bubble for serious or recent ones, a compact tag for the rest (every red circle gets a label)
       if (a.source === "dps_log" && a.severity !== "high" && +now - +new Date(a.createdAt) > 6 * 3600_000) {
-        out.push({ id: `al:${a.id}`, kind: "alertmini", lng: a.lng, lat: a.lat, eyebrow: `DPS · ${ago(a.createdAt, now)}`, title: a.title });
+        out.push({ id: `al:${a.id}`, kind: "alertmini", lng: a.lng, lat: a.lat, eyebrow: ago(a.createdAt, now), title: a.title, severity: a.severity });
         continue;
       }
-      out.push({ id: `al:${a.id}`, kind: "alert", lng: a.lng, lat: a.lat, eyebrow: "DPS · Caution", title: a.title, meta: `${a.advice} · ${ago(a.createdAt, now)}` });
+      out.push({ id: `al:${a.id}`, kind: "alert", lng: a.lng, lat: a.lat, eyebrow: ago(a.createdAt, now), title: a.title, severity: a.severity });
     }
   }
 
@@ -89,17 +95,18 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     }
   }
 
-  if (chips.events) {
+  if (chips.events || chips.food) {
     const soon = s.events
-      .filter((e) => !e.game && e.lat != null && e.lng != null && (chips.food ? e.freeFood : e.visibility === "open" || e.freeFood || e.friendsGoing.length > 0))
+      .filter((e) => !e.game && e.lat != null && e.lng != null && ((chips.events && (e.visibility === "open" || e.friendsGoing.length > 0)) || (chips.food && e.freeFood)))
       .filter((e) => +new Date(e.end) > +now && +new Date(e.start) - +now < 90 * 60_000)
       .sort((x, y) => y.friendsGoing.length - x.friendsGoing.length || +new Date(x.start) - +new Date(y.start))
       .slice(0, 4);
     for (const e of soon) {
       const where = b(e.buildingId)?.name ?? "";
-      const label = chips.food && e.freeFood ? "Free food" : CATEGORY_META[e.category]?.label ?? "Event";
+      // the label is always the event's type; free food is a badge on top, so turning a filter on/off never renames an event
+      const label = CATEGORY_META[e.category]?.label ?? "Event";
       out.push({
-        id: `ev:${e.id}`, kind: "event", lng: e.lng!, lat: e.lat!, eyebrow: `${label} · ${where}`,
+        id: `ev:${e.id}`, kind: "event", lng: e.lng!, lat: e.lat!, eyebrow: `${label} · ${where}`, food: e.freeFood ? e.foodDetail ?? "Free food" : undefined,
         title: e.title.length > 26 ? `${e.title.slice(0, 25)}…` : e.title,
         meta: `${isLive(e, now) ? "Now" : fmtTime(e.start)} · ${e.attendeeCount} going`,
       });
@@ -107,7 +114,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
   }
 
   if (chips.webcams) {
-    for (const w of WEBCAMS) out.push({ id: `cam:${w.id}`, kind: "webcam", lng: w.lng, lat: w.lat, eyebrow: w.source, title: w.name });
+    for (const w of WEBCAMS) out.push({ id: `cam:${w.id}`, kind: "webcam", lng: w.lng, lat: w.lat, eyebrow: w.source, title: w.name, heading: w.heading });
   }
 
   // one bubble per spot: later (more specific) kinds don't stack on top of earlier ones
