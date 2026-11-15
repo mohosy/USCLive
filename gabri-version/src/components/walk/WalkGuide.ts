@@ -119,6 +119,21 @@ function softShadowTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+/** the "you are here" circle: soft blue, a little stronger at the rim (blue, so it never reads as a red DPS zone or a gold live game) */
+function accuracyTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grad.addColorStop(0, "rgba(59,130,246,0.5)");
+  grad.addColorStop(0.84, "rgba(59,130,246,0.3)");
+  grad.addColorStop(0.94, "rgba(96,165,250,0.95)");
+  grad.addColorStop(1, "rgba(96,165,250,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+}
+
 // ---------- three.js custom layer ----------
 export class CharacterLayer implements mapboxgl.CustomLayerInterface {
   id = "walk-character";
@@ -133,6 +148,14 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
   alwaysOnTop = false;
   /** meters above the ground (picked up and carried by the recall animation) */
   lift = 0;
+  /** "you are here": a soft pulsing circle under the feet with this radius in meters on the ground, in place of
+   *  the thin gold ring (null: the ring, as on the tour guide and in play mode) */
+  accuracyM: number | null = null;
+  /** called at the start of every frame with the time in ms, so the owner can move and turn the character */
+  onFrame: ((now: number) => void) | null = null;
+  /** reduced motion: hold the pose, no pulsing, and no continuous redraw (the owner repaints when something changes) */
+  still = false;
+  private disc: THREE.Mesh | null = null;
   /** each light and its daytime strength, so dusk and night can dim the character to match the map */
   private lit: [THREE.Light, number][] = [];
   private camera = new THREE.Camera();
@@ -241,10 +264,25 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
       pmrem.dispose();
       this.envReady = true;
     }
+    this.onFrame?.(performance.now());
     const dt = this.clock.getDelta();
-    this.mixer.update(dt * this.timeScale);
+    this.mixer.update(this.still ? 0 : dt * this.timeScale);
     const t = this.clock.elapsedTime;
     (this.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.35 * Math.sin(t * 3);
+    this.ring.visible = this.accuracyM == null;
+    if (this.accuracyM != null) {
+      if (!this.disc) {
+        this.disc = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({ map: accuracyTexture(), transparent: true, depthWrite: false }));
+        this.disc.rotation.x = -Math.PI / 2;
+        this.disc.position.y = this.ring.position.y * 0.5; // under the contact shadow
+        this.scene.add(this.disc);
+      }
+      const pulse = this.still ? 0.5 : 0.5 + 0.5 * Math.sin(t * 2.2);
+      // the radius is meters on the ground, whatever size the character is drawn at
+      this.disc.scale.setScalar(((this.accuracyM * this.unitsPerMeter) / this.scale) * (1 + 0.06 * pulse));
+      (this.disc.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.4 * pulse;
+      this.disc.visible = true;
+    } else if (this.disc) this.disc.visible = false;
 
     const rotYAngle = Math.PI - toRad(this.heading);
     this.lights.rotation.y = -rotYAngle;
@@ -258,7 +296,7 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
     // play mode: the player is never hidden behind a building (drawn over them, like most map games)
     if (this.alwaysOnTop) gl.clear(gl.DEPTH_BUFFER_BIT);
     this.renderer.render(this.scene, this.camera);
-    this.map.triggerRepaint();
+    if (!this.still) this.map.triggerRepaint();
   }
 
   onRemove() {

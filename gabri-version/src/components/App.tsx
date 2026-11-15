@@ -22,7 +22,8 @@ import { BuildingDetail, EventDetail, OrgDetail, type HostRef } from "./Drawers"
 import { DiningDetail } from "./DiningDetail";
 import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
-import type { Camera, MapLayers } from "./MapView";
+import type { Camera, MapLayers, MeLive } from "./MapView";
+import MeCard from "./MeCard";
 import MenuPanel from "./MenuPanel";
 import WeatherPill from "./weather/WeatherPill";
 import { useCampusWeather } from "./weather/useCampusWeather";
@@ -73,6 +74,12 @@ export default function App() {
   const locRef = useRef(loc);
   useEffect(() => { locRef.current = loc; }, [loc]);
   const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
+  // your location's accuracy and the phone's compass: read by the map every frame (a ref, so a turning phone re-renders nothing)
+  const meLive = useRef<MeLive>({ accuracyM: null, compass: null });
+  // the "you" card (tap your Trojan): the accuracy at the moment it was opened
+  const [meCard, setMeCard] = useState<{ accuracyM: number | null } | null>(null);
+  const [playAsk, setPlayAsk] = useState(false);
+  const [ask, setAsk] = useState<{ text: string; key: number } | null>(null);
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -343,30 +350,52 @@ export default function App() {
     const id = navigator.geolocation.watchPosition((p) => {
       const here = { lat: p.coords.latitude, lng: p.coords.longitude };
       const nearest = [...BUILDINGS].sort((a, b) => distanceMeters(here, a) - distanceMeters(here, b))[0];
-      if (distanceMeters(here, nearest) > 1500) { setGps("off"); return; } // off campus: keep the demo location
+      if (distanceMeters(here, nearest) > 1500) { setGps("off"); meLive.current.accuracyM = null; return; } // off campus: keep the demo location
+      meLive.current.accuracyM = p.coords.accuracy;
       // small GPS jitter doesn't re-render everything
       setLoc((prev) => (prev.buildingId === nearest.id && distanceMeters(prev, here) < 15 ? prev : { ...here, label: `near ${nearest.name}`, buildingId: nearest.id }));
       setGps("on");
       if (!centered) { centered = true; setFocus({ lat: here.lat, lng: here.lng, zoom: 17, key: ++focusSeq.current }); }
-    }, () => setGps("off"), { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 });
+    }, () => { setGps("off"); meLive.current.accuracyM = null; }, { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 });
     return () => navigator.geolocation.clearWatch(id);
+  }, [signedIn]);
+
+  // The phone's compass, when it has one: your Trojan faces the way you are facing while you stand still.
+  // (Android reports it as an absolute orientation; iPhones as webkitCompassHeading, once allowed: see locateMe.)
+  useEffect(() => {
+    if (!signedIn || typeof window === "undefined") return;
+    const on = (e: DeviceOrientationEvent) => {
+      const ios = (e as DeviceOrientationEvent & { webkitCompassHeading?: number }).webkitCompassHeading;
+      const h = typeof ios === "number" ? ios : e.absolute && e.alpha != null ? 360 - e.alpha : null;
+      if (h != null && Number.isFinite(h)) meLive.current.compass = h;
+    };
+    window.addEventListener("deviceorientationabsolute", on as EventListener);
+    window.addEventListener("deviceorientation", on);
+    return () => { window.removeEventListener("deviceorientationabsolute", on as EventListener); window.removeEventListener("deviceorientation", on); };
   }, [signedIn]);
 
   /** Locate button: with a fix, just re-center; otherwise ask the browser once. Off campus or denied keeps the demo spot. */
   function locateMe() {
     const center = (l: { lat: number; lng: number }) => setFocus({ lat: l.lat, lng: l.lng, zoom: 17, key: ++focusSeq.current });
+    // iPhones only share the compass after a tap asks for it; a refusal just means no compass
+    const motion = typeof DeviceOrientationEvent !== "undefined" ? (DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }) : null;
+    motion?.requestPermission?.().catch(() => {});
     if (gps === "on" || !navigator.geolocation) { center(loc); return; }
     setGps("asking");
     navigator.geolocation.getCurrentPosition((p) => {
       const here = { lat: p.coords.latitude, lng: p.coords.longitude };
       const nearest = [...BUILDINGS].sort((a, b) => distanceMeters(here, a) - distanceMeters(here, b))[0];
       if (distanceMeters(here, nearest) > 1500) { setGps("off"); center(loc); return; } // off campus: keep the demo location
+      meLive.current.accuracyM = p.coords.accuracy;
       setLoc({ ...here, label: `near ${nearest.name}`, buildingId: nearest.id });
       setGps("on");
       center(here);
     }, () => { setGps("off"); center(loc); }, { enableHighAccuracy: true, timeout: 8000 });
   }
   const endWalk = useCallback(() => setWalk(null), []);
+  const openMe = useCallback(() => setMeCard({ accuracyM: meLive.current.accuracyM }), []);
+  const closeMe = useCallback(() => setMeCard(null), []);
+  const playAsked = useCallback(() => setPlayAsk(false), []);
   async function markAllRead() {
     await api("/api/notifications", { json: { all: true } });
     setNotifs((n) => n.map((x) => ({ ...x, read: true })));
@@ -542,6 +571,10 @@ export default function App() {
               onIntroDone={() => setIntro(false)}
               walk={view === "map" && walk && walkTo ? { to: walkTo, key: walk.key } : null}
               onWalkEnd={endWalk}
+              meLive={meLive}
+              onMe={openMe}
+              playAsk={playAsk}
+              onPlayAsked={playAsked}
             />
           )}
           {(view === "3d" || keepSat) && (
@@ -568,6 +601,8 @@ export default function App() {
                 hotspots={state?.hotspots ?? NO_HOTSPOTS}
                 showHeat={chips.crowds}
                 onCallout={onCallout}
+                meLive={meLive}
+                onMe={openMe}
               />
             </div>
           )}
@@ -584,6 +619,13 @@ export default function App() {
             ))}
           </div>
 
+
+          {/* tap your Trojan: where you are, and what you can do from there */}
+          {meCard && !walk && (
+            <MeCard loc={loc} gps={gps} accuracyM={meCard.accuracyM} onClose={closeMe}
+              onNear={() => { setMeCard(null); setAsk({ text: "What's happening near me right now?", key: ++focusSeq.current }); }}
+              onPlay={() => { setMeCard(null); if (view !== "map") switchView("map"); setPlayAsk(true); }} />
+          )}
 
           {/* Bottom dock: locate + one filter row (each chip is a layer on the map and its legend), then search and assistant in one bar */}
           <div className="map-dock">
@@ -605,7 +647,7 @@ export default function App() {
                   </button>
                 </div>
                 {state && (
-                  <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction} onOpenBuilding={openBuilding}
+                  <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction} onOpenBuilding={openBuilding} ask={ask}
                     onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
                     onChanged={() => { refresh(); pollNotifs(); }} />
                 )}

@@ -26,6 +26,7 @@ function alertPoints(alerts: SafetyAlert[]): FC {
   return { type: "FeatureCollection", features: alerts.map((a) => ({ type: "Feature", properties: { id: `al:${a.id}`, title: a.title }, geometry: { type: "Point", coordinates: [a.lng, a.lat] } })) };
 }
 import { LEVEL_COLOR } from "./ui";
+import { MeMotion } from "@/lib/meMotion";
 import type { WalkGuide, WalkProgress } from "./walk/WalkGuide";
 import { CROWD_MIN_ZOOM, CrowdLayer, type CrowdSpot } from "./walk/CrowdLayer";
 import { busyLine, hotspotFor } from "@/lib/hotspots";
@@ -300,7 +301,20 @@ interface Props {
   onWalkEnd: () => void;
   /** dawn / day / dusk / night lighting (follows the real sun; see lib/sun) */
   light?: LightPreset;
+  /** live facts about your location, read every frame: accuracy in meters (null: unknown or the default spot)
+   *  and the phone's compass heading (null: none) */
+  meLive?: { current: MeLive };
+  /** your Trojan was tapped */
+  onMe?: () => void;
+  /** play mode was asked for from outside the map (the "you" card); onPlayAsked tells the app it has started */
+  playAsk?: boolean;
+  onPlayAsked?: () => void;
 }
+
+/** your location's accuracy and the phone's compass, kept in a ref so a turning phone does not re-render the app */
+export interface MeLive { accuracyM: number | null; compass: number | null }
+const ME_ACCURACY_M = 10; // the circle's radius when the accuracy is not known
+const prefersStill = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 type FC = FeatureCollection;
 const EMPTY: FC = { type: "FeatureCollection", features: [] };
@@ -403,9 +417,9 @@ export default function MapView(props: Props) {
   const map = useRef<mapboxgl.Map | null>(null);
   const ready = useRef(false);
   const styleRef = useRef<MapStyle>(props.mapStyle);
-  const meMarker = useRef<mapboxgl.Marker | null>(null);
-  /** "you are here" is your Trojan, standing where you are (the blue dot only shows until the 3D engine has loaded) */
+  /** "you are here" is your Trojan: it stands where you are, walks to your new spot when you move, and faces the way you go */
   const meChar = useRef<import("./walk/WalkGuide").CharacterLayer | null>(null);
+  const meMotion = useRef<MeMotion | null>(null);
   const placeMe = useRef<() => void>(() => {});
   const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC; alerts: FC; cams: FC; alertPts: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings), alerts: EMPTY, cams: EMPTY, alertPts: EMPTY });
   const bubbles = useRef(new Map<string, { m: mapboxgl.Marker; el: HTMLDivElement; html: string; c: Callout }>());
@@ -938,7 +952,7 @@ export default function MapView(props: Props) {
       // the 3D character engine loads on demand (same as tours), so the page stays light until you play
       void import("./walk/PlayMode").then(({ PlayMode }) => {
         if (map.current !== m || play.current) return;
-        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay, () => {});
+        play.current = new PlayMode(m, meMotion.current?.pos ?? cb.current.me, [campus.current?.buildings, area.current], stopPlay, () => {});
         placeMe.current(); // the play Trojan is you now: no second one standing at your location
         play.current.setLight(cb.current.light);
         // while playing, tap anywhere on the map (not on a pin or a bubble) to jump your Trojan there
@@ -1058,20 +1072,22 @@ export default function MapView(props: Props) {
     return () => clearInterval(t);
   }, []);
 
-  // your Trojan where you are: sized like everyone else (real size up close, ~24px zoomed out), lit for the time of day
+  // your Trojan where you are: sized like everyone else (real size up close, ~24px zoomed out), lit for the time of day.
+  // It is the only "you" on the map: there is no location dot.
   useEffect(() => {
     placeMe.current = () => {
-      const m = map.current, c = meChar.current;
-      if (!m || !c || !ready.current) return;
+      const m = map.current, c = meChar.current, mo = meMotion.current;
+      if (!m || !c || !mo || !ready.current) return;
       const show = !play.current && !cb.current.walk; // the play Trojan or the tour guide stands in for you
-      const dot = meMarker.current?.getElement();
-      if (dot) dot.style.display = show ? "none" : "";
       if (!show) { if (m.getLayer(c.id)) m.removeLayer(c.id); return; }
-      c.pos = { lat: cb.current.me.lat, lng: cb.current.me.lng };
-      const mpp = (78_271.517 * Math.cos((c.pos.lat * Math.PI) / 180)) / 2 ** m.getZoom();
-      c.scale = Math.max(1.2, (24 * mpp) / 2);
+      const still = prefersStill();
+      const onMap = !!m.getLayer(c.id);
+      // a new location: walk there (appear there with reduced motion, or when coming back onto the map)
+      mo.setTarget({ lat: cb.current.me.lat, lng: cb.current.me.lng }, performance.now(), still || !onMap);
+      c.still = still;
       c.setLight(cb.current.light);
-      if (!m.getLayer(c.id)) m.addLayer(c);
+      if (!onMap) m.addLayer(c);
+      m.triggerRepaint();
     };
   });
   useEffect(() => {
@@ -1080,13 +1096,30 @@ export default function MapView(props: Props) {
     const t = setTimeout(() => {
       void Promise.all([import("./walk/WalkGuide"), import("./walk/trojanModel")]).then(([{ CharacterLayer }, { buildTrojan }]) => {
         if (gone || meChar.current) return;
-        const c = new CharacterLayer(buildTrojan(), { lat: cb.current.me.lat, lng: cb.current.me.lng });
+        const start = { lat: cb.current.me.lat, lng: cb.current.me.lng };
+        const mo = meMotion.current = new MeMotion(start);
+        const c = new CharacterLayer(buildTrojan(), start);
         c.id = "me-character";
         c.alwaysOnTop = true; // it marks where you are: never hidden by the building you're in
-        c.play("Idle");
+        c.play("Idle"); // standing: the gentle breathing loop
+        let walking = false;
+        // every frame: where you are between two location fixes, which way you face, and the size on screen
+        c.onFrame = (now) => {
+          const m = map.current;
+          if (!m) return;
+          const live = cb.current.meLive?.current;
+          mo.setCompass(live?.compass ?? null);
+          mo.setFallbackHeading(m.getBearing() + 180); // nothing to go on yet: face the camera
+          mo.step(now);
+          c.pos = mo.pos;
+          c.heading = mo.heading;
+          if (mo.moving !== walking) { walking = mo.moving; c.play(walking ? "Walk" : "Idle"); }
+          const mpp = (78_271.517 * Math.cos((mo.pos.lat * Math.PI) / 180)) / 2 ** m.getZoom();
+          c.scale = Math.max(1.2, (24 * mpp) / 2); // same rule as play mode
+          // the accuracy circle: the real accuracy, but never smaller than 22 px so it reads at every zoom
+          c.accuracyM = Math.max(Math.min(live?.accuracyM ?? ME_ACCURACY_M, 60), 22 * mpp);
+        };
         meChar.current = c;
-        const m = map.current;
-        m?.on("zoom", () => placeMe.current());
         placeMe.current();
       });
     }, 1500);
@@ -1094,16 +1127,56 @@ export default function MapView(props: Props) {
   }, []);
   useEffect(() => { placeMe.current(); }, [props.me, props.light, props.walk?.key]);
 
+  // tapping your Trojan opens the "you" card. It wins over the building or pin under it.
   useEffect(() => {
-    const m = map.current;
-    if (!m) return;
-    if (!meMarker.current) {
-      const d = document.createElement("div");
-      d.className = "me-pin";
-      d.title = "You";
-      meMarker.current = new mapboxgl.Marker({ element: d }).setLngLat([props.me.lng, props.me.lat]).addTo(m);
-    } else meMarker.current.setLngLat([props.me.lng, props.me.lat]);
-  }, [props.me]);
+    const box = el.current;
+    if (!box) return;
+    const onChar = (clientX: number, clientY: number) => {
+      const m = map.current, c = meChar.current, mo = meMotion.current;
+      if (!m || !c || !mo || !m.getLayer(c.id)) return false;
+      const r = m.getCanvas().getBoundingClientRect();
+      const x = clientX - r.left, y = clientY - r.top;
+      const s = m.project([mo.pos.lng, mo.pos.lat]);
+      const mpp = (78_271.517 * Math.cos((mo.pos.lat * Math.PI) / 180)) / 2 ** m.getZoom();
+      const tall = Math.max(28, (2 * c.scale) / mpp);
+      return Math.abs(x - s.x) < Math.max(18, tall * 0.35) && y < s.y + 12 && y > s.y - tall - 8;
+    };
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
+    const onClick = (e: MouseEvent) => {
+      if (!cb.current.onMe || !(e.target instanceof HTMLCanvasElement)) return; // only taps on the map itself
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return; // that was a drag
+      if (!onChar(e.clientX, e.clientY)) return;
+      e.stopPropagation();
+      cb.current.onMe();
+    };
+    const onMove = (e: MouseEvent) => {
+      if (play.current || !(e.target instanceof HTMLCanvasElement)) return;
+      const c = map.current?.getCanvas();
+      if (!c) return;
+      if (onChar(e.clientX, e.clientY)) { c.style.cursor = "pointer"; c.dataset.me = "1"; }
+      else if (c.dataset.me) { delete c.dataset.me; c.style.cursor = ""; }
+    };
+    box.addEventListener("pointerdown", onDown, true);
+    box.addEventListener("click", onClick, true);
+    box.addEventListener("mousemove", onMove);
+    return () => { box.removeEventListener("pointerdown", onDown, true); box.removeEventListener("click", onClick, true); box.removeEventListener("mousemove", onMove); };
+  }, []);
+
+  // "Start play mode" on the "you" card. Asked from Satellite, the map may still be loading: start once it is ready.
+  const playAsk = props.playAsk;
+  useEffect(() => {
+    if (!playAsk) return;
+    const start = () => {
+      if (!ready.current) return false;
+      cb.current.onPlayAsked?.();
+      if (!play.current?.isActive) togglePlay.current();
+      return true;
+    };
+    if (start()) return;
+    const t = setInterval(() => { if (start()) clearInterval(t); }, 200);
+    return () => clearInterval(t);
+  }, [playAsk]);
 
   // side panel opened/closed: shift the visible center with padding (no canvas resize, no re-render)
   useEffect(() => {
@@ -1126,7 +1199,8 @@ export default function MapView(props: Props) {
     // a tour asked for while you're walking around starts from where your Trojan is, and takes it over
     const fromPlay = play.current?.position();
     if (play.current) stopPlay();
-    const me = fromPlay ? { ...cb.current.me, lng: fromPlay.lng, lat: fromPlay.lat } : cb.current.me;
+    const at = fromPlay ?? meMotion.current?.pos; // from your Trojan, wherever it is standing right now
+    const me = at ? { ...cb.current.me, lng: at.lng, lat: at.lat } : cb.current.me;
     let guide: WalkGuide | null = null;
     let cancelled = false;
     // the walking character (three.js) is only downloaded when a walk actually starts
