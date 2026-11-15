@@ -5,9 +5,10 @@ import { lightFor, type LightPreset } from "@/lib/sun";
 import { loadMapLighting, loadOpenIn, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
-import { api, applyFilters, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Hotspot, type Loc, type Notification } from "@/lib/client-types";
+import { api, applyFilters, conflictsIn, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Hotspot, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
 import { DINING_HALLS } from "@/lib/dining";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
@@ -24,10 +25,12 @@ import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
 import type { Camera, MapLayers, MeLive } from "./MapView";
 import MeCard from "./MeCard";
+import ConflictSheet from "./ConflictSheet";
+import type { Conflict } from "@/lib/conflicts";
 import MenuPanel from "./MenuPanel";
 import WeatherPill from "./weather/WeatherPill";
 import { useCampusWeather } from "./weather/useCampusWeather";
-import SignIn, { clearSession, loadSession, saveGoogleSession, signIn, type GooglePrefill } from "./SignIn";
+import SignIn, { clearSession, loadSession, saveGoogleSession, signIn, updateSavedSession, type GooglePrefill } from "./SignIn";
 import FindFriends from "./FindFriends";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
@@ -67,6 +70,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false); // the side panel: pushes the map on desktop, bottom sheet on phones
   const [signedIn, setSignedIn] = useState<boolean | null>(null); // null while the saved session is being checked
   const [accountOpen, setAccountOpen] = useState(false);
+  const router = useRouter();
   const [findOpen, setFindOpen] = useState(false); // Find friends sheet
   const [findQuery, setFindQuery] = useState<string | undefined>(undefined); // /?add=username (a scanned QR code or a shared link)
   const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
@@ -341,11 +345,18 @@ export default function App() {
     else if (kind === "cam") setCam(WEBCAMS.find((w) => w.id === id) ?? null);
   }
 
-  async function rsvp(id: string) {
+  // an RSVP that clashes with your schedule: the conflicts, then "Go anyway" or "Cancel"
+  const [clash, setClash] = useState<{ id: string; title: string; conflicts: Conflict[] } | null>(null);
+  async function rsvp(id: string, anyway = false) {
     try {
-      const r = await api<{ event: EventView }>(`/api/events/${id}/rsvp`, { method: "POST" });
+      const r = await api<{ event: EventView }>(`/api/events/${id}/rsvp`, { json: anyway ? { anyway: true } : {} });
       setState((s) => (s ? { ...s, events: s.events.map((e) => (e.id === id ? r.event : e)) } : s));
-    } catch (e) { alert((e as Error).message); }
+      setClash(null);
+    } catch (e) {
+      const conflicts = conflictsIn(e);
+      if (conflicts && !anyway) setClash({ id, title: state?.events.find((x) => x.id === id)?.title ?? "", conflicts });
+      else { setClash(null); alert((e as Error).message); }
+    }
   }
   async function invite(id: string, userIds: string[]) {
     const r = await api<{ event: EventView }>(`/api/events/${id}/invite`, { json: { userIds } });
@@ -418,6 +429,10 @@ export default function App() {
   const openMe = useCallback(() => setMeCard({ accuracyM: meLive.current.accuracyM }), []);
   const closeMe = useCallback(() => setMeCard(null), []);
   const playAsked = useCallback(() => setPlayAsk(false), []);
+  // the browser's saved friend list follows the server's (it is only used to put friends back after a demo-server restart)
+  const friendKey = state?.me.friends.map((f) => f.id).join(",");
+  useEffect(() => { if (friendKey !== undefined) updateSavedSession({ friendIds: friendKey ? friendKey.split(",") : [] }); }, [friendKey]);
+
   /** Accept or decline a friend request from the Notifications list. */
   async function answerFriend(n: Notification, accept: boolean) {
     try { await api("/api/friends", { json: { userId: n.fromUserId, action: accept ? "accept" : "decline" } }); } catch { /* already answered somewhere else */ }
@@ -441,13 +456,10 @@ export default function App() {
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
       <WeatherPill weather={weather} />
       <div ref={accountArea} className="account-area">
-        {/* notifications, beside your profile; opens the same panel on its Notifications tab */}
-        <button onClick={() => { setAccountOpen((o) => !(o && accountTab === "notifications")); setAccountTab("notifications"); }} className="map-bell" aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}>
-          <Bell size={18} strokeWidth={2} />
-          {unread > 0 && <span className="bell-unread" />}
-        </button>
-        <button ref={accountButton} onClick={() => { setAccountOpen((o) => !o); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label="Account" aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
+        {/* one button for your account: notifications live inside its menu, and a gold dot on it says there are unread ones */}
+        <button ref={accountButton} onClick={() => { setAccountOpen((o) => !o); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label={unread ? `Account, ${unread} unread notifications` : "Account"} aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
           {state?.me.avatar ?? <UserRound size={16} />}
+          {unread > 0 && <span className="avatar-unread" aria-hidden="true" />}
         </button>
         {accountOpen && state && (
           <section id="account-panel" className="account-panel" aria-label="Your account">
@@ -471,7 +483,8 @@ export default function App() {
               e.currentTarget.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
             }}>
               {([["account", "Profile", UserRound], ["inbox", "Inbox", Inbox], ["notifications", "Notifications", Bell]] as const).map(([key, label, Icon]) => (
-                <button key={key} role="tab" id={`account-tab-${key}`} aria-selected={accountTab === key} aria-controls={`account-content-${key}`} tabIndex={accountTab === key ? 0 : -1} onClick={() => setAccountTab(key)}>
+                <button key={key} role="tab" id={`account-tab-${key}`} aria-selected={accountTab === key} aria-controls={`account-content-${key}`} tabIndex={accountTab === key ? 0 : -1}
+                  onClick={() => { if (key === "account") { setAccountOpen(false); router.push("/profile"); } else setAccountTab(key); }}>
                   <Icon size={15} /><span>{label}</span>{key === "notifications" && unread > 0 && <span className="unread-count">{unread}</span>}
                 </button>
               ))}
@@ -479,7 +492,6 @@ export default function App() {
             <div className="account-content scroll-thin" role="tabpanel" id={`account-content-${accountTab}`} aria-labelledby={`account-tab-${accountTab}`} tabIndex={0}>
               {accountTab === "account" && <div className="p-2 text-sm">
                 <div className="px-3 py-2"><AccountBadge type={state.me.accountType} /></div>
-                <Link href="/profile" onClick={() => setAccountOpen(false)} className="menu-item"><UserRound size={17} /> View profile</Link>
                 <button onClick={() => { setAccountOpen(false); setFindOpen(true); }} className="menu-item"><UserPlus size={17} /> Find friends</button>
                 <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item"><Settings size={17} /> Settings</Link>
                 <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item"><LayoutDashboard size={17} /> Organizer dashboard</Link>
@@ -490,7 +502,8 @@ export default function App() {
               {accountTab === "notifications" && <div className="p-2">
                 {unread > 0 && <div className="flex justify-end px-2 pb-2"><button onClick={markAllRead} className="min-h-10 text-sm font-medium text-cardinal">Mark all read</button></div>}
                 {!notifs.length && <p className="px-3 py-8 text-center text-sm text-muted">You&apos;re all caught up.</p>}
-                {notifs.map((n) => n.fromUserId ? (
+                {/* friend requests waiting for an answer stay at the top, above newer notifications */}
+                {[...notifs.filter((n) => n.fromUserId), ...notifs.filter((n) => !n.fromUserId)].map((n) => n.fromUserId ? (
                   // a friend request: answer it right here
                   <div key={n.id} className="menu-item !items-start !cursor-default">
                     <span className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-cardinal" />
@@ -518,6 +531,7 @@ export default function App() {
           </section>
         )}
       </div>
+      {clash && <ConflictSheet title={clash.title} conflicts={clash.conflicts} goLabel="Go anyway" onGo={() => rsvp(clash.id, true)} onCancel={() => setClash(null)} />}
       {findOpen && <FindFriends me={state?.me.username} initialQuery={findQuery} onClose={() => { setFindOpen(false); setFindQuery(undefined); }} onChanged={() => { refresh(); pollNotifs(); }} />}
 
       <div className="absolute inset-0">

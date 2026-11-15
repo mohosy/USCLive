@@ -39,11 +39,14 @@ export default function FindFriends({ me, onClose, onChanged, initialQuery }: { 
   useEffect(() => {
     const term = q.trim().replace(/^@+/, "");
     let live = true;
+    const search = () => api<{ results: PersonView[] }>(`/api/users?q=${encodeURIComponent(term)}`).then((r) => { if (live) setResults(r.results); }).catch(() => {});
     const t = setTimeout(() => {
       if (!term) { setResults(null); return; }
-      api<{ results: PersonView[] }>(`/api/users?q=${encodeURIComponent(term)}`).then((r) => { if (live) setResults(r.results); }).catch(() => {});
+      void search();
     }, 180);
-    return () => { live = false; clearTimeout(t); };
+    // the results refresh too, so "Requested" turns into "Friends" when the request is accepted
+    const again = term ? setInterval(search, 4000) : undefined;
+    return () => { live = false; clearTimeout(t); clearInterval(again); };
   }, [q, version]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };

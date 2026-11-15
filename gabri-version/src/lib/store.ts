@@ -12,6 +12,7 @@ import { ME, ORGS, seedAlerts, seedEvents, seedHistory, seedInbox, seedNotificat
 import type { CampusEvent, FriendRequest, InboxItem, Notification, Registration, SafetyAlert, User } from "./types";
 import { DEFAULT_PREFS, notifySwitch, prefsOf } from "./prefs";
 import { settleDemoRequests } from "./friends";
+import { myConflictMark } from "./conflictCheck";
 import { backfill, closesSoon, counts, findRegistration, isClosed, reapply } from "./registration";
 import type { GoogleSession } from "./google";
 
@@ -39,6 +40,8 @@ export interface DB {
   registrations: Registration[];
   /** friend requests waiting for an answer (see lib/friends.ts) */
   friendRequests: FriendRequest[];
+  /** changes whenever this data starts over (a demo server restart or a reset): tells a browser its saved copy is newer */
+  bootId: string;
 }
 
 /** The demo students (not real people). The demo account itself is used by a real person, so it is not in here. */
@@ -85,6 +88,7 @@ export function fresh(): DB {
     registrations: [],
     // two demo students have asked the demo student to be friends, so Accept and Decline can be tried
     friendRequests: demoRequests(+now),
+    bootId: `boot_${(+now).toString(36)}${Math.random().toString(36).slice(2, 8)}`,
   };
 }
 
@@ -106,6 +110,7 @@ export function db(): DB {
   d.registrations ??= [];
   d.friendRequests ??= demoRequests(Date.now()).filter((r) => !d.users.find((u) => u.id === ME)?.friends.includes(r.from)); // state saved before requests existed
   demoPrefs(d.users);
+  d.bootId ??= `boot_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   return d;
 }
 
@@ -120,6 +125,7 @@ export function resetDb() {
     f.registrations = (old.registrations ?? []).filter((r) => f.events.some((e) => e.id === r.eventId));
     reapply(f.events, f.registrations);
     c.db = f;
+    g.__usclive = f; // without Supabase the memory copy is the data: replace it too, or the reset is lost
     return c.db;
   }
   g.__usclive = fresh();
@@ -264,6 +270,8 @@ export function publicEvent(e: CampusEvent, viewer: User) {
       return { id, name: u?.name ?? id, avatar: u?.avatar ?? "?", photo: u?.photo?.startsWith("/") ? u.photo : undefined };
     }),
     going: e.attendees.includes(viewer.id),
+    // you are going and it clashes with a class or another event of yours: "Overlaps FBE 403" (you chose "Register anyway")
+    conflict: myConflictMark(viewer, e, db().events),
     // registration: the viewer's own status plus counts; never anyone else's identity
     registration: e.registrationType ? registrationView(e, viewer.id) : undefined,
     invited: e.invitees.includes(viewer.id),

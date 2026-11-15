@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api, type Building, type Loc } from "@/lib/client-types";
-import { LEVEL_COLOR } from "./ui";
+import StudyRooms from "./StudyRooms";
+import { LEVEL_COLOR, cx } from "./ui";
 
 interface Spot { building: Building; walk: number; fill: number; level: string; trend: string; ratio: number; label: string; count: number | null }
 
@@ -12,8 +13,21 @@ export default function StudyPanel({ loc, tick, onOpenBuilding }: { loc: Loc; ti
     api<{ spots: Spot[] }>(`/api/study?lat=${loc.lat}&lng=${loc.lng}`).then((r) => setSpots(r.spots)).catch(() => setSpots([]));
   }, [loc.lat, loc.lng, tick]);
 
+  const [mode, setMode] = useState<"seating" | "rooms">("seating");
+  const toggle = (
+    <div className="flex rounded-lg border border-line p-0.5" role="group" aria-label="Study spots">
+      {(["seating", "rooms"] as const).map((m) => (
+        <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)} className={cx("flex-1 rounded-md py-1 text-xs font-medium", mode === m ? "bg-surface text-foreground" : "text-muted hover:text-foreground")}>
+          {m === "seating" ? "Open seating" : "Bookable rooms"}
+        </button>
+      ))}
+    </div>
+  );
+  if (mode === "rooms") return <div className="space-y-3">{toggle}<StudyRooms loc={loc} /></div>;
+
   return (
     <div className="space-y-3">
+      {toggle}
       <p className="text-xs leading-relaxed text-muted">Sorted by how full each place is right now, distance, and noise level.</p>
       {!spots && <div className="space-y-2">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-16" />)}</div>}
       <ul className="divide-y divide-line">

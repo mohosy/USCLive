@@ -30,6 +30,8 @@ export interface Session {
   username?: string;
   /** friends added in the app (re-applied after the demo server restarts) */
   friendIds?: string[];
+  /** which run of the demo server that friend list belongs to: it is only put back after a restart */
+  boot?: string;
 }
 const KEY = "usclive.session";
 
@@ -48,8 +50,8 @@ export function saveGoogleSession(email: string) {
 }
 /** Apply a session on the server (also used on reload, because the demo store resets when the server restarts). */
 export async function signIn(s: Session) {
-  const r = await api<{ username: string; friendIds: string[] }>("/api/session", { json: { action: "signin", ...s } });
-  saveSession({ ...s, username: r.username, friendIds: r.friendIds });
+  const r = await api<{ username: string; friendIds: string[]; boot?: string }>("/api/session", { json: { action: "signin", ...s } });
+  saveSession({ ...s, username: r.username, friendIds: r.friendIds, boot: r.boot });
 }
 /** Merge Settings changes into the saved session so they survive a reload. */
 export function updateSavedSession(patch: Partial<Session>) {

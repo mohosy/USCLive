@@ -2,7 +2,9 @@
 
 import { ArrowUpRight, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { api, fmtTime, type EventView } from "@/lib/client-types";
+import { api, conflictsIn, fmtTime, type EventView } from "@/lib/client-types";
+import type { Conflict } from "@/lib/conflicts";
+import ConflictSheet from "./ConflictSheet";
 import { registrationSite } from "@/lib/registration";
 import { Button, Tag } from "./ui";
 
@@ -31,15 +33,27 @@ export default function RegisterBox({ ev, onUpdated }: { ev: EventView; onUpdate
     return () => { window.removeEventListener("focus", back); document.removeEventListener("visibilitychange", back); };
   }, []);
 
-  async function send(path: "register" | "self-report", init: RequestInit & { json?: unknown }) {
+  // a clash with your classes or another event: the server sends the conflicts back instead of signing you up
+  const [clash, setClash] = useState<{ conflicts: Conflict[]; retry: () => void } | null>(null);
+
+  async function send(path: "register" | "self-report", init: RequestInit & { json?: unknown }, retry?: () => void) {
     setBusy(true); setErr(null);
-    try { const r = await api<Reply>(`/api/events/${ev.id}/${path}`, init); onUpdated(r.event); setAsking(false); }
-    catch (e) { setErr((e as Error).message); }
+    try { const r = await api<Reply>(`/api/events/${ev.id}/${path}`, init); onUpdated(r.event); setAsking(false); setClash(null); }
+    catch (e) {
+      const conflicts = conflictsIn(e);
+      if (conflicts && retry) setClash({ conflicts, retry });
+      else { setClash(null); setErr((e as Error).message); }
+    }
     setBusy(false);
   }
-  const register = () => send("register", { method: "POST" });
+  const register = () => send("register", { json: {} }, () => send("register", { json: { anyway: true } }));
   const cancel = () => send("register", { method: "DELETE" });
-  const confirm = () => send("self-report", { json: { confirmed: true } });
+  const confirm = () => send("self-report", { json: { confirmed: true } }, () => send("self-report", { json: { confirmed: true, anyway: true } }));
+  const sheet = clash && (
+    <ConflictSheet title={ev.title} conflicts={clash.conflicts} busy={busy} goLabel={reg.type === "native" ? (reg.spotsLeft === 0 ? "Join waitlist anyway" : "Register anyway") : "Save anyway"}
+      onGo={clash.retry} onCancel={() => setClash(null)} />
+  );
+  const mark = ev.conflict && <p className="text-xs font-medium text-cardinal">{ev.conflict}</p>;
   function openOfficial() {
     away.current = true;
     // if the new tab never takes focus (blocked, or opened in the background), still ask after a moment
@@ -71,6 +85,8 @@ export default function RegisterBox({ ev, onUpdated }: { ev: EventView; onUpdate
           <Button className="w-full whitespace-nowrap !rounded-full" disabled={busy} onClick={register}>Register</Button>
         )}
         {reg.status === "registered" && <p className="text-xs text-muted">On your schedule. Friends see that you&apos;re going.</p>}
+        {mark}
+        {sheet}
         {reg.status === "waitlisted" && <p className="text-xs text-muted">You&apos;ll get a notification if a spot opens up.</p>}
         {deadline}
         {ev.registrationUrl && <a href={ev.registrationUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground">Official page <ArrowUpRight size={12} /></a>}
@@ -108,6 +124,8 @@ export default function RegisterBox({ ev, onUpdated }: { ev: EventView; onUpdate
       {reg.status === "self-reported"
         ? <p className="text-xs text-muted">On your schedule. This is what you told us; your real registration is on {site}.</p>
         : <p className="text-xs text-muted">Opens {site} in a new tab. USCLive doesn&apos;t register you there.</p>}
+      {mark}
+      {sheet}
       {deadline}
       {err && <p role="alert" className="text-sm font-medium text-red-700">{err}</p>}
     </div>
