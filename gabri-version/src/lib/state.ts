@@ -109,7 +109,11 @@ async function run<T>(uid: string | undefined, fn: (ctx: ReqCtx) => Promise<T>):
 /** Wrap an API route: load state, run as the cookie's person, save changes, set the cookie on sign-in/out. */
 export function withState<A extends unknown[]>(handler: (req: Request, ...rest: A) => Promise<Response> | Response) {
   return async (req: Request, ...rest: A): Promise<Response> => {
-    const { out, ctx } = await run(cookieUid(req), async () => handler(req, ...rest));
+    // a save conflict re-runs the handler: read the body once and hand each run a fresh copy
+    // (a second req.json() on the same request fails, which showed up as "Invalid JSON")
+    const raw = req.method === "GET" || req.method === "HEAD" ? null : await req.arrayBuffer();
+    const fresh = () => (raw === null ? req : new Request(req.url, { method: req.method, headers: req.headers, body: raw }));
+    const { out, ctx } = await run(cookieUid(req), async () => handler(fresh(), ...rest));
     if (ctx.setCookie === undefined) return out;
     const res = new Response(out.body, out); // copy: some responses have read-only headers
     const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
