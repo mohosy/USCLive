@@ -134,7 +134,7 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
         <div className="text-[22px] font-semibold tracking-tight">USC<span className="text-cardinal">Live</span></div>
         {step === "email" ? (
           <form className="mt-1" onSubmit={(e) => { e.preventDefault(); next(email); }}>
-            <p className="text-sm text-muted">Sign in with your USC email to see what is happening on campus.</p>
+            <p className="text-sm text-muted">Sign in to see what is happening on campus.</p>
             <label className="mt-4 block">
               <div className="mb-1 text-xs font-medium text-muted">USC email</div>
               <input className={inputCls} type="email" inputMode="email" autoComplete="email" placeholder="ttrojan@usc.edu" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
