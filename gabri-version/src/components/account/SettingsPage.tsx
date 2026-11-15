@@ -9,6 +9,7 @@ import { api } from "@/lib/client-types";
 import { INTERESTS } from "@/lib/directory";
 import { AccountTypePicker, clearSession, updateSavedSession, type AccountType } from "../SignIn";
 import { Avatar, cx, inputCls } from "../ui";
+import { UsernameInput, useUsernameStatus } from "../UsernameField";
 import AccountShell from "./AccountShell";
 import { useAccount, type ProfileView } from "./useAccount";
 
@@ -49,6 +50,8 @@ export default function SettingsPage() {
 function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: ProfileView) => void }) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
+  const [username, setUsername] = useState(initial.username);
+  const uStatus = useUsernameStatus(username, initial.username);
   const [pronounChoice, setPronounChoice] = useState(PRONOUNS.includes(initial.pronouns) ? initial.pronouns : initial.pronouns ? "custom" : "");
   const [customPronouns, setCustomPronouns] = useState(PRONOUNS.includes(initial.pronouns) ? "" : initial.pronouns);
   const [bio, setBio] = useState(initial.bio);
@@ -75,7 +78,7 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
 
   const pronouns = pronounChoice === "custom" ? customPronouns.trim() : pronounChoice;
   const dirty =
-    name !== initial.name || pronouns !== initial.pronouns || bio !== initial.bio || photo !== initial.photo ||
+    name !== initial.name || uStatus.u !== initial.username || pronouns !== initial.pronouns || bio !== initial.bio || photo !== initial.photo ||
     interests.join() !== initial.interests.join() || accountType !== initial.accountType || (orgId || null) !== initial.creatorOrgId;
   const edit = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setSaved(false); };
 
@@ -87,11 +90,12 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
 
   async function save() {
     if (!name.trim()) return setErr("Your name can't be empty.");
+    if (uStatus.state !== "ok") return setErr(uStatus.state === "checking" ? "Still checking that username…" : `Username: ${uStatus.msg || "pick one"}.`);
     setBusy(true); setErr(null);
     try {
-      const patch = { name: name.trim(), pronouns, bio: bio.trim(), photo, interests, accountType, creatorOrgId: accountType === "creator" ? orgId || null : null };
+      const patch = { name: name.trim(), username: uStatus.u, pronouns, bio: bio.trim(), photo, interests, accountType, creatorOrgId: accountType === "creator" ? orgId || null : null };
       const r = await api<{ profile: ProfileView }>("/api/profile", { method: "PATCH", json: patch });
-      updateSavedSession({ interests, accountType, creatorOrgId: patch.creatorOrgId, profile: { name: patch.name, pronouns, bio: patch.bio, photo } });
+      updateSavedSession({ username: uStatus.u, interests, accountType, creatorOrgId: patch.creatorOrgId, profile: { name: patch.name, pronouns, bio: patch.bio, photo } });
       onSaved(r.profile);
       setSaved(true);
       setPostReason(false);
@@ -129,6 +133,10 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
           <Field label="Name" hint="Use the name you go by.">
             <input className={inputCls} value={name} maxLength={60} onChange={(e) => edit(setName)(e.target.value)} />
           </Field>
+          <div className="sm:col-span-2">
+            <div className="mb-1 text-xs font-medium text-muted">Username</div>
+            <UsernameInput value={username} onChange={edit(setUsername)} status={uStatus} />
+          </div>
           <Field label="Pronouns" hint="Shown next to your name.">
             <select className={inputCls} value={pronounChoice} onChange={(e) => edit(setPronounChoice)(e.target.value)}>
               <option value="">Don&apos;t show pronouns</option>

@@ -13,6 +13,13 @@ import { Avatar, Button, CatLabel, LevelDot, Tag, cx } from "./ui";
 const VIS_LABEL = { public: "Public", school: "School only", open: "Open invite, anyone can join", invite: "Invite only" } as const;
 const SRC_LABEL: Record<string, string> = { flyer: "Added from a flyer", scrape: "Imported from usc.edu", brightspace: "From Brightspace", email: "From your email", calendar: "From your calendar" };
 
+/** "Maya", "Maya and Ryan", "Maya, Ryan and 2 others" */
+function goingNames(n: string[]) {
+  if (n.length <= 2) return n.join(" and ");
+  if (n.length === 3) return `${n[0]}, ${n[1]} and ${n[2]}`;
+  return `${n[0]}, ${n[1]} and ${n.length - 2} others`;
+}
+
 function Back({ onClose }: { onClose: () => void }) {
   return (
     <button onClick={onClose} className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-foreground">
@@ -30,8 +37,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenBuilding, onDirections }: {
-  ev: EventView; state: AppState; loc: Loc; onClose: () => void; onRsvp: (id: string) => Promise<void>; onInvite: (id: string, userIds: string[]) => Promise<void>; onOpenBuilding: (id: string) => void;
+export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindFriends, onOpenBuilding, onDirections }: {
+  ev: EventView; state: AppState; loc: Loc; onClose: () => void; onRsvp: (id: string) => Promise<void>; onInvite: (id: string, userIds: string[]) => Promise<void>; onFindFriends: () => void; onOpenBuilding: (id: string) => void;
   onDirections: (buildingId: string) => void;
 }) {
   const [picking, setPicking] = useState(false);
@@ -67,9 +74,9 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenB
       </div>
 
       {ev.friendsGoing.length > 0 && (
-        <div className="mt-3 flex items-center gap-2">
-          <div className="flex -space-x-1.5">{ev.friendsGoing.map((f) => <Avatar key={f.id} initials={f.avatar} />)}</div>
-          <span className="text-sm text-muted">{ev.friendsGoing.map((f) => f.name.split(" ")[0]).join(", ")}</span>
+        <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2">
+          <div className="flex -space-x-1.5">{ev.friendsGoing.slice(0, 4).map((f) => <Avatar key={f.id} initials={f.avatar} size={26} />)}</div>
+          <span className="text-sm"><span className="font-medium">{goingNames(ev.friendsGoing.map((f) => f.name.split(" ")[0]))}</span> <span className="text-muted">{ev.friendsGoing.length === 1 ? "is" : "are"} going</span></span>
         </div>
       )}
 
@@ -89,7 +96,7 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenB
       {action.kind === "link" && ev.category !== "sports_watch" && (
         <button onClick={toggle} disabled={busy} className="mt-2 text-xs text-muted hover:text-foreground">{ev.going ? "Saved to your schedule · remove" : "Also save to my schedule"}</button>
       )}
-      {picking && <SendSheet key={ev.id} ev={ev} friends={state.me.friends} onSend={(ids) => onInvite(ev.id, ids)} onClose={() => setPicking(false)} />}
+      {picking && <SendSheet key={ev.id} ev={ev} friends={state.me.friends} onSend={(ids) => onInvite(ev.id, ids)} onFindFriends={onFindFriends} onClose={() => setPicking(false)} />}
 
       <p className="mt-6 text-xs text-muted">
         {SRC_LABEL[ev.source] ? `${SRC_LABEL[ev.source]}. ` : ""}Passed safety review.

@@ -6,7 +6,9 @@ import { api } from "@/lib/client-types";
 import type { DirectoryEntry } from "@/lib/directory";
 import type { SchoolId } from "@/lib/types";
 import { ORGS } from "@/lib/orgs";
+import { suggestUsername } from "@/lib/username";
 import { Button, cx, inputCls } from "./ui";
+import { UsernameInput, useUsernameStatus } from "./UsernameField";
 
 export type AccountType = "student" | "creator";
 export interface SavedProfile { name?: string; pronouns?: string; bio?: string; photo?: string | null }
@@ -22,6 +24,10 @@ export interface Session {
   creatorOrgId?: string | null;
   /** edits made in Settings, re-applied on reload because the demo server forgets them on restart */
   profile?: SavedProfile;
+  /** @username (picked at sign-up or changed in Settings) */
+  username?: string;
+  /** friends added in the app (re-applied after the demo server restarts) */
+  friendIds?: string[];
 }
 const KEY = "usclive.session";
 
@@ -36,8 +42,8 @@ function saveSession(s: Session) {
 }
 /** Apply a session on the server (also used on reload, because the demo store resets when the server restarts). */
 export async function signIn(s: Session) {
-  await api("/api/session", { json: { action: "signin", ...s } });
-  saveSession(s);
+  const r = await api<{ username: string; friendIds: string[] }>("/api/session", { json: { action: "signin", ...s } });
+  saveSession({ ...s, username: r.username, friendIds: r.friendIds });
 }
 /** Merge Settings changes into the saved session so they survive a reload. */
 export function updateSavedSession(patch: Partial<Session>) {
@@ -91,6 +97,10 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [school, setSchool] = useState<SchoolId | "">("");
+  // suggested from the name until the student types their own
+  const [handle, setHandle] = useState<string | null>(null);
+  const username = handle ?? suggestUsername(first, last);
+  const uStatus = useUsernameStatus(username);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -108,9 +118,9 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
     } catch (e) { setErr((e as Error).message); setBusy(false); }
   }
   function create() {
-    if (!first.trim() || !last.trim() || !school) return;
+    if (!first.trim() || !last.trim() || !school || uStatus.state !== "ok") return;
     setBusy(true); setErr(null);
-    void go({ email: email.trim().toLowerCase(), interests: [], accountType: "student", signup: { firstName: first.trim(), lastName: last.trim(), school } });
+    void go({ email: email.trim().toLowerCase(), interests: [], accountType: "student", username: uStatus.u, signup: { firstName: first.trim(), lastName: last.trim(), school } });
   }
 
   return (
@@ -148,8 +158,12 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
                 {SCHOOLS.filter((x) => x.id !== "all").map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
             </label>
+            <label className="block">
+              <div className="mb-1 text-xs font-medium text-muted">Username</div>
+              <UsernameInput value={username} onChange={setHandle} status={uStatus} />
+            </label>
             {err && <p role="alert" className="text-sm font-medium text-red-700">{err}</p>}
-            <Button type="submit" className="w-full" disabled={busy || !first.trim() || !last.trim() || !school}>Create account</Button>
+            <Button type="submit" className="w-full" disabled={busy || !first.trim() || !last.trim() || !school || uStatus.state !== "ok"}>Create account</Button>
             <button type="button" className="w-full text-center text-xs text-muted hover:text-foreground" onClick={() => { setStep("email"); setErr(null); }}>Use a different email</button>
           </form>
         )}

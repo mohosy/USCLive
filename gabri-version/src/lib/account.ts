@@ -8,6 +8,8 @@ export const PRONOUNS = ["she/her", "he/him", "they/them", "she/they", "he/they"
 /** Profile fields a student can set themselves (school/major/year/email come from the USC directory). */
 export const ProfileInput = z.object({
   name: z.string().trim().min(1).max(60).optional(),
+  /** checked for format and uniqueness by the profile route */
+  username: z.string().max(40).optional(),
   pronouns: z.string().trim().max(30).optional(),
   bio: z.string().trim().max(160).optional(),
   // small square image from the browser (resized client-side); null removes it

@@ -105,6 +105,19 @@ export async function syncDps(force = false) {
 }
 
 export const currentUserId = () => ME;
+export const findByUsername = (u: string) => db().users.find((x) => x.username === u);
+/** Is this @username free for `forId` (taken by anyone else = not free)? */
+export const usernameFree = (u: string, forId: string) => { const owner = findByUsername(u); return !owner || owner.id === forId; };
+/** `base`, or base2, base3… if someone else has it. */
+export function uniqueUsername(base: string, forId: string) {
+  if (usernameFree(base, forId)) return base;
+  for (let i = 2; ; i++) if (usernameFree(`${base.slice(0, 18)}${i}`, forId)) return `${base.slice(0, 18)}${i}`;
+}
+/** Make two users friends (both ways) or unfriend them. */
+export function setFriends(a: User, b: User, on: boolean) {
+  const link = (x: User, y: User) => { x.friends = on ? Array.from(new Set([...x.friends, y.id])) : x.friends.filter((f) => f !== y.id); };
+  link(a, b); link(b, a);
+}
 export const getUser = (id: string) => db().users.find((u) => u.id === id);
 export const getMe = () => getUser(ME)!;
 export const orgs = () => ORGS;

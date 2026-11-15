@@ -15,10 +15,11 @@ export interface MeView {
   interests: string[];
   orgs: string[];
   classes: ClassMeeting[];
-  friends: { id: string; name: string; avatar: string; school: SchoolId }[];
+  friends: { id: string; name: string; avatar: string; school: SchoolId; username: string }[];
   today: { kind: "class" | "office_hours"; code: string; title: string; buildingId: string; room: string; start: string; end: string }[];
   freeMinutes: number;
   freeUntil: string | null;
+  username?: string;
   email?: string;
   accountType?: "student" | "creator";
   creatorOrgId?: string;

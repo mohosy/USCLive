@@ -3,7 +3,7 @@
  * during a demo. Orgs, people and events are fictional.
  */
 import { INTERSECTIONS } from "./campus";
-import type { CampusEvent, ClassMeeting, InboxItem, Notification, Org, SafetyAlert, User } from "./types";
+import type { CampusEvent, ClassMeeting, InboxItem, Notification, Org, SafetyAlert, SchoolId, User } from "./types";
 
 const MIN = 60_000;
 
@@ -23,6 +23,18 @@ function dayAt(now: Date, addDays: number, h: number, m = 0) {
 }
 
 export const ME = "u_me";
+
+// [id, username, name, school, year, major, their friends (for "mutual friends")]
+const STUDENTS: [string, string, string, SchoolId, string, string, string[]][] = [
+  ["u_ryan", "ryanpatel", "Ryan Patel", "viterbi", "Sophomore", "Computer Science", ["u_ethan", "u_kai"]],
+  ["u_ava", "ava.thompson", "Ava Thompson", "dornsife", "Sophomore", "Psychology", ["u_maya", "u_sofia"]],
+  ["u_diego", "diegoram", "Diego Ramirez", "viterbi", "Senior", "Mechanical Engineering", ["u_jordan"]],
+  ["u_hannah", "hannahkim", "Hannah Kim", "thornton", "Junior", "Music Industry", ["u_maya"]],
+  ["u_omar", "omar.h", "Omar Haddad", "marshall", "Freshman", "Business Administration", ["u_priya", "u_leah"]],
+  ["u_zoe", "zoewilliams", "Zoe Williams", "roski", "Junior", "Fine Arts", []],
+  ["u_marcus", "marcusj", "Marcus Johnson", "annenberg", "Senior", "Communication", ["u_sofia"]],
+  ["u_nina", "ninaliu", "Nina Liu", "viterbi", "Junior", "Computer Science", ["u_ethan", "u_ryan"]],
+];
 
 export function seedUsers(now: Date): User[] {
   const today = now.getDay();
@@ -48,17 +60,21 @@ export function seedUsers(now: Date): User[] {
 
   return [
     {
-      id: ME, name: "Alex Rivera", avatar: "AR", school: "viterbi", year: "Junior", major: "Computer Science (Business minor)",
+      id: ME, username: "arivera", name: "Alex Rivera", avatar: "AR", school: "viterbi", year: "Junior", major: "Computer Science (Business minor)",
       friends: ["u_priya", "u_jordan", "u_maya", "u_ethan", "u_sofia"], classes: myClasses,
       interests: ["soccer", "startups", "boba", "AI", "jazz"], orgs: ["org_startup"],
     },
-    { id: "u_priya", name: "Priya Shah", avatar: "PS", school: "marshall", year: "Junior", major: "Business Administration", friends: [ME], classes: [], interests: ["finance"], orgs: ["org_finance"] },
-    { id: "u_jordan", name: "Jordan Lee", avatar: "JL", school: "dornsife", year: "Sophomore", major: "Economics", friends: [ME], classes: [], interests: ["soccer"], orgs: [] },
-    { id: "u_maya", name: "Maya Chen", avatar: "MC", school: "sca", year: "Senior", major: "Film & TV Production", friends: [ME], classes: [], interests: ["film"], orgs: [] },
-    { id: "u_ethan", name: "Ethan Brooks", avatar: "EB", school: "viterbi", year: "Junior", major: "Electrical Engineering", friends: [ME], classes: [], interests: ["poker"], orgs: [] },
-    { id: "u_sofia", name: "Sofia Martinez", avatar: "SM", school: "annenberg", year: "Sophomore", major: "Journalism", friends: [ME], classes: [], interests: ["news"], orgs: ["org_dt"] },
-    { id: "u_kai", name: "Kai Nakamura", avatar: "KN", school: "viterbi", year: "Freshman", major: "CS Games", friends: [], classes: [], interests: [], orgs: [] },
-    { id: "u_leah", name: "Leah Goldberg", avatar: "LG", school: "marshall", year: "Senior", major: "Accounting", friends: [], classes: [], interests: [], orgs: [] },
+    { id: "u_priya", username: "priyashah", name: "Priya Shah", avatar: "PS", school: "marshall", year: "Junior", major: "Business Administration", friends: [ME], classes: [], interests: ["finance"], orgs: ["org_finance"] },
+    { id: "u_jordan", username: "jordanlee", name: "Jordan Lee", avatar: "JL", school: "dornsife", year: "Sophomore", major: "Economics", friends: [ME], classes: [], interests: ["soccer"], orgs: [] },
+    { id: "u_maya", username: "mayachen", name: "Maya Chen", avatar: "MC", school: "sca", year: "Senior", major: "Film & TV Production", friends: [ME], classes: [], interests: ["film"], orgs: [] },
+    { id: "u_ethan", username: "ethan.brooks", name: "Ethan Brooks", avatar: "EB", school: "viterbi", year: "Junior", major: "Electrical Engineering", friends: [ME], classes: [], interests: ["poker"], orgs: [] },
+    { id: "u_sofia", username: "sofiam", name: "Sofia Martinez", avatar: "SM", school: "annenberg", year: "Sophomore", major: "Journalism", friends: [ME], classes: [], interests: ["news"], orgs: ["org_dt"] },
+    { id: "u_kai", username: "kai.codes", name: "Kai Nakamura", avatar: "KN", school: "viterbi", year: "Freshman", major: "CS Games", friends: ["u_ethan", "u_ryan"], classes: [], interests: [], orgs: [] },
+    { id: "u_leah", username: "leahg", name: "Leah Goldberg", avatar: "LG", school: "marshall", year: "Senior", major: "Accounting", friends: ["u_priya"], classes: [], interests: [], orgs: [] },
+    // other Trojans you can find by @username and add (some are already going to things today)
+    ...STUDENTS.map(([id, username, name, school, year, major, friends]) => ({
+      id, username, name, avatar: name.split(" ").map((w) => w[0]).join(""), school, year, major, friends, classes: [], interests: [], orgs: [],
+    })),
   ];
 }
 
@@ -76,7 +92,7 @@ export function seedEvents(now: Date): CampusEvent[] {
   const list: Seed[] = [
     e({ title: "Pickup soccer — need 4 more!", description: "Casual 7v7, all levels. Bring a light and dark shirt.", category: "sports_play", buildingId: "crm",
       start: inMin(now, 10).toISOString(), end: inMin(now, 100).toISOString(), host: { kind: "user", name: "Jordan Lee", id: "u_jordan" },
-      visibility: "open", capacity: 18, freeFood: false, attendees: ["u_jordan", "u_sofia", ...crowd(9)], tags: ["pickup", "outdoor"], expectedTurnout: 16 }),
+      visibility: "open", capacity: 18, freeFood: false, attendees: ["u_jordan", "u_sofia", "u_diego", ...crowd(8)], tags: ["pickup", "outdoor"], expectedTurnout: 16 }),
     e({ title: "Pickup basketball (half court)", description: "Running 3s on courts 2-3. Winners stay.", category: "sports_play", buildingId: "lrc",
       start: inMin(now, 20).toISOString(), end: inMin(now, 110).toISOString(), host: { kind: "user", name: "Kai Nakamura", id: "u_kai" },
       visibility: "open", capacity: 12, freeFood: false, attendees: ["u_kai", ...crowd(5)], tags: ["pickup"], expectedTurnout: 10 }),
@@ -88,10 +104,10 @@ export function seedEvents(now: Date): CampusEvent[] {
       visibility: "open", schools: ["viterbi"], course: "CSCI 104", capacity: 80, freeFood: false, attendees: crowd(34), tags: ["review", "official"], expectedTurnout: 60 }),
     e({ title: "Startup Pitch Night", description: "6 student founders pitch to VCs. Free pizza and networking after.", category: "student", buildingId: "rth", room: "RTH 526",
       start: inMin(now, -30).toISOString(), end: inMin(now, 120).toISOString(), host: { kind: "org", name: "Viterbi Startup Garage", id: "org_startup" },
-      visibility: "public", schools: ["viterbi"], capacity: 120, freeFood: true, foodDetail: "Free pizza", attendees: ["u_ethan", ...crowd(71)], tags: ["startups", "networking"], expectedTurnout: 90 }),
+      visibility: "public", schools: ["viterbi"], capacity: 120, freeFood: true, foodDetail: "Free pizza", attendees: ["u_ethan", "u_ryan", "u_nina", "u_omar", ...crowd(68)], tags: ["startups", "networking"], expectedTurnout: 90 }),
     e({ title: "Boba study break", description: "Free boba (first 150) + lo-fi + coloring. Come destress before midterms!", category: "student", buildingId: "tcc", room: "TCC 2nd floor lounge",
       start: inMin(now, 40).toISOString(), end: inMin(now, 100).toISOString(), host: { kind: "org", name: "Trojan Boba Society", id: "org_boba" },
-      visibility: "public", capacity: 150, freeFood: true, foodDetail: "Free boba (first 150)", attendees: ["u_maya", ...crowd(58)], tags: ["destress"], expectedTurnout: 150 }),
+      visibility: "public", capacity: 150, freeFood: true, foodDetail: "Free boba (first 150)", attendees: ["u_maya", "u_ava", "u_hannah", ...crowd(56)], tags: ["destress"], expectedTurnout: 150 }),
     e({ title: "Resume reviews: Tech & Finance", description: "Drop-in 10-minute resume reviews with recruiters and Career Center advisors. Coffee + bagels.", category: "career", buildingId: "tcc", room: "TCC 450",
       start: inMin(now, 120).toISOString(), end: inMin(now, 240).toISOString(), host: { kind: "usc", name: "USC Career Center" }, link: { url: "https://usc.joinhandshake.com/", label: "Register on Handshake" },
       visibility: "public", capacity: 100, freeFood: true, foodDetail: "Coffee + bagels", attendees: crowd(41), tags: ["resume", "internships"], expectedTurnout: 70 }),

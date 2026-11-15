@@ -1,10 +1,11 @@
 "use client";
 
-import { BadgeCheck, CalendarDays, ChevronRight, GraduationCap, History, Megaphone, Pencil, Plus, Settings, Users } from "lucide-react";
+import { BadgeCheck, CalendarDays, ChevronRight, GraduationCap, History, Megaphone, Pencil, Plus, Settings, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { fmtTime, isLive, type EventView } from "@/lib/client-types";
+import FindFriends from "../FindFriends";
 import { AccountBadge, Avatar, CatLabel, Tag, cx } from "../ui";
 import AccountShell from "./AccountShell";
 import { useAccount } from "./useAccount";
@@ -12,8 +13,9 @@ import { useAccount } from "./useAccount";
 type Tab = "upcoming" | "past" | "hosting";
 
 export default function ProfilePage() {
-  const { data, status } = useAccount();
+  const { data, status, reload } = useAccount();
   const [tab, setTab] = useState<Tab>("upcoming");
+  const [finding, setFinding] = useState(false);
   const settingsLink = (
     <Link href="/settings" className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-medium text-muted hover:bg-surface hover:text-foreground">
       <Settings size={15} /> Settings
@@ -22,12 +24,13 @@ export default function ProfilePage() {
 
   return (
     <AccountShell status={status} right={settingsLink}>
-      {data && <Profile data={data} tab={tab} setTab={setTab} />}
+      {data && <Profile data={data} tab={tab} setTab={setTab} onFind={() => setFinding(true)} />}
+      {finding && <FindFriends me={data?.profile.username} onClose={() => setFinding(false)} onChanged={() => { void reload(); }} />}
     </AccountShell>
   );
 }
 
-function Profile({ data, tab, setTab }: { data: NonNullable<ReturnType<typeof useAccount>["data"]>; tab: Tab; setTab: (t: Tab) => void }) {
+function Profile({ data, tab, setTab, onFind }: { data: NonNullable<ReturnType<typeof useAccount>["data"]>; tab: Tab; setTab: (t: Tab) => void; onFind: () => void }) {
   const p = data.profile;
   const creator = p.accountType === "creator";
   const school = SCHOOLS.find((s) => s.id === p.school)?.name ?? p.school;
@@ -50,6 +53,9 @@ function Profile({ data, tab, setTab }: { data: NonNullable<ReturnType<typeof us
               <Avatar initials={p.avatar} photo={p.photo} size={104} />
             </div>
             <div className="flex gap-2 pb-1">
+              <button onClick={onFind} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3.5 py-2 text-sm font-medium hover:bg-surface">
+                <UserPlus size={14} /> Find friends
+              </button>
               <Link href="/settings" className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3.5 py-2 text-sm font-medium hover:bg-surface">
                 <Pencil size={14} /> Edit profile
               </Link>
@@ -65,6 +71,7 @@ function Profile({ data, tab, setTab }: { data: NonNullable<ReturnType<typeof us
             {p.name}
             {p.pronouns && <span className="ml-2 align-middle text-base font-normal text-muted">{p.pronouns}</span>}
           </h1>
+          {p.username && <div className="text-[15px] text-muted">@{p.username}</div>}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted">
             <AccountBadge type={p.accountType} />
             {creator && <span>Posts for {p.creatorOrgName ?? "themselves"}</span>}
@@ -91,7 +98,7 @@ function Profile({ data, tab, setTab }: { data: NonNullable<ReturnType<typeof us
           <Stat n={data.upcoming.length} label="Going" />
           <Stat n={data.past.length} label="Attended" />
           {creator && <Stat n={data.hosting.length} label="Hosting" />}
-          <Stat n={p.friendsCount} label="Friends" icon={<Users size={12} />} />
+          <Stat n={p.friendsCount} label="Friends" icon={<Users size={12} />} onClick={onFind} />
         </div>
       </section>
 
@@ -115,13 +122,16 @@ function Profile({ data, tab, setTab }: { data: NonNullable<ReturnType<typeof us
   );
 }
 
-function Stat({ n, label, icon }: { n: number; label: string; icon?: React.ReactNode }) {
-  return (
-    <div className="border-r border-line px-2 py-3.5 last:border-r-0">
+function Stat({ n, label, icon, onClick }: { n: number; label: string; icon?: React.ReactNode; onClick?: () => void }) {
+  const inner = (
+    <>
       <div className="text-xl font-semibold tracking-tight">{n}</div>
       <div className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted">{icon}{label}</div>
-    </div>
+    </>
   );
+  return onClick
+    ? <button onClick={onClick} title="See and find friends" className="border-r border-line px-2 py-3.5 transition-colors last:border-r-0 hover:bg-surface">{inner}</button>
+    : <div className="border-r border-line px-2 py-3.5 last:border-r-0">{inner}</div>;
 }
 
 function EventCard({ e, mode }: { e: EventView; mode: Tab }) {

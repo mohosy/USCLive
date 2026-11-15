@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpen, CalendarDays, ChevronDown, House, LayoutDashboard, LogOut, Moon, Navigation, Plus, Settings, Sun, Sunrise, Sunset, UserRound } from "lucide-react";
+import { Bell, BookOpen, CalendarDays, ChevronDown, House, LayoutDashboard, LogOut, Moon, Navigation, Plus, Settings, Sun, Sunrise, Sunset, UserPlus, UserRound } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -22,6 +22,7 @@ import InboxModal from "./InboxModal";
 import type { Camera, MapLayers } from "./MapView";
 import MenuPanel from "./MenuPanel";
 import SignIn, { clearSession, loadSession, signIn } from "./SignIn";
+import FindFriends from "./FindFriends";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
@@ -49,6 +50,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false); // the side panel: pushes the map on desktop, bottom sheet on phones
   const [signedIn, setSignedIn] = useState<boolean | null>(null); // null while the saved session is being checked
   const [accountOpen, setAccountOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false); // Find friends sheet
   const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
@@ -325,12 +327,13 @@ export default function App() {
                     <Avatar initials={state.me.avatar} photo={state.me.photo} size={44} />
                     <div className="min-w-0">
                       <div className="truncate text-[14px] font-semibold">{state.me.name}{state.me.pronouns && <span className="ml-1.5 text-xs font-normal text-muted">({state.me.pronouns})</span>}</div>
-                      <div className="truncate text-[12px] text-muted">{state.me.major || SCHOOLS.find((x) => x.id === state.me.school)?.name}</div>
+                      <div className="truncate text-[12px] text-muted">{state.me.username ? `@${state.me.username}` : state.me.major || SCHOOLS.find((x) => x.id === state.me.school)?.name}</div>
                       <AccountBadge type={state.me.accountType} className="mt-1" />
                     </div>
                   </div>
                   <div className="menu-sep" />
                   <Link href="/profile" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><UserRound size={16} className="text-muted" /> View profile</Link>
+                  <button onClick={() => { setAccountOpen(false); setFindOpen(true); }} className="menu-item text-[14px]"><UserPlus size={16} className="text-muted" /> Find friends</button>
                   <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><Settings size={16} className="text-muted" /> Settings</Link>
                   <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><LayoutDashboard size={16} className="text-muted" /> Organizer dashboard</Link>
                   <div className="menu-sep" />
@@ -341,6 +344,7 @@ export default function App() {
           )}
         </div>
       </header>
+      {findOpen && <FindFriends me={state?.me.username} onClose={() => setFindOpen(false)} onChanged={refresh} />}
 
       <div className="absolute inset-0">
         {/* Sidebar */}
@@ -370,7 +374,7 @@ export default function App() {
             ) : openAlert ? (
               <AlertDetail alert={openAlert} now={now} onClose={closeDetail} />
             ) : event ? (
-              <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
+              <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (

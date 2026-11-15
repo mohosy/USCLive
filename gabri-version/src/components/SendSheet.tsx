@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Link2, Mail, MessageCircle, Send, Share, X } from "lucide-react";
+import { Check, Link2, Mail, MessageCircle, Search, Send, Share, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 import { fmtWhen, type EventView, type MeView } from "@/lib/client-types";
 import { Avatar, Button, cx } from "./ui";
@@ -13,9 +13,10 @@ const firstNames = (fs: Friend[]) => {
 };
 
 /** iOS-style share sheet for an event: pick friends and send, or share a link anywhere. */
-export default function SendSheet({ ev, friends, onSend, onClose }: {
-  ev: EventView; friends: Friend[]; onSend: (userIds: string[]) => Promise<void>; onClose: () => void;
+export default function SendSheet({ ev, friends, onSend, onFindFriends, onClose }: {
+  ev: EventView; friends: Friend[]; onSend: (userIds: string[]) => Promise<void>; onFindFriends: () => void; onClose: () => void;
 }) {
+  const [filter, setFilter] = useState("");
   const [sel, setSel] = useState<string[]>([]);
   const [sent, setSent] = useState<string[]>([]);
   const [last, setLast] = useState<Friend[]>([]);
@@ -27,6 +28,8 @@ export default function SendSheet({ ev, friends, onSend, onClose }: {
   const blurb = `${ev.title} · ${fmtWhen(ev.start, ev.end)}${ev.buildingName ? ` at ${ev.buildingName}` : ""}`;
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const picked = friends.filter((f) => sel.includes(f.id));
+  const f = filter.trim().toLowerCase().replace(/^@+/, "");
+  const shown = f ? friends.filter((x) => x.username.startsWith(f) || x.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(f))) : friends;
 
   async function send() {
     setBusy(true); setErr("");
@@ -51,9 +54,16 @@ export default function SendSheet({ ev, friends, onSend, onClose }: {
         <button onClick={onClose} aria-label="Close" className="grid h-6 w-6 place-items-center rounded-full text-muted hover:bg-surface hover:text-foreground"><X size={14} /></button>
       </div>
 
+      {friends.length > 9 && (
+        <div className="relative mt-2.5">
+          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search friends" autoCapitalize="none" spellCheck={false}
+            className="w-full rounded-full border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] outline-none focus:bg-white" />
+        </div>
+      )}
       {friends.length ? (
-        <div className="mt-3 grid grid-cols-5 gap-1">
-          {friends.map((f) => {
+        <div className="mt-3 grid max-h-[232px] grid-cols-5 gap-1 overflow-y-auto">
+          {shown.map((f) => {
             const on = sel.includes(f.id), done = sent.includes(f.id);
             return (
               <button key={f.id} disabled={done} aria-pressed={on}
@@ -71,9 +81,16 @@ export default function SendSheet({ ev, friends, onSend, onClose }: {
               </button>
             );
           })}
+          <button onClick={onFindFriends} title="Find friends by @username" className="flex flex-col items-center gap-1 rounded-xl py-1.5 hover:bg-surface">
+            <span className="grid h-10 w-10 place-items-center rounded-full border border-dashed border-foreground/25 text-muted"><UserPlus size={16} /></span>
+            <span className="text-[11px] text-muted">Find</span>
+          </button>
         </div>
       ) : (
-        <p className="mt-2 text-xs text-muted">Add friends to send them events. You can still share a link below.</p>
+        <div className="mt-2 rounded-xl bg-surface p-3 text-center">
+          <p className="text-xs text-muted">Add friends by @username to send them events.</p>
+          <button onClick={onFindFriends} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"><UserPlus size={13} /> Find friends</button>
+        </div>
       )}
 
       {friends.length > 0 && (
