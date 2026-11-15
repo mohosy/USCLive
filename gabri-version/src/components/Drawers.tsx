@@ -137,16 +137,33 @@ export function BuildingDetail({ id, loc, now, tick, onClose, onOpenEvent }: { i
             <div className="flex items-center gap-1.5 text-sm font-medium capitalize"><LevelDot level={h.level} />{h.suppressed ? "Very quiet" : h.level}</div>
             <div className="text-xs text-muted">{h.suppressed ? "Fewer than 5 people" : `About ${h.count} people · ${h.ratio.toFixed(1)}x usual`}</div>
           </div>
-          <div className="mt-3 flex h-20 items-end gap-[3px]">
-            {mine?.curve.slice(6).map((c) => (
-              <div key={c.hour} className="relative h-full flex-1" title={`${c.hour}:00 · typical ${c.typical}${c.today != null ? ` · today ${c.today}` : ""}`}>
-                <div className="absolute bottom-0 w-full rounded-sm bg-surface" style={{ height: `${(c.typical / max) * 100}%` }} />
-                {c.today != null && <div className={cx("absolute bottom-0 left-[20%] w-[60%] rounded-sm", c.hour === nowH ? "bg-cardinal" : "bg-foreground/30")} style={{ height: `${(c.today / max) * 100}%` }} />}
-              </div>
-            ))}
+          <div className="relative mt-3 h-20">
+            {/* today so far: solid bars (this hour in cardinal) */}
+            <div className="absolute inset-0 flex items-end gap-[3px]">
+              {mine?.curve.slice(6).map((c) => (
+                <div key={c.hour} className="relative h-full flex-1" title={`${c.hour}:00 · usually ${c.typical}${c.today != null ? ` · today ${c.today}` : ""}`}>
+                  {c.today != null && <div className={cx("absolute bottom-0 left-[12%] w-[76%] rounded-sm", c.hour === nowH ? "bg-cardinal" : "bg-foreground/25")} style={{ height: `${(c.today / max) * 100}%` }} />}
+                </div>
+              ))}
+            </div>
+            {/* how busy it usually is: a dotted line through the day */}
+            {mine && (() => {
+              const pts = mine.curve.slice(6);
+              const n = pts.length;
+              const line = pts.map((c, i) => `${((i + 0.5) / n) * 100},${100 - (c.typical / max) * 100}`).join(" ");
+              return (
+                <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline points={line} fill="none" stroke="#6e6e73" strokeWidth="1.6" strokeDasharray="1 3.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                </svg>
+              );
+            })()}
           </div>
           <div className="mt-1 flex justify-between text-[10px] text-muted"><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span></div>
-          <div className="mt-1 text-[11px] text-muted">Light bars: typical. Dark bars: today.</div>
+          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted">
+            <span className="inline-flex items-center gap-1.5"><svg width="16" height="4" aria-hidden="true"><line x1="1" y1="2" x2="15" y2="2" stroke="#6e6e73" strokeWidth="1.6" strokeDasharray="1 3.2" strokeLinecap="round" /></svg> Usually</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-1.5 rounded-sm bg-foreground/25" /> Today</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-1.5 rounded-sm bg-cardinal" /> Now</span>
+          </div>
         </div>
       )}
 
