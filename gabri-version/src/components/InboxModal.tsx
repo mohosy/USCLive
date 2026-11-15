@@ -16,14 +16,14 @@ const KIND: Record<string, { label: string; tone: "neutral" | "food" | "live" | 
   ignore: { label: "Skipped", tone: "neutral" },
 };
 
-export default function InboxModal({ open, onClose, onChanged }: { open: boolean; onClose: () => void; onChanged: () => void }) {
+export default function InboxModal({ open, onClose, onChanged, embedded = false }: { open: boolean; onClose: () => void; onChanged: () => void; embedded?: boolean }) {
   const [items, setItems] = useState<(InboxItem & { scanned: boolean })[]>([]);
   const [results, setResults] = useState<ScanT["items"]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [ical, setIcal] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
-  useEffect(() => { if (open) api<{ items: (InboxItem & { scanned: boolean })[] }>("/api/inbox").then((r) => setItems(r.items)); }, [open]);
+  useEffect(() => { if (open) api<{ items: (InboxItem & { scanned: boolean })[] }>("/api/inbox").then((r) => setItems(r.items)).catch(() => setMsg("Could not load your inbox. Close and reopen it to try again.")); }, [open]);
 
   async function scan() {
     setBusy("scan"); setMsg(null);
@@ -57,10 +57,9 @@ export default function InboxModal({ open, onClose, onChanged }: { open: boolean
   const byId = Object.fromEntries(results.map((r) => [r.inboxId, r]));
   const allScanned = items.length > 0 && items.every((i) => i.scanned);
 
-  return (
-    <Modal open={open} onClose={onClose} title="Inbox" wide>
+  const content = (
       <div className="space-y-5">
-        <div className="flex items-center justify-between gap-4">
+        <div className={embedded ? "flex flex-col items-start gap-3" : "flex items-center justify-between gap-4"}>
           <p className="text-sm text-muted">Finds events, deadlines and invites in your email, Brightspace and calendar, and flags phishing. Connected to demo accounts.</p>
           <Button className="shrink-0" disabled={!!busy || allScanned} onClick={scan}>{busy === "scan" ? "Scanning..." : allScanned ? "Scanned" : "Scan inbox"}</Button>
         </div>
@@ -83,7 +82,7 @@ export default function InboxModal({ open, onClose, onChanged }: { open: boolean
           })}
         </ul>
 
-        <div className="grid grid-cols-2 gap-6 border-t border-line pt-4">
+        <div className={`grid gap-6 border-t border-line pt-4 ${embedded ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
           <div className="space-y-2">
             <div className="text-sm font-medium">Brightspace calendar</div>
             <p className="text-xs text-muted">In Brightspace, open Calendar, choose Subscribe and paste the link here. Any .ics link works.</p>
@@ -100,6 +99,6 @@ export default function InboxModal({ open, onClose, onChanged }: { open: boolean
         </div>
         {msg && <p className="text-sm text-muted">{msg}</p>}
       </div>
-    </Modal>
   );
+  return embedded ? (open ? content : null) : <Modal open={open} onClose={onClose} title="Inbox" wide>{content}</Modal>;
 }

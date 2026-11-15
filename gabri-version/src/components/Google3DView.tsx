@@ -12,6 +12,8 @@ import { iconCanvas, iconKey, ICON_PX } from "@/lib/eventIcons";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
 import { RotateCcw, RotateCw, Compass } from "lucide-react";
+import type { CampusWeather } from "@/lib/weather";
+import WeatherEffects from "./weather/WeatherEffects";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { calloutHTML } from "@/lib/calloutHtml";
@@ -55,6 +57,7 @@ const GROUND_Z = -30;
 const hex = (h: string, a = 255): [number, number, number, number] => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
 interface Props {
+  weather: CampusWeather;
   /** false while it pre-loads hidden behind Explore: no ground measuring */
   active?: boolean;
   events: EventView[];
@@ -712,11 +715,12 @@ export default function Google3DView(props: Props) {
   return (
     <div className="absolute inset-0">
       <div ref={el} className="absolute inset-0" />
-      <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" />
+      <WeatherEffects weather={props.weather} active={props.active !== false} />
+      <div ref={overlay} className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" />
       <div className="pointer-events-none absolute bottom-2 right-14 z-10 max-w-[60%] truncate rounded bg-white/80 px-2 py-0.5 text-[10px] text-gray-700">
         <span className="font-semibold">Google</span>{credits ? ` · ${credits}` : ""}
       </div>
-      <div className="absolute bottom-10 right-3 z-10 flex flex-col overflow-hidden rounded-lg border border-line bg-white shadow-sm">
+      <div className="satellite-controls absolute bottom-10 right-3 z-10 flex flex-col overflow-hidden rounded-lg border border-line bg-white shadow-sm">
         <button onClick={() => rotate(-45)} className="p-2 text-foreground hover:bg-surface" title="Rotate left"><RotateCcw size={16} /></button>
         <button onClick={resetNorth} className="border-y border-line p-2 text-foreground hover:bg-surface" title="Reset view"><Compass size={16} /></button>
         <button onClick={() => rotate(45)} className="p-2 text-foreground hover:bg-surface" title="Rotate right"><RotateCw size={16} /></button>

@@ -1,6 +1,8 @@
 "use client";
 
 import mapboxgl from "mapbox-gl";
+import type { CampusWeather } from "@/lib/weather";
+import WeatherEffects from "./weather/WeatherEffects";
 import type { Feature, FeatureCollection } from "geojson";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
@@ -48,6 +50,7 @@ export interface Camera { longitude: number; latitude: number; zoom: number; pit
 export interface MapLayers { events: boolean; hotspots: boolean; columns: boolean; places: boolean }
 
 interface Props {
+  weather: CampusWeather;
   events: EventView[];
   hotspots: Hotspot[];
   buildings: Building[];
@@ -338,7 +341,7 @@ export default function MapView(props: Props) {
       container: el.current,
       accessToken: TOKEN,
       style: s.url,
-      config: { basemap: { ...s.config, ...placeConfig(styleRef.current, props.layers.places) } },
+      config: { basemap: { ...s.config, ...placeConfig(styleRef.current, props.layers.places), lightPreset: props.weather.isDay ? "day" : "night" } },
       center: intro ? [props.me.lng, props.me.lat] : props.initialCamera ? [props.initialCamera.longitude, props.initialCamera.latitude] : USC_CENTER,
       zoom: intro ? 14.6 : props.initialCamera?.zoom ?? 16.4,
       minZoom: intro ? 14 : 15,
@@ -421,8 +424,18 @@ export default function MapView(props: Props) {
     styleRef.current = props.mapStyle;
     ready.current = false;
     const s = STYLES[props.mapStyle];
-    m.setStyle(s.url, { config: { basemap: { ...s.config, ...placeConfig(props.mapStyle, cb.current.layers.places) } } } as unknown as Parameters<mapboxgl.Map["setStyle"]>[1]);
+    m.setStyle(s.url, { config: { basemap: { ...s.config, ...placeConfig(props.mapStyle, cb.current.layers.places), lightPreset: cb.current.weather.isDay ? "day" : "night" } } } as unknown as Parameters<mapboxgl.Map["setStyle"]>[1]);
   }, [props.mapStyle]);
+
+  // Change only Standard's lighting; keep all event, crowd and DPS layers intact.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const apply = () => m.setConfigProperty("basemap", "lightPreset", props.weather.isDay ? "day" : "night");
+    if (ready.current) apply();
+    m.on("style.load", apply);
+    return () => { m.off("style.load", apply); };
+  }, [props.weather.isDay]);
 
   // data -> sources (only touch the GPU when something actually changed)
   useEffect(() => {
@@ -559,6 +572,7 @@ export default function MapView(props: Props) {
   return (
     <div className="absolute inset-0">
       <div ref={el} className="h-full w-full" />
+      <WeatherEffects weather={props.weather} />
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}
