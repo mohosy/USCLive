@@ -14,6 +14,10 @@
   --foreground: #1d1d1f;
   --muted: #6e6e73;
   --line: rgba(0, 0, 0, 0.08);
+  /* the light glass of the chat box, shared by the tab bar, bell and dropdowns */
+  --glass: rgba(255, 255, 255, 0.3);
+  --glass-blur: blur(8px);
+  --glass-shadow: 0 3px 14px rgba(30, 20, 20, 0.07);
   --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", var(--font-geist-sans), system-ui, sans-serif;
 }
 
@@ -215,15 +219,15 @@ html, body {
 .map-menu-button:hover, .map-menu-button[aria-expanded="true"] { background: rgba(255,255,255,0.9); }
 /* Top-right: the cardinal initials button (gold dot = unread notifications) and the account panel it opens */
 .account-area { position: absolute; right: 24px; top: calc(20px + var(--sat)); z-index: 35; display: flex; align-items: center; gap: 10px; }
-.map-bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.92); color: #1d1d1f; box-shadow: 0 4px 14px rgba(20,20,30,0.16); border: 0.5px solid rgba(0,0,0,0.08); }
-.map-bell:hover { background: #fff; }
+.map-bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: #1d1d1f; box-shadow: var(--glass-shadow); }
+.map-bell:hover { background: rgba(255,255,255,0.5); }
 .bell-unread { position: absolute; right: 8px; top: 8px; width: 9px; height: 9px; background: var(--cardinal); border: 2px solid #fff; border-radius: 50%; }
 .map-profile { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--cardinal); color: #fff; font-size: 14.5px; font-weight: 650; box-shadow: 0 4px 14px rgba(65,0,0,0.22); cursor: pointer; }
 .map-profile::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
 .map-profile:hover { background: var(--cardinal-hover); }
 .profile-unread { position: absolute; right: -1px; top: -1px; width: 8px; height: 8px; background: var(--gold); border: 2px solid var(--cardinal); border-radius: 50%; }
 /* see-through, Apple style: 70% white, a light 8px blur (heavier blurs slow the map), thin white border, soft shadow */
-.account-panel { position: absolute; right: 0; top: 46px; width: 280px; max-width: calc(100vw - 32px); overflow: hidden; border-radius: 16px; background: rgba(255,255,255,0.7); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.75); box-shadow: 0 10px 36px rgba(30,20,20,0.18); }
+.account-panel { position: absolute; right: 0; top: 46px; width: 280px; max-width: calc(100vw - 32px); overflow: hidden; border-radius: 16px; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); }
 .account-panel .text-muted { color: #47474d; }
 .account-tabs { display: flex; flex-direction: column; padding: 4px 8px 10px; gap: 2px; border-bottom: 1px solid rgba(0,0,0,0.1); }
 .account-tabs [role="tab"] { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 40px; padding: 9px 12px; font-size: 13px; font-weight: 550; color: #47474d; border-radius: 9px; cursor: pointer; }
@@ -251,7 +255,7 @@ html, body {
 .dock-search-row { display: flex; align-items: center; gap: 12px; pointer-events: none; }
 .dock-search-row > * { pointer-events: auto; }
 .campus-chat { position: relative; flex: 1 1 100%; min-width: 0; }
-.campus-search { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px 8px 20px; background: rgba(255,255,255,0.3); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-radius: 16px; box-shadow: 0 3px 14px rgba(30,20,20,0.07); transition: background-color 180ms ease, box-shadow 180ms ease, backdrop-filter 180ms ease; }
+.campus-search { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px 8px 20px; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-radius: 16px; box-shadow: var(--glass-shadow); transition: background-color 180ms ease, box-shadow 180ms ease, backdrop-filter 180ms ease; }
 .campus-search:hover { background: rgba(255,255,255,0.5); }
 .campus-search:focus-within { background: rgba(255,255,255,0.98); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 6px 24px rgba(30,20,20,0.16); }
 .search-icon { flex-shrink: 0; color: var(--cardinal); }
@@ -286,6 +290,10 @@ html, body {
   clip-path: inset(0 0 calc(100% - 50px) 0 round 18px); transition: clip-path 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .side-open { clip-path: inset(0 0 0 0 round 18px); }
 .side-inner { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; background: rgba(255,255,255,0.97); box-shadow: 0 8px 28px rgba(30,20,20,0.14); }
+/* folded: just the tab bar, in the same light glass as the chat box at the bottom */
+.side:not(.side-open) .side-inner { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); }
+.side:not(.side-open) .side-bar { border-bottom-color: transparent; }
+.side-inner { transition: background-color 0.3s ease; }
 .side-bar { display: flex; align-items: center; gap: 2px; flex-shrink: 0; height: 50px; padding: 0 6px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
 .side-tab { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 999px; font-size: 13.5px; font-weight: 550; color: #1d1d1f; white-space: nowrap; }
 .side-tab:hover { background: rgba(0,0,0,0.05); }
@@ -373,9 +381,9 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { position: absolute; top: calc(90px + var(--sat)); right: 24px; z-index: 10; display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px 0 12px; border-radius: 999px;
-  background: rgba(255,255,255,0.9); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
-  border: 0.5px solid rgba(0,0,0,0.08); box-shadow: 0 4px 16px rgba(20,20,30,0.12); color: #1d1d1f; white-space: nowrap; }
+.weather-pill { position: absolute; top: calc(22px + var(--sat)); right: 124px; z-index: 10; display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px 0 12px; border-radius: 999px;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; }
 .weather-sun { color: #e8a200; }
 .weather-temperature { font-size: 16px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
