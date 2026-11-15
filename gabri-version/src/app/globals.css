@@ -276,7 +276,7 @@ html, body {
 .dock-options > .chip-row { min-height: 0; overflow-y: hidden; }
 .dock-options-open { grid-template-rows: 1fr; opacity: 1; transform: none; }
 /* locate: a glass circle right above the zoom / rotate column (centered on its 33px width) */
-.map-locate { position: absolute; right: 24px; bottom: 166px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
+.map-locate { position: absolute; right: 24px; bottom: 224px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
 .map-locate:hover { background: rgba(255,255,255,0.5); }
 .dock-search-row > * { pointer-events: auto; }
@@ -487,7 +487,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
   .map-app { --dock-lift: max(0px, var(--sab) - 12px); }
   .map-controls { bottom: calc(210px + var(--dock-lift)); }
   .map-app .mapboxgl-ctrl-bottom-right { bottom: calc(198px + var(--dock-lift)); }
-  .map-locate { bottom: calc(364px + var(--dock-lift)); right: 16px; }
+  .map-locate { bottom: calc(422px + var(--dock-lift)); right: 16px; }
   .map-app .mapboxgl-ctrl-bottom-right { right: 16px; }
   .map-app .satellite-credit { bottom: calc(212px + var(--dock-lift)); }
 }
@@ -651,3 +651,5 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .play-ic { display: grid; place-items: center; width: 100%; height: 100%; }
 .play-ic svg { transition: transform 0.15s ease; }
 .play-ctrl button:hover .play-ic svg { transform: scale(1.1) rotate(-4deg); }
+/* the play button shares the column's right edge (locate, zoom, play stack on one line) */
+.mapboxgl-ctrl-group.play-ctrl { margin-right: 0 !important; }
