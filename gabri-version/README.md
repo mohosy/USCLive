@@ -73,12 +73,15 @@ What is real, what only opens another site, and what would need USC.
 - Adding a registered event to your Google Calendar. The Google connection here is read-only.
 
 **Demo data and limits**
-- People, orgs and events are fictional seed data. Six seed events take registrations (four native, one Handshake,
-  one Engage); the seeded "going" lists count as registered so the numbers add up.
+- The orgs are real USC orgs and offices (names, descriptions, sites and logos from the EngageSC directory and each
+  org's own site, in `src/lib/orgs.ts`). The people, the events and every headcount are made-up demo data: these orgs
+  are not hosting these events and have not endorsed USCLive.
+- 21 seed events take registrations (17 in the app, three on Handshake, one on Engage); the seeded "going" lists
+  count as registered so the numbers add up.
 - Storage follows the rest of the app: memory locally, the single Supabase state row when Supabase is configured.
   `supabase/migrations/20261114_event_registrations.sql` defines proper tables for registrations, but **the app does
   not read those tables yet**.
-- Sign-in is still the demo sign-in (a usc.edu email, no password), so "signed-in user only" is as strong as that.
+- Sign-in is Google, or the shared demo student (no password), so "signed-in user only" is as strong as that.
 - The rate limit is kept in one server's memory; on a host running several copies each copy counts separately.
 - Run the rule checks with `node scripts/check-registration.mjs`.
 
@@ -89,6 +92,6 @@ What is real, what only opens another site, and what would need USC.
 - Scraper only fetches `https://*.usc.edu`; iCal import blocks localhost/IPs (SSRF guard).
 
 ## Demo data
-All people, orgs and events are fictional and generated relative to "now" (`src/lib/seed.ts`). Building coordinates are approximate.
+The orgs are real USC orgs and offices, taken from the EngageSC directory and each org's own site (`src/lib/orgs.ts`). The people, the events they appear to host and all headcounts are fictional demo data, generated relative to "now" (`src/lib/seed.ts`); no org listed here is hosting these events or has endorsed USCLive. Building coordinates are approximate.
 In-memory store — resets when the server restarts.
 Event photos on the map are freely licensed (Creative Commons / public domain) from Wikimedia Commons, matched to events by what they are (`src/lib/eventPhotos.ts`); credits at `/credits`.
