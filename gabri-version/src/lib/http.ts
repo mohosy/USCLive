@@ -36,7 +36,21 @@ export function safeExternalUrl(raw: string, allowHosts?: RegExp): URL | null {
 export async function fetchText(u: URL, maxBytes = 2_000_000) {
   const res = await fetch(u, { headers: { "User-Agent": "USCLive/0.1 (student hackathon project)" }, signal: AbortSignal.timeout(12_000), redirect: "follow" });
   if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength > maxBytes) throw new Error("Response too large");
+  if (Number(res.headers.get("content-length") ?? 0) > maxBytes) { void res.body?.cancel(); throw new Error("Response too large"); }
+  // read in chunks and stop the moment it's over the limit (the header can be missing or wrong)
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) { void reader.cancel(); throw new Error("Response too large"); }
+    chunks.push(value);
+  }
+  const buf = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) { buf.set(c, at); at += c.byteLength; }
   return new TextDecoder().decode(buf);
 }

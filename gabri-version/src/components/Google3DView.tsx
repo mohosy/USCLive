@@ -613,10 +613,17 @@ export default function Google3DView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // rebuild the 3D layers only when what they draw actually changed (a 20s refresh usually changes nothing)
+  const drawn = useRef("");
   useEffect(() => {
+    const sig = JSON.stringify([props.events, props.me, props.selectedEventId, props.highlightIds, props.alerts, props.hotspots, props.showHeat]);
+    if (sig === drawn.current && props.buildings === lastBuildings.current) return;
+    drawn.current = sig;
+    lastBuildings.current = props.buildings;
     deck.current?.setProps({ layers: layers() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.events, props.buildings, props.me, props.selectedEventId, props.highlightIds, props.alerts, props.hotspots, props.showHeat]);
+  const lastBuildings = useRef<Building[] | null>(null);
 
   // HTML bubbles (same as Explore): create/update/remove by id, then position on every frame
   useEffect(() => {

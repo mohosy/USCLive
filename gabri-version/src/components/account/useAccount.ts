@@ -16,6 +16,7 @@ export interface ProfileView {
   school: SchoolId;
   major: string;
   year: string;
+  verified: boolean;
   interests: string[];
   accountType: "student" | "creator";
   creatorOrgId: string | null;

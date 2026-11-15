@@ -15,14 +15,21 @@ interface NowRes {
   leaveBy: string | null;
 }
 
+/** Suggestions are reused for a few minutes (and across tab switches) instead of re-asking the AI each time. */
+const TTL = 4 * 60_000;
+let cache: { key: string; at: number; res: NowRes } | null = null;
+
 const ACTION_LABEL: Record<string, string> = { join: "Join", go: "Go", study: "View", eat: "Join", rest: "View", prep: "View" };
 
-export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRsvp, compact }: {
+export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRsvp, compact, active = true }: {
   state: AppState; loc: Loc; onOpenEvent: (id: string) => void; onOpenBuilding: (id: string) => void; onRsvp: (id: string) => Promise<void>;
+  /** only fetch while the panel is on screen */
+  active?: boolean;
   /** only the "Right now" suggestions (the Home tab shows the schedule itself) */
   compact?: boolean;
 }) {
-  const [res, setRes] = useState<NowRes | null>(null);
+  const key = `${loc.lat},${loc.lng},${loc.label}`;
+  const [res, setRes] = useState<NowRes | null>(() => (cache?.key === key ? cache.res : null));
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -30,7 +37,9 @@ export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRs
     setLoading(true);
     setErr(null);
     try {
-      setRes(await api<NowRes>("/api/ai/now", { json: { lat: loc.lat, lng: loc.lng, label: loc.label } }));
+      const r = await api<NowRes>("/api/ai/now", { json: { lat: loc.lat, lng: loc.lng, label: loc.label } });
+      cache = { key: `${loc.lat},${loc.lng},${loc.label}`, at: Date.now(), res: r };
+      setRes(r);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -39,9 +48,11 @@ export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRs
   }, [loc.lat, loc.lng, loc.label]);
 
   useEffect(() => {
-    const t = setTimeout(run, 0);
+    if (!active) return;
+    const fresh = cache?.key === key && Date.now() - cache.at < TTL;
+    const t = setTimeout(() => (fresh ? setRes(cache!.res) : run()), 0);
     return () => clearTimeout(t);
-  }, [run]);
+  }, [run, active, key]);
 
   const eventsById = Object.fromEntries(state.events.map((e) => [e.id, e])) as Record<string, EventView>;
   const now = new Date(state.now);

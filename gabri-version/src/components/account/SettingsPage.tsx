@@ -161,8 +161,8 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
         <div className="divide-y divide-line rounded-xl border border-line">
           <Locked label="Email" value={initial.email || "—"} />
           <Locked label="School" value={school} />
-          <Locked label="Major" value={initial.major} />
-          <Locked label="Year" value={initial.year} />
+          {initial.major && <Locked label="Major" value={initial.major} />}
+          {initial.year && <Locked label="Year" value={initial.year} />}
         </div>
       </Card>
 
@@ -222,7 +222,7 @@ function Locked({ label, value }: { label: string; value: string }) {
     <div className="flex items-center gap-3 px-3.5 py-2.5 text-sm">
       <div className="w-16 shrink-0 text-muted">{label}</div>
       <div className="min-w-0 flex-1 truncate">{value}</div>
-      <Lock size={13} className="shrink-0 text-muted" aria-label="Verified by USC" />
+      <Lock size={13} className="shrink-0 text-muted" aria-label="Set at sign-up" />
     </div>
   );
 }

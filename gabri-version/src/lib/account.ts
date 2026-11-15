@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { initialsOf, INTERESTS } from "./directory";
-import { ORGS } from "./seed";
+import { ORGS } from "./orgs";
 import type { User } from "./types";
 
 export const PRONOUNS = ["she/her", "he/him", "they/them", "she/they", "he/they"];
@@ -36,6 +36,13 @@ export function applyProfile(u: User, p: ProfilePatch) {
   if (p.accountType !== undefined) u.accountType = p.accountType;
   if (p.creatorOrgId !== undefined) u.creatorOrgId = p.creatorOrgId && ORGS.some((o) => o.id === p.creatorOrgId) ? p.creatorOrgId : undefined;
   if (u.accountType !== "creator") u.creatorOrgId = undefined;
+}
+
+/** Short stable hash of the photo, so its URL changes only when the photo does (lets the browser cache it). */
+export function photoVersion(dataUrl: string) {
+  let h = 0;
+  for (let i = 0; i < dataUrl.length; i += 7) h = (h * 31 + dataUrl.charCodeAt(i)) >>> 0;
+  return `${h.toString(36)}${dataUrl.length.toString(36)}`;
 }
 
 export const isCreator = (u: User) => u.accountType === "creator";

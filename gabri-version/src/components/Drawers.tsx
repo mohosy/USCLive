@@ -108,10 +108,16 @@ interface BuildingRes { building: Building; hotspot?: Hotspot; curve: { hour: nu
 
 export function BuildingDetail({ id, loc, now, tick, onClose, onOpenEvent }: { id: string; loc: Loc; now: Date; tick: number; onClose: () => void; onOpenEvent: (id: string) => void }) {
   const [data, setData] = useState<BuildingRes | null>(null);
-  useEffect(() => { api<BuildingRes>(`/api/buildings/${id}`).then(setData).catch(() => {}); }, [id, tick]);
-  const b = data?.building ?? BUILDING_BY_ID[id];
-  const h = data?.hotspot;
-  const max = data ? Math.max(...data.curve.map((c) => Math.max(c.typical, c.today ?? 0)), 1) : 1;
+  // a slower answer for a building you already clicked away from must not overwrite the current one
+  useEffect(() => {
+    let current = true;
+    api<BuildingRes>(`/api/buildings/${id}`).then((d) => { if (current) setData(d); }).catch(() => {});
+    return () => { current = false; };
+  }, [id, tick]);
+  const mine = data?.building.id === id ? data : null; // never show the previous building's numbers
+  const b = mine?.building ?? BUILDING_BY_ID[id];
+  const h = mine?.hotspot;
+  const max = mine ? Math.max(...mine.curve.map((c) => Math.max(c.typical, c.today ?? 0)), 1) : 1;
   const nowH = now.getHours();
 
   return (
@@ -128,7 +134,7 @@ export function BuildingDetail({ id, loc, now, tick, onClose, onOpenEvent }: { i
             <div className="text-xs text-muted">{h.suppressed ? "Fewer than 5 people" : `About ${h.count} people · ${h.ratio.toFixed(1)}x usual`}</div>
           </div>
           <div className="mt-3 flex h-20 items-end gap-[3px]">
-            {data?.curve.slice(6).map((c) => (
+            {mine?.curve.slice(6).map((c) => (
               <div key={c.hour} className="relative h-full flex-1" title={`${c.hour}:00 · typical ${c.typical}${c.today != null ? ` · today ${c.today}` : ""}`}>
                 <div className="absolute bottom-0 w-full rounded-sm bg-surface" style={{ height: `${(c.typical / max) * 100}%` }} />
                 {c.today != null && <div className={cx("absolute bottom-0 left-[20%] w-[60%] rounded-sm", c.hour === nowH ? "bg-cardinal" : "bg-foreground/30")} style={{ height: `${(c.today / max) * 100}%` }} />}
@@ -144,8 +150,8 @@ export function BuildingDetail({ id, loc, now, tick, onClose, onOpenEvent }: { i
 
       <h3 className="mt-6 text-sm font-semibold">Events here</h3>
       <div className="-mx-2 mt-1">
-        {data?.events.map((e) => <EventRow key={e.id} e={e} loc={loc} now={now} onOpen={() => onOpenEvent(e.id)} />)}
-        {data && !data.events.length && <p className="px-2 py-3 text-sm text-muted">Nothing scheduled.</p>}
+        {mine?.events.map((e) => <EventRow key={e.id} e={e} loc={loc} now={now} onOpen={() => onOpenEvent(e.id)} />)}
+        {mine && !mine.events.length && <p className="px-2 py-3 text-sm text-muted">Nothing scheduled.</p>}
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
 import { connection } from "next/server";
 import { aiEnabled } from "@/lib/ai";
-import { BUILDINGS } from "@/lib/campus";
 import { computeHotspots } from "@/lib/hotspots";
 import { freeWindow, todaysClasses } from "@/lib/planner";
+import { photoVersion } from "@/lib/account";
 import { activeAlerts, canSee, db, getMe, getUser, orgs, publicEvent, syncDps } from "@/lib/store";
 
 
@@ -22,6 +22,8 @@ export async function GET() {
     aiEnabled: aiEnabled(),
     me: {
       ...me,
+      // the photo is served once as an image (cacheable), not re-sent inside every refresh
+      photo: me.photo ? `/api/profile/photo?v=${photoVersion(me.photo)}` : undefined,
       friends: me.friends.map((id) => {
         const u = getUser(id)!;
         return { id, name: u.name, avatar: u.avatar, school: u.school };
@@ -33,7 +35,6 @@ export async function GET() {
     events,
     hotspots: computeHotspots(d.events, now),
     alerts: activeAlerts(now),
-    buildings: BUILDINGS,
     orgs: orgs(),
     unread: d.notifications.filter((n) => !n.read).length,
   });

@@ -124,6 +124,8 @@ export interface User {
   orgs: string[];
   // account + profile (set at sign-in / in Settings)
   email?: string;
+  /** school/major come from the (demo) USC directory rather than what the student typed */
+  verified?: boolean;
   accountType?: AccountType;
   /** org a creator posts for (one of ORGS), or undefined = posts as themselves */
   creatorOrgId?: string;
