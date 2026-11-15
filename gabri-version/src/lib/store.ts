@@ -120,6 +120,7 @@ export function resetDb() {
     f.registrations = (old.registrations ?? []).filter((r) => f.events.some((e) => e.id === r.eventId));
     reapply(f.events, f.registrations);
     c.db = f;
+    g.__usclive = f; // without Supabase the memory copy is the data: replace it too, or the reset is lost
     return c.db;
   }
   g.__usclive = fresh();

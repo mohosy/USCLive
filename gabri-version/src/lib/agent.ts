@@ -303,7 +303,8 @@ async function runRules(text: string, me: User, loc: Loc, t: Turn): Promise<stri
       s.due_dates.length ? `Due this week: ${s.due_dates.slice(0, 3).map((d) => `${d.what} (${d.due})`).join(", ")}.` : ""].join(" ").trim();
   }
   const food = /\b(food|eat|hungry|pizza|snack)\b/i.test(q);
-  const words = q.replace(/\b(what'?s|whats|is|are|there|any|anything|happening|going on|tonight|today|now|near|me|events?)\b/gi, " ");
+  // "what's happening near me right now?" is a question about everything on, not a search for those words
+  const words = q.replace(/\b(what'?s|whats|what|is|are|there|any|anything|happening|going on|on|tonight|today|right|now|near|nearby|around|here|close|by|me|campus|events?)\b/gi, " ").replace(/[?!.,]/g, " ").replace(/\s+/g, " ").trim();
   const hits = TOOLS.search_events.run({ query: food ? "" : words, free_food: food, when: /tonight|today/i.test(q) ? "today" : /week/i.test(q) ? "week" : "today" }, me, loc, t) as { title: string; when: string; where: string }[];
   // the events show as cards under the reply, so the text stays short
   return hits.length ? `Here ${hits.length === 1 ? "is one" : `are ${Math.min(hits.length, 4)}`}${food ? " with free food" : ""}:` : "Nothing matching right now. Try 'free food', 'pickup', a class code, or 'take me to Leavey'.";
