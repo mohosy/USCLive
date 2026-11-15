@@ -404,6 +404,9 @@ export default function MapView(props: Props) {
   const ready = useRef(false);
   const styleRef = useRef<MapStyle>(props.mapStyle);
   const meMarker = useRef<mapboxgl.Marker | null>(null);
+  /** "you are here" is your Trojan, standing where you are (the blue dot only shows until the 3D engine has loaded) */
+  const meChar = useRef<import("./walk/WalkGuide").CharacterLayer | null>(null);
+  const placeMe = useRef<() => void>(() => {});
   const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC; alerts: FC; cams: FC; alertPts: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings), alerts: EMPTY, cams: EMPTY, alertPts: EMPTY });
   const bubbles = useRef(new Map<string, { m: mapboxgl.Marker; el: HTMLDivElement; html: string; c: Callout }>());
   const cb = useRef(props);
@@ -618,6 +621,7 @@ export default function MapView(props: Props) {
     updateCrowd();
     if (!sat) walkers.current?.install(m, cb.current.light ?? "day");
     walkRef.current?.install(); // keep an active walk alive across Map/Satellite switches
+    placeMe.current(); // your Trojan, after a style reload
   }
 
   useEffect(() => {
@@ -935,6 +939,7 @@ export default function MapView(props: Props) {
       void import("./walk/PlayMode").then(({ PlayMode }) => {
         if (map.current !== m || play.current) return;
         play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay, () => {});
+        placeMe.current(); // the play Trojan is you now: no second one standing at your location
         play.current.setLight(cb.current.light);
         // while playing, tap anywhere on the map (not on a pin or a bubble) to jump your Trojan there
         const jump = (e: mapboxgl.MapMouseEvent) => {
@@ -1052,6 +1057,42 @@ export default function MapView(props: Props) {
     }, 1000);
     return () => clearInterval(t);
   }, []);
+
+  // your Trojan where you are: sized like everyone else (real size up close, ~24px zoomed out), lit for the time of day
+  useEffect(() => {
+    placeMe.current = () => {
+      const m = map.current, c = meChar.current;
+      if (!m || !c || !ready.current) return;
+      const show = !play.current && !cb.current.walk; // the play Trojan or the tour guide stands in for you
+      const dot = meMarker.current?.getElement();
+      if (dot) dot.style.display = show ? "none" : "";
+      if (!show) { if (m.getLayer(c.id)) m.removeLayer(c.id); return; }
+      c.pos = { lat: cb.current.me.lat, lng: cb.current.me.lng };
+      const mpp = (78_271.517 * Math.cos((c.pos.lat * Math.PI) / 180)) / 2 ** m.getZoom();
+      c.scale = Math.max(1.2, (24 * mpp) / 2);
+      c.setLight(cb.current.light);
+      if (!m.getLayer(c.id)) m.addLayer(c);
+    };
+  });
+  useEffect(() => {
+    // the 3D engine loads a moment after the map, so the first paint stays light
+    let gone = false;
+    const t = setTimeout(() => {
+      void Promise.all([import("./walk/WalkGuide"), import("./walk/trojanModel")]).then(([{ CharacterLayer }, { buildTrojan }]) => {
+        if (gone || meChar.current) return;
+        const c = new CharacterLayer(buildTrojan(), { lat: cb.current.me.lat, lng: cb.current.me.lng });
+        c.id = "me-character";
+        c.alwaysOnTop = true; // it marks where you are: never hidden by the building you're in
+        c.play("Idle");
+        meChar.current = c;
+        const m = map.current;
+        m?.on("zoom", () => placeMe.current());
+        placeMe.current();
+      });
+    }, 1500);
+    return () => { gone = true; clearTimeout(t); };
+  }, []);
+  useEffect(() => { placeMe.current(); }, [props.me, props.light, props.walk?.key]);
 
   useEffect(() => {
     const m = map.current;
