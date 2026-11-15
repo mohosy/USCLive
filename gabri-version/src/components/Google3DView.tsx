@@ -270,10 +270,10 @@ export default function Google3DView(props: Props) {
         scenegraph: CAM_MODEL,
         getPosition: (c) => [c.lng, c.lat, zAt.current.get(c.id) ?? gz],
         getOrientation: [0, 200, 90],
-        // Snap Map style: big, and about the same size on screen at every zoom (~70-90 px tall)
+        // Snap Map style: about the same size on screen at every zoom (~45-60 px tall)
         sizeScale: 400,
-        sizeMinPixels: 60,
-        sizeMaxPixels: 80,
+        sizeMinPixels: 40,
+        sizeMaxPixels: 52,
         _lighting: "pbr",
         pickable: true,
         updateTriggers: { getPosition: camZ.current },

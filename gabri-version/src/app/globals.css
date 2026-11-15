@@ -145,6 +145,8 @@ html, body {
 .gm-line b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .gm-sub { margin-top: 5px; font-size: 11px; color: #6e6e73; }
 .co-game .co-foot::after { width: 56px; height: 56px; border: 2px solid var(--gold); animation: co-ring 2.4s ease-out infinite; }
+/* game and event bubbles float just above their map pin instead of covering it (the ring stays on the pin) */
+.co-game .co-foot, .co-event .co-foot { margin-top: 18px; }
 /* free food badge on any event bubble */
 .co-food { display: inline-block; margin-top: 4px; padding: 1px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 600; color: #92400e; background: #fef3c7; }
 .co-bump .co-card { animation: co-bump 0.7s ease; }

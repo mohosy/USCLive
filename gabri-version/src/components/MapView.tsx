@@ -368,7 +368,7 @@ export default function MapView(props: Props) {
       layout: { "model-id": "film-cam" },
       paint: {
         // Snap Map style: oversized, about the same size on screen at every zoom (halves per zoom level)
-        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [90, 90, 90]], 19, ["literal", [7, 7, 7]]],
+        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [58, 58, 58]], 19, ["literal", [4.5, 4.5, 4.5]]],
         "model-rotation": ["literal", [0, 0, 200]],
         "model-type": "common-3d",
         "model-cast-shadows": true,
