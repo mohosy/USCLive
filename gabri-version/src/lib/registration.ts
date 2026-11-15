@@ -142,5 +142,5 @@ export function rows(ev: CampusEvent, regs: Registration[], who: (userId: string
 export function toCsv(list: RegistrationRow[]) {
   const cell = (v: string) => `"${(/^[=+\-@\t\r]/.test(v) ? `'${v}` : v).replace(/"/g, '""')}"`;
   const head = ["Name", "Username", "School", "Status", "Registered at"];
-  return [head, ...list.map((r) => [r.name, r.username ? `@${r.username}` : "", r.school, r.status, r.registeredAt])].map((line) => line.map(cell).join(",")).join("\r\n") + "\r\n";
+  return [head, ...list.map((r) => [r.name, r.username, r.school, r.status, r.registeredAt])].map((line) => line.map(cell).join(",")).join("\r\n") + "\r\n";
 }
