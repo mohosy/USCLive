@@ -1,6 +1,8 @@
 "use client";
 
 import mapboxgl from "mapbox-gl";
+import type { CampusWeather } from "@/lib/weather";
+import WeatherEffects from "./weather/WeatherEffects";
 import type { Feature, FeatureCollection } from "geojson";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
@@ -24,10 +26,12 @@ function alertPoints(alerts: SafetyAlert[]): FC {
   return { type: "FeatureCollection", features: alerts.map((a) => ({ type: "Feature", properties: { id: `al:${a.id}`, title: a.title }, geometry: { type: "Point", coordinates: [a.lng, a.lat] } })) };
 }
 import { LEVEL_COLOR } from "./ui";
-import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
+import type { WalkGuide, WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+/** Phones get a lighter scene: fewer pixels, no 3D trees, campus buildings only, no shadows. */
+const PHONE = typeof window !== "undefined" && window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
 
 export type MapStyle = "map" | "satellite";
 const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }> = {
@@ -36,7 +40,7 @@ const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }>
   map: {
     url: "mapbox://styles/mapbox/standard",
     // Mapbox's 3D buildings are off: we draw only USC's buildings (see installSpotlight). Trees/landmarks stay, clipped to campus.
-    config: { lightPreset: "day", show3dObjects: true, show3dBuildings: false, show3dLandmarks: true, show3dTrees: true, showTransitLabels: false, showRoadLabels: true },
+    config: { lightPreset: "day", show3dObjects: true, show3dBuildings: false, show3dLandmarks: true, show3dTrees: !PHONE, showTransitLabels: false, showRoadLabels: true },
   },
   // Aerial imagery: shown as the placeholder while the photoreal 3D view loads
   satellite: {
@@ -89,7 +93,7 @@ function installArea(m: mapboxgl.Map, fc: FeatureCollection, light: LightPreset)
       "fill-extrusion-color": ["interpolate", ["linear"], ["get", "h"], 0, "#ebe8e4", 20, "#e2ded9", 60, "#d8d3cd"],
       "fill-extrusion-height": ["get", "h"],
       "fill-extrusion-opacity": 0.92,
-      "fill-extrusion-ambient-occlusion-intensity": 0.25,
+      "fill-extrusion-ambient-occlusion-intensity": PHONE ? 0 : 0.25,
       "fill-extrusion-ambient-occlusion-radius": 3,
       // faint street-light glow at night (applyLight); campus stays the warm one
       "fill-extrusion-flood-light-color": "#ffc98f",
@@ -159,7 +163,7 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, light: L
       "fill-extrusion-height": ["get", "h"],
       "fill-extrusion-base": ["get", "mh"],
       "fill-extrusion-opacity": 0.97,
-      "fill-extrusion-ambient-occlusion-intensity": 0.3,
+      "fill-extrusion-ambient-occlusion-intensity": PHONE ? 0 : 0.3,
       "fill-extrusion-ambient-occlusion-radius": 3,
       // warm uplighting on the walls and a pool of light on the ground; only turned up at dusk/night (applyLight)
       "fill-extrusion-flood-light-color": "#ffb066",
@@ -187,6 +191,7 @@ export interface Camera { longitude: number; latitude: number; zoom: number; pit
 export interface MapLayers { events: boolean; hotspots: boolean; columns: boolean; places: boolean }
 
 interface Props {
+  weather: CampusWeather;
   events: EventView[];
   hotspots: Hotspot[];
   buildings: Building[];
@@ -317,6 +322,7 @@ export default function MapView(props: Props) {
   const campus = useRef<CampusData | null>(null);
   const area = useRef<FeatureCollection | null>(null);
   const [rotateHint, setRotateHint] = useState(false);
+  const needle = useRef<SVGSVGElement>(null); // the compass needle in the control column
 
   /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
   function tidyBubbles() {
@@ -453,7 +459,7 @@ export default function MapView(props: Props) {
         // each camera faces the way it actually looks (GeoJSON can't carry arrays, so match on the id)
         "model-rotation": ["match", ["get", "id"], ...WEBCAMS.flatMap((w) => [`cam:${w.id}`, ["literal", [0, 0, camYaw(w.heading)]]]), ["literal", [0, 0, 90]]],
         "model-type": "common-3d",
-        "model-cast-shadows": true,
+        "model-cast-shadows": !PHONE,
         "model-emissive-strength": 0.6,
       },
     } as mapboxgl.LayerSpecification);
@@ -464,7 +470,7 @@ export default function MapView(props: Props) {
       paint: {
         "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [60, 60, 60]], 19, ["literal", [5, 5, 5]]],
         "model-type": "common-3d",
-        "model-cast-shadows": true,
+        "model-cast-shadows": !PHONE,
         "model-emissive-strength": 1,
       },
     } as mapboxgl.LayerSpecification);
@@ -498,6 +504,9 @@ export default function MapView(props: Props) {
     // Satellite (initialCamera set) or when the user prefers reduced motion.
     const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const intro = !!props.intro && !props.initialCamera && !reduceMotion;
+    // iPhones are 3x: Mapbox sizes its canvas from devicePixelRatio, so on phones it sees 2x
+    // (looks the same on a moving map, ~45% fewer pixels to draw). Only JS readers are affected, not page text.
+    if (PHONE && window.devicePixelRatio > 2) Object.defineProperty(window, "devicePixelRatio", { configurable: true, get: () => 2 });
     const m = new mapboxgl.Map({
       container: el.current,
       accessToken: TOKEN,
@@ -511,22 +520,32 @@ export default function MapView(props: Props) {
       pitch: intro ? 0 : props.initialCamera?.pitch ?? 60,
       maxPitch: 72,
       bearing: intro ? 10 : props.initialCamera?.bearing ?? -20,
-      antialias: true, // smooth edges on 3D buildings and the walking character
+      antialias: !PHONE, // smooth edges on desktop; phones skip it (it's costly on their GPUs)
       performanceMetricsCollection: false,
       // required credits, kept small and together: the Mapbox logo (unaltered) next to a compact ⓘ attribution
       logoPosition: "bottom-right",
       attributionControl: false,
+      // right-click drag and Ctrl + drag rotate and tilt; two fingers on a phone twist to rotate and drag to tilt
+      dragRotate: true,
+      touchZoomRotate: true,
+      touchPitch: true,
     });
     map.current = m;
-    m.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
+    m.touchZoomRotate.enableRotation();
+    // weather on the map comes from Open-Meteo (CC BY 4.0): credited here with the map's own credits
+    m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a>' }), "bottom-right");
+    // Mapbox's own zoom + compass (drag the compass to tilt); phones pinch instead (hidden there in CSS)
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
+    const turnNeedle = () => { if (needle.current) needle.current.style.transform = `rotate(${-m.getBearing()}deg)`; };
+    m.on("rotate", turnNeedle);
+    turnNeedle();
     m.on("style.load", install);
     loadCampus().then(
       (c) => {
         campus.current = c;
         if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, cb.current.light ?? "day", "alert-fill");
         // the neighborhood's buildings come after campus (a bigger file; campus shows first)
-        loadArea().then((fc) => { area.current = fc; if (ready.current && map.current === m && styleRef.current !== "satellite") installArea(m, fc, cb.current.light ?? "day"); }, () => {});
+        if (!PHONE) loadArea().then((fc) => { area.current = fc; if (ready.current && map.current === m && styleRef.current !== "satellite") installArea(m, fc, cb.current.light ?? "day"); }, () => {});
       },
       () => { /* no campus data: fall back to the plain map */ },
     );
@@ -552,8 +571,9 @@ export default function MapView(props: Props) {
     // trackpad two-finger click = right click: rotate the map instead of opening the browser menu
     el.current.addEventListener("contextmenu", (e) => e.preventDefault());
 
-    // Trackpad orbit, like a 3D viewer: two-finger swipe sideways turns the map, ⌥ + swipe up/down tilts it.
-    // (Pinch and plain up/down swipes still zoom.) Runs in the capture phase so Mapbox's scroll-zoom never sees these.
+    // Trackpad orbit, like a 3D viewer: two-finger swipe sideways turns the map; with ⌥ held, swiping left/right turns
+    // it and up/down tilts it. (Pinch and plain up/down swipes still zoom.) Runs in the capture phase so Mapbox's
+    // scroll-zoom never sees these.
     const turned = () => {
       setRotateHint(false);
       try { localStorage.setItem("usclive.rotateHint", "1"); } catch { /* storage blocked */ }
@@ -565,7 +585,7 @@ export default function MapView(props: Props) {
         e.preventDefault(); e.stopPropagation();
         m.setPitch(Math.max(0, Math.min(72, m.getPitch() - e.deltaY * 0.2)));
         turned();
-      } else if (ax > ay * 1.2) {
+      } else if (e.altKey || ax > ay * 1.2) {
         e.preventDefault(); e.stopPropagation();
         m.setBearing(m.getBearing() - e.deltaX * 0.25);
         turned();
@@ -724,6 +744,7 @@ export default function MapView(props: Props) {
   // tick live game clocks every second; flash the bubble when the score changes
   useEffect(() => {
     const t = setInterval(() => {
+      if (document.hidden) return; // nothing to tick while the tab is hidden
       const now = new Date();
       for (const b of bubbles.current.values()) {
         if (!b.c.game) continue;
@@ -769,18 +790,26 @@ export default function MapView(props: Props) {
     const w = cb.current.walk;
     if (!m || !w) return;
     const me = cb.current.me;
-    const guide = new WalkGuide(m, {
-      from: { lng: me.lng, lat: me.lat, label: me.label },
-      to: { lng: w.to.lng, lat: w.to.lat, name: w.to.name, code: w.to.code, id: w.to.id },
-      token: TOKEN,
-      onProgress: setWalkP,
+    let guide: WalkGuide | null = null;
+    let cancelled = false;
+    // the walking character (three.js) is only downloaded when a walk actually starts
+    void import("./walk/WalkGuide").then(({ WalkGuide }) => {
+      if (cancelled) return;
+      const g = new WalkGuide(m, {
+        from: { lng: me.lng, lat: me.lat, label: me.label },
+        to: { lng: w.to.lng, lat: w.to.lat, name: w.to.name, code: w.to.code, id: w.to.id },
+        token: TOKEN,
+        onProgress: setWalkP,
+      });
+      guide = g;
+      walkRef.current = g;
+      const go = () => { if (walkRef.current === g) g.start(); };
+      if (m.isStyleLoaded()) go();
+      else m.once("idle", go);
     });
-    walkRef.current = guide;
-    const go = () => { if (walkRef.current === guide) guide.start(); };
-    if (m.isStyleLoaded()) go();
-    else m.once("idle", go);
     return () => {
-      guide.destroy();
+      cancelled = true;
+      guide?.destroy();
       if (walkRef.current === guide) walkRef.current = null;
       setWalkP(null);
       syncLayers(); // bring back pins/crowds the walk hid
@@ -793,8 +822,10 @@ export default function MapView(props: Props) {
   return (
     <div className="absolute inset-0">
       <div ref={el} className="h-full w-full" />
+      <WeatherEffects weather={props.weather} />
+
       {rotateHint && !props.walk && (
-        <div className="glass fade-in pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
+        <div className="glass fade-in pointer-events-none absolute left-1/2 top-[calc(1.25rem+var(--sat))] z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
           Swipe sideways with two fingers to turn the map · <span className="text-muted">⌥ + swipe to tilt</span>
         </div>
       )}

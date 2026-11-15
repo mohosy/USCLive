@@ -37,7 +37,9 @@ const Input = z.object({
  * Mock sign-in. `lookup` says whether a usc.edu address is one of the demo students (directory record) or
  * a new account. `signin` makes the demo user that person: demo students get their directory record and
  * demo schedule; a new account gets only the name and school they entered, and starts with no classes,
- * friends, clubs or interests.
+ * friends, clubs or interests. Name and school are locked on the person's account the first time it is
+ * created: later sign-ins with that email keep them, whatever they send, and go straight in.
+ * (In the real app the school comes from USC single sign-on.)
  */
 async function POST_(req: Request) {
   const b = await body(req, Input);
@@ -46,11 +48,14 @@ async function POST_(req: Request) {
   const viaGoogle = !!b.data.google && getSession()?.email === b.data.email.trim().toLowerCase();
   if (!viaGoogle && !isUscEmail(b.data.email)) return Response.json({ error: "Use your @usc.edu email." }, { status: 403 });
   const entry = directoryLookup(b.data.email);
-  if (b.data.action === "lookup") return Response.json({ profile: entry, isNew: !entry });
-
   // each person has their own account (kept in a session cookie); the demo students share the demo account
   const email = b.data.email.trim().toLowerCase();
   let me: User | undefined = entry ? getUser(DEMO_ID) : db().users.find((u) => u.email?.toLowerCase() === email);
+  // an account whose sign-up is finished (a school was chosen): its name and school are locked from then on.
+  // (A Google account exists before its school is picked, with the placeholder school "all": that one may still finish.)
+  const existing = !entry && me && me.school !== "all" ? me : null;
+  if (b.data.action === "lookup") return Response.json({ profile: entry, isNew: !entry && !existing });
+
   if (me && !entry) {
     const already = currentUserId() === me.id; // this browser is already signed in as them
     // Google accounts open only through Google sign-in, never by typing the email
@@ -68,7 +73,7 @@ async function POST_(req: Request) {
     const problem = usernameProblem(wanted);
     if (problem) return Response.json({ error: `Username: ${problem.toLowerCase()}.` }, { status: 400 });
     if (!usernameFree(wanted, me.id)) return Response.json({ error: `@${wanted} is taken. Try another username.` }, { status: 409 });
-  } else if (!entry) {
+  } else if (!entry && !existing?.username) {
     return Response.json({ error: "Pick a username." }, { status: 400 });
   }
   const base = { creatorOrgId: undefined, pronouns: undefined, bio: undefined, photo: undefined, accountType: b.data.accountType ?? "student" };
@@ -79,16 +84,25 @@ async function POST_(req: Request) {
       interests: (b.data.interests ?? demo.interests).filter((i) => INTERESTS.includes(i)), classes: demo.classes, friends: demo.friends, orgs: demo.orgs,
     });
   } else {
-    if (!b.data.signup) return Response.json({ error: "Create your account first." }, { status: 400 });
-    const { firstName, lastName, school } = b.data.signup;
-    const name = `${firstName} ${lastName}`;
-    Object.assign(me, {
-      ...base, name, avatar: initialsOf(name), school, major: "", year: "", email: b.data.email.trim().toLowerCase(), verified: false,
-      interests: (b.data.interests ?? []).filter((i) => INTERESTS.includes(i)), classes: [], friends: [], orgs: [],
-    });
+    if (!existing && !b.data.signup) return Response.json({ error: "Create your account first." }, { status: 400 });
+    if (existing) {
+      // school lock: this person keeps the name and school from their first sign-up; anything sent now is ignored
+      // (their classes, friends and clubs stay as they are too)
+      if (b.data.accountType) me.accountType = b.data.accountType;
+      if (b.data.interests) me.interests = b.data.interests.filter((i) => INTERESTS.includes(i));
+    } else {
+      const { firstName, lastName, school } = b.data.signup!;
+      const name = `${firstName} ${lastName}`;
+      Object.assign(me, {
+        ...base, name, avatar: initialsOf(name), school, major: "", year: "", email, verified: false,
+        interests: (b.data.interests ?? []).filter((i) => INTERESTS.includes(i)), classes: [], friends: [], orgs: [],
+      });
+    }
   }
-  applyProfile(me, { ...(b.data.profile ?? {}), creatorOrgId: b.data.creatorOrgId ?? null });
-  me.username = wanted ?? uniqueUsername(suggestUsername(b.data.email.split("@")[0]), me.id);
+  // a returning account keeps its profile and creator org unless this request sends new ones
+  applyProfile(me, existing ? { ...(b.data.profile ?? {}), ...(b.data.creatorOrgId !== undefined ? { creatorOrgId: b.data.creatorOrgId } : {}) } : { ...(b.data.profile ?? {}), creatorOrgId: b.data.creatorOrgId ?? null });
+  // a returning account that sent no username keeps the one it had
+  me.username = wanted ?? uniqueUsername(existing?.username ?? suggestUsername(b.data.email.split("@")[0]), me.id);
   // friends: what the browser saved (after adds/removes), else the defaults above; always both ways
   if (b.data.friendIds) {
     for (const id of [...me.friends]) { const u = getUser(id); if (u) setFriends(me, u, false); }

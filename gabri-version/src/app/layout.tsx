@@ -13,7 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "USCLive — what's happening on campus, live",
+  // short on purpose: it's the name under the home-screen icon and in browser tabs
+  title: "USCLive",
   description: "A live 3D map of everything happening at USC, with an AI assistant that tells you what to do now.",
   // installed on an iPhone home screen: full-screen, its own name, the map runs under the status bar
   appleWebApp: { capable: true, title: "USCLive", statusBarStyle: "black-translucent" },
@@ -33,6 +34,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* start talking to Mapbox while the app's code is still loading (saves a round trip on phones) */}
+        <link rel="preconnect" href="https://api.mapbox.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://events.mapbox.com" />
+      </head>
       <body className="h-full overflow-hidden">{children}</body>
     </html>
   );

@@ -110,7 +110,7 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
 
 interface BuildingRes { building: Building; hotspot?: Hotspot; curve: { hour: number; typical: number; today: number | null }[]; events: EventView[] }
 
-export function BuildingDetail({ id, loc, now, tick, onClose, onOpenEvent }: { id: string; loc: Loc; now: Date; tick: number; onClose: () => void; onOpenEvent: (id: string) => void }) {
+export function BuildingDetail({ id, loc, now, tick, onClose, onOpenEvent, onWalk }: { id: string; loc: Loc; now: Date; tick: number; onClose: () => void; onOpenEvent: (id: string) => void; onWalk?: (buildingId: string) => void }) {
   const [data, setData] = useState<BuildingRes | null>(null);
   // a slower answer for a building you already clicked away from must not overwrite the current one
   useEffect(() => {
@@ -129,7 +129,14 @@ export function BuildingDetail({ id, loc, now, tick, onClose, onOpenEvent }: { i
       <Back onClose={onClose} />
       <div className="text-xs font-medium text-muted">{b.code}</div>
       <h2 className="text-xl font-semibold">{b.name}</h2>
-      <div className="text-sm text-muted">{walkMinutes(loc, b)} min walk</div>
+      <div className="mt-1 flex items-center gap-3">
+        <span className="text-sm text-muted">{walkMinutes(loc, b)} min walk</span>
+        {onWalk && loc.buildingId !== b.id && (
+          <button type="button" onClick={() => onWalk(b.id)} className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
+            <Navigation size={12} /> Take me there
+          </button>
+        )}
+      </div>
 
       {h && (
         <div className="mt-5">
