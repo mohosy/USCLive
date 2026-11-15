@@ -1,6 +1,6 @@
 /** Deterministic context the AI reasons over: free time, nearby options, study spots. */
 import { BUILDING_BY_ID, BUILDINGS, CATEGORY_META, walkMinutes } from "./campus";
-import { computeHotspots } from "./hotspots";
+import { computeHotspots, fillPct } from "./hotspots";
 import { canSee, db, publicEvent } from "./store";
 import type { ClassMeeting, Hotspot, User } from "./types";
 
@@ -55,7 +55,7 @@ export function studySpots(loc: Loc, now = new Date()) {
       const walk = walkMinutes(loc, b);
       // lower is better: emptier, closer, quiet bonus
       const score = fill * 100 + walk * 2.5 - (b.studySpot!.quiet ? 8 : 0) + (h.trend === "rising" ? 6 : 0);
-      return { building: b, hotspot: h, walk, fill: Math.round(fill * 100), score };
+      return { building: b, hotspot: h, walk, fill: fillPct(h.count, b.capacity), score };
     })
     .sort((a, b) => a.score - b.score);
 }

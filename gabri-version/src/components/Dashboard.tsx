@@ -9,7 +9,59 @@ import type { Moderation } from "@/lib/types";
 import AddEventModal from "./AddEventModal";
 import { Button, Tag, cx } from "./ui";
 
-interface Row { id: string; title: string; start: string; end: string; building: string; host: string; rsvps: number; capacity: number | null; expected: number | null; measured: number | null; showRate: number | null; freeFood: boolean; category: string; status: "past" | "live" | "upcoming"; source: string }
+interface RegSummary { type: "native" | "handshake" | "engage" | "external"; registered: number; waitlisted: number; selfReported: number; cancelled: number; deadline: string | null; canManage: boolean }
+interface RegRow { name: string; username: string; school: string; status: string; registeredAt: string }
+const REG_SITE = { native: "One tap in USCLive", handshake: "On Handshake", engage: "On Engage", external: "On an official page" } as const;
+const REG_STATUS: Record<string, string> = { registered: "Registered", waitlisted: "Waitlist", "self-reported": "Said they registered", cancelled: "Cancelled" };
+
+/** One event's sign-ups: the three counts, and for its organizer the list and a CSV download. */
+function RegistrationCard({ r, now }: { r: Row & { registration: RegSummary }; now: Date }) {
+  const [list, setList] = useState<RegRow[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const reg = r.registration;
+  async function toggle() {
+    if (open) { setOpen(false); return; }
+    setOpen(true); setErr(null);
+    try { setList((await api<{ registrations: RegRow[] }>(`/api/events/${r.id}/registrations`)).registrations); }
+    catch (e) { setErr((e as Error).message); }
+  }
+  return (
+    <div className="rounded-lg border border-line p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{r.title}</div>
+          <div className="truncate text-xs text-muted">{fmtWhen(r.start, r.end, now)} · {r.building} · {REG_SITE[reg.type]}{r.capacity ? ` · ${r.capacity} seats` : ""}</div>
+        </div>
+        <div className="flex items-center gap-4 text-right text-xs text-muted">
+          {([["Registered", reg.registered], ["Waitlist", reg.waitlisted], ["Said they registered", reg.selfReported]] as const).map(([label, n]) => (
+            <div key={label}><div className="text-lg font-semibold tabular-nums text-foreground">{n}</div>{label}</div>
+          ))}
+        </div>
+      </div>
+      {reg.canManage ? (
+        <div className="mt-3 flex gap-2">
+          <Button variant="secondary" className="!py-1 text-xs" onClick={toggle}>{open ? "Hide list" : "View list"}</Button>
+          <a href={`/api/events/${r.id}/registrations?format=csv`} download className="inline-flex items-center justify-center rounded-lg border border-line px-3 py-1 text-xs font-medium hover:bg-surface">Export CSV</a>
+        </div>
+      ) : <p className="mt-2 text-xs text-muted">The list and the CSV are only for this event&apos;s organizer (a Student Creator account posting for {r.host}).</p>}
+      {open && (
+        <div className="scroll-thin mt-3 max-h-64 overflow-y-auto border-t border-line">
+          {err && <p className="py-3 text-sm text-red-700">{err}</p>}
+          {list?.map((x, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 border-b border-line py-1.5 text-sm last:border-b-0">
+              <span className="min-w-0 truncate">{x.name}{x.username && <span className="ml-1.5 text-xs text-muted">@{x.username}</span>}</span>
+              <span className="shrink-0 text-xs text-muted">{REG_STATUS[x.status] ?? x.status} · {new Date(x.registeredAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+            </div>
+          ))}
+          {list && !list.length && <p className="py-3 text-sm text-muted">Nobody has registered yet.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface Row { id: string; title: string; start: string; end: string; building: string; host: string; rsvps: number; registration: RegSummary | null; capacity: number | null; expected: number | null; measured: number | null; showRate: number | null; freeFood: boolean; category: string; status: "past" | "live" | "upcoming"; source: string }
 interface Dash {
   org: Org; isUsg: boolean; orgs: Org[];
   totals: { events: number; rsvps: number; upcoming: number; live: number; avgShowRate: number | null; foodEvents: number };
@@ -147,6 +199,15 @@ export default function Dashboard() {
                 </section>
               </div>
             </div>
+
+            <section>
+              <h2 className="text-sm font-semibold">Registrations</h2>
+              <p className="mb-3 text-xs text-muted">Events that take sign-ups. &ldquo;Said they registered&rdquo; counts students who told USCLive they signed up on Handshake, Engage or another official page; USCLive cannot check those.</p>
+              <div className="space-y-3">
+                {d.rows.filter((r): r is Row & { registration: RegSummary } => !!r.registration).map((r) => <RegistrationCard key={r.id} r={r} now={now} />)}
+                {!d.rows.some((r) => r.registration) && <p className="py-6 text-center text-sm text-muted">No events with registration yet. Add one with &ldquo;Post event&rdquo;.</p>}
+              </div>
+            </section>
 
             <section>
               <h2 className="text-sm font-semibold">Review queue</h2>

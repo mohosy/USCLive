@@ -32,7 +32,7 @@ export function CatLabel({ category }: { category: string }) {
   );
 }
 
-export function Tag({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "food" | "live" | "class" | "private" | "open" }) {
+export function Tag({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "food" | "live" | "class" | "private" | "open" | "closing" }) {
   const t = {
     neutral: "bg-surface text-foreground",
     food: "bg-amber-50 text-amber-800",
@@ -40,6 +40,7 @@ export function Tag({ children, tone = "neutral" }: { children: ReactNode; tone?
     class: "bg-blue-50 text-blue-700",
     private: "bg-violet-50 text-violet-700",
     open: "bg-emerald-50 text-emerald-700",
+    closing: "bg-cardinal/10 text-cardinal", // registration closes within 48 hours
   }[tone];
   return <span className={cx("inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium", t)}>{children}</span>;
 }

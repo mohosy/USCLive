@@ -6,6 +6,7 @@ import { BUILDING_BY_ID, walkMinutes } from "@/lib/campus";
 import { fmtTime, isLive, type AppState, type Loc, type Notification } from "@/lib/client-types";
 import { primaryAction } from "@/lib/eventActions";
 import { gameState } from "@/lib/games";
+import { fillPct } from "@/lib/hotspots";
 import { LEVEL_COLOR } from "./ui";
 
 const TRACKED = ["dining", "gym", "library", "student_center"];
@@ -45,7 +46,7 @@ export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onA
   const games = state.events.filter((e) => e.game && isLive(e, now));
   const busy = state.hotspots
     .filter((h) => !h.suppressed && BUILDING_BY_ID[h.buildingId] && TRACKED.includes(BUILDING_BY_ID[h.buildingId].kind))
-    .map((h) => ({ h, b: BUILDING_BY_ID[h.buildingId], fill: Math.min(99, Math.round((h.count / BUILDING_BY_ID[h.buildingId].capacity) * 100)) }))
+    .map((h) => ({ h, b: BUILDING_BY_ID[h.buildingId], fill: fillPct(h.count, BUILDING_BY_ID[h.buildingId].capacity) }))
     .sort((x, y) => y.fill - x.fill).slice(0, 6);
   const next = state.me.today.filter((c) => +new Date(c.end) > +now).slice(0, 2);
   const events = state.events.filter((e) => !e.game && +new Date(e.end) > +now).sort((x, y) => +new Date(x.start) - +new Date(y.start)).slice(0, 3);

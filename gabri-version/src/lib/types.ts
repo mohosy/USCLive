@@ -69,6 +69,26 @@ export interface Moderation {
   checkedBy: "claude" | "rules";
 }
 
+/**
+ * How people sign up for an event.
+ * - native: one tap in USCLive (capacity, waitlist and deadline are enforced here)
+ * - handshake / engage / external: sign-up happens on the official page; USCLive only opens it
+ *   and can record "I registered" when the student says so. It never registers anyone there.
+ */
+export type RegistrationType = "native" | "handshake" | "engage" | "external";
+export type RegistrationStatus = "registered" | "waitlisted" | "self-reported" | "cancelled";
+
+/** One per person per event. Cancelling keeps the record (status "cancelled") so re-registering reuses it. */
+export interface Registration {
+  id: string;
+  eventId: string;
+  userId: string;
+  status: RegistrationStatus;
+  /** when this person last joined the list (registered, waitlisted or self-reported): the waitlist order */
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CampusEvent {
   id: string;
   title: string;
@@ -87,6 +107,12 @@ export interface CampusEvent {
   invitees: string[];
   attendees: string[];
   capacity?: number;
+  /** set = this event takes registrations (see RegistrationType); unset = the plain RSVP / Join toggle */
+  registrationType?: RegistrationType;
+  /** ISO time after which registration is closed */
+  registrationDeadline?: string;
+  /** handshake / engage / external: the official sign-up page. native: the original listing, shown as "Official page" */
+  registrationUrl?: string;
   freeFood: boolean;
   foodDetail?: string;
   tags: string[];

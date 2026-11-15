@@ -70,12 +70,18 @@ export function countAt(b: Building, d: Date, events: BoostEvent[]) {
   return Math.max(0, Math.round(base * noise * todaySkew + liveEventBoost(b, d, events)));
 }
 
-function levelFor(ratio: number, count: number, capacity: number): Hotspot["level"] {
-  const fill = count / capacity;
-  if (fill > 0.9 || ratio > 2) return "packed";
-  if (ratio > 1.25 || fill > 0.7) return "busy";
-  if (ratio < 0.7 || fill < 0.15) return "quiet";
-  return "normal";
+/** How full a place is: the whole percentage shown everywhere (people ÷ capacity, capped at 99). */
+export const fillPct = (count: number, capacity: number) => Math.min(99, Math.max(0, Math.round((count / Math.max(1, capacity)) * 100)));
+
+/**
+ * The one busyness scale. Every Quiet / Normal / Busy / Packed label in the app (map markers, event tags, panels,
+ * the assistant) comes from the percentage full, so a label and the number next to it can never disagree:
+ * under 30% Quiet, 30-59% Normal, 60-84% Busy, 85% and up Packed.
+ * How it compares with the usual crowd at this hour is a separate fact (`ratio`, shown as "1.4x usual").
+ */
+export const LEVEL_FROM_PCT = { normal: 30, busy: 60, packed: 85 } as const;
+export function levelForPct(pct: number): Hotspot["level"] {
+  return pct >= LEVEL_FROM_PCT.packed ? "packed" : pct >= LEVEL_FROM_PCT.busy ? "busy" : pct >= LEVEL_FROM_PCT.normal ? "normal" : "quiet";
 }
 
 /** How busy one building is right now. Works for every building (the map and the detail panel use this same math). */
@@ -90,7 +96,7 @@ export function hotspotFor(b: Building, events: BoostEvent[], now = new Date()):
     count,
     baseline,
     ratio,
-    level: levelFor(ratio, count, b.capacity),
+    level: levelForPct(fillPct(count, b.capacity)),
     trend: delta > b.capacity * 0.04 ? "rising" : delta < -b.capacity * 0.04 ? "falling" : "steady",
     suppressed: count < K_ANON,
   };

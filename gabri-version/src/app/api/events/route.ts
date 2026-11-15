@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { moderateEvent } from "@/lib/ai";
 import { BUILDING_BY_ID } from "@/lib/campus";
-import { body, toIso } from "@/lib/http";
+import { body, safeExternalUrl, toIso } from "@/lib/http";
 import { addNotification, db, getMe, newId, orgs, publicEvent } from "@/lib/store";
 import type { CampusEvent } from "@/lib/types";
 import { withState } from "@/lib/state";
@@ -24,6 +24,10 @@ const CreateEvent = z.object({
   freeFood: z.boolean().optional(),
   foodDetail: z.string().max(80).nullish(),
   source: z.enum(["user", "flyer"]).default("user"),
+  // registration (optional): native = one tap in USCLive; the others point at the official page
+  registrationType: z.enum(["native", "handshake", "engage", "external"]).nullish(),
+  registrationDeadline: z.string().max(40).nullish(),
+  registrationUrl: z.string().trim().max(500).nullish(),
 });
 
 async function POST_(req: Request) {
@@ -38,6 +42,14 @@ async function POST_(req: Request) {
   const start = toIso(input.start);
   const end = toIso(input.end);
   if (!start || !end || +new Date(end) <= +new Date(start)) return Response.json({ error: "Invalid start/end time" }, { status: 400 });
+
+  // registration settings: the link must be a public https page; the deadline cannot be after the event ends
+  const regUrl = input.registrationUrl ? safeExternalUrl(input.registrationUrl)?.toString() ?? null : undefined;
+  if (regUrl === null) return Response.json({ error: "The registration link must be a public https:// address." }, { status: 400 });
+  if (input.registrationType && input.registrationType !== "native" && !regUrl) return Response.json({ error: "Add the link to the official registration page." }, { status: 400 });
+  const regDeadline = input.registrationType && input.registrationDeadline ? toIso(input.registrationDeadline) : undefined;
+  if (regDeadline === null) return Response.json({ error: "Invalid registration deadline" }, { status: 400 });
+  if (regDeadline && +new Date(regDeadline) > +new Date(end)) return Response.json({ error: "The registration deadline can't be after the event ends." }, { status: 400 });
 
   const org = input.hostAs === "org" ? orgs().find((o) => o.id === input.orgId) : undefined;
   const host: CampusEvent["host"] = org ? { kind: "org", name: org.name, id: org.id } : { kind: "user", name: me.name, id: me.id };
@@ -60,8 +72,11 @@ async function POST_(req: Request) {
     schools: input.schools.length ? input.schools : ["all"],
     course: input.course?.toUpperCase().replace(/^([A-Z]+)\s*(\d)/, "$1 $2") || undefined,
     invitees: input.invitees,
-    attendees: [me.id],
+    attendees: input.registrationType ? [] : [me.id], // registration events start empty: the organizer is not a sign-up
     capacity: input.capacity ?? undefined,
+    registrationType: input.registrationType ?? undefined,
+    registrationDeadline: regDeadline ?? undefined,
+    registrationUrl: input.registrationType ? regUrl ?? undefined : undefined,
     freeFood: input.freeFood ?? mod.data.freeFood,
     foodDetail: input.foodDetail ?? mod.data.foodDetail ?? undefined,
     tags: [],

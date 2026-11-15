@@ -7,12 +7,20 @@
  * saves if anything changed, and sets the cookie when someone signs in or out.
  */
 import { DEMO_ID, fresh, memoryDb, requestCtx, type DB, type ReqCtx } from "./store";
+import { reapply } from "./registration";
 
 const URL_ = process.env.SUPABASE_URL ?? "";
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 export const persisted = () => !!(URL_ && KEY);
 const COOKIE = "ul_uid";
-const DEMO_REFRESH_MS = 4 * 3600_000; // demo events are relative to "now": regenerate them every few hours
+// Demo events are written relative to "now" (see seedEvents). They follow the clock, not the moment the server
+// started: they are regenerated when they are half an hour old, and straight away when someone opens the app after
+// nobody had it open for a few minutes, so a presenter always starts with a fresh set.
+const DEMO_REFRESH_MS = 30 * 60_000;
+const DEMO_IDLE_MS = 3 * 60_000;
+/** The time demo data is relative to. The one place a demo clock would plug in. */
+const demoNow = () => Date.now();
+let lastRequestAt = 0; // this server's last request (not saved: only tells "nobody had the app open")
 
 // legacy service_role keys are JWTs (eyJ…) and also go in Authorization; new sb_secret_ keys go only in apikey
 const headers = (): Record<string, string> => ({ apikey: KEY, ...(KEY.startsWith("eyJ") ? { Authorization: `Bearer ${KEY}` } : {}), "Content-Type": "application/json" });
@@ -49,13 +57,27 @@ async function save(data: DB, version: number): Promise<boolean> {
   return true;
 }
 
-/** Demo events are generated relative to "now"; refresh them every few hours, keeping people's accounts and their own data. */
+/** Demo events are generated relative to "now"; keep them current, keeping people's accounts and their own data. */
 function refreshDemo(d: DB) {
-  if (Date.now() - d.seededAt < DEMO_REFRESH_MS) return;
+  const now = demoNow();
+  const age = now - d.seededAt;
+  const idle = now - lastRequestAt;
+  lastRequestAt = now;
+  if (age < DEMO_REFRESH_MS && !(idle >= DEMO_IDLE_MS && age >= DEMO_IDLE_MS)) return;
   const f = fresh();
+  // what people did on the demo events since they were generated (going, invites) carries over to the new set
+  const old = new Map(d.events.filter((e) => e.source === "seed").map((e) => [e.id, e]));
+  for (const e of f.events) {
+    const was = old.get(e.id);
+    if (!was || was.title !== e.title) continue;
+    for (const id of was.attendees) if (!e.attendees.includes(id) && d.users.some((u) => u.id === id)) e.attendees.push(id);
+    for (const id of was.invitees) if (!e.invitees.includes(id)) e.invitees.push(id);
+  }
   const people = new Map(d.users.map((u) => [u.id, u]));
   d.users = [...f.users.map((u) => people.get(u.id) ?? u), ...d.users.filter((u) => !f.users.some((s) => s.id === u.id))];
-  d.events = [...f.events, ...d.events.filter((e) => e.source !== "seed")];
+  // keep what people posted; the two demo posts that are not marked "seed" come back with the new set, so drop the old copies
+  const regenerated = new Set(f.events.map((e) => e.id));
+  d.events = [...f.events, ...d.events.filter((e) => e.source !== "seed" && !regenerated.has(e.id))];
   d.history = f.history;
   d.inbox = f.inbox;
   d.scannedInbox = [];
@@ -64,7 +86,9 @@ function refreshDemo(d: DB) {
   d.liveScriptIndex = 0;
   d.lastLiveTick = Date.now();
   d.reminded = [];
-  d.seededAt = Date.now();
+  d.registrations = (d.registrations ?? []).filter((r) => d.events.some((e) => e.id === r.eventId));
+  reapply(d.events, d.registrations); // the regenerated demo events forget who registered: put them back
+  d.seededAt = now;
 }
 
 const cookieUid = (req?: Request) => req?.headers.get("cookie")?.match(/(?:^|;\s*)ul_uid=([^;]+)/)?.[1];

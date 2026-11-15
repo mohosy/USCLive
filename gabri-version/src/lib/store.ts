@@ -9,7 +9,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { BUILDING_BY_ID } from "./campus";
 import { withFaces } from "./faces";
 import { ME, ORGS, seedAlerts, seedEvents, seedHistory, seedInbox, seedNotifications, seedUsers } from "./seed";
-import type { CampusEvent, InboxItem, Notification, SafetyAlert, User } from "./types";
+import type { CampusEvent, InboxItem, Notification, Registration, SafetyAlert, User } from "./types";
+import { backfill, closesSoon, counts, findRegistration, isClosed, reapply } from "./registration";
 import type { GoogleSession } from "./google";
 
 export interface DB {
@@ -32,6 +33,8 @@ export interface DB {
   google: Record<string, GoogleSession>;
   /** model calls today (see aiLimit): resets each day in Los Angeles */
   aiUsage?: { day: string; total: number; byUser: Record<string, number> };
+  /** event registrations: one per person per event (see lib/registration.ts) */
+  registrations: Registration[];
 }
 
 /** The current request: its copy of the state and who is signed in. */
@@ -60,6 +63,7 @@ export function fresh(): DB {
     reminded: [],
     lastReminder: 0,
     google: {},
+    registrations: [],
   };
 }
 
@@ -78,6 +82,7 @@ export function db(): DB {
   d.lastReminder ??= 0;
   d.google ??= {};
   withFaces(d.users); // demo students' photos (also for state saved before they existed)
+  d.registrations ??= [];
   return d;
 }
 
@@ -88,6 +93,9 @@ export function resetDb() {
     const old = c.db, f = fresh();
     f.users = [...f.users, ...old.users.filter((u) => !f.users.some((s) => s.id === u.id))];
     f.google = old.google ?? {};
+    // registrations for events that survive the reset (the demo events keep their ids)
+    f.registrations = (old.registrations ?? []).filter((r) => f.events.some((e) => e.id === r.eventId));
+    reapply(f.events, f.registrations);
     c.db = f;
     return c.db;
   }
@@ -221,6 +229,8 @@ export function publicEvent(e: CampusEvent, viewer: User) {
       return { id, name: u?.name ?? id, avatar: u?.avatar ?? "?", photo: u?.photo?.startsWith("/") ? u.photo : undefined };
     }),
     going: e.attendees.includes(viewer.id),
+    // registration: the viewer's own status plus counts; never anyone else's identity
+    registration: e.registrationType ? registrationView(e, viewer.id) : undefined,
     invited: e.invitees.includes(viewer.id),
     isClassmate: !!e.course && viewer.classes.some((c) => c.code === e.course),
     lat: b?.lat,
@@ -230,6 +240,22 @@ export function publicEvent(e: CampusEvent, viewer: User) {
   };
 }
 export type PublicEvent = ReturnType<typeof publicEvent>;
+
+/** What a viewer may know about an event's registration: their own status, counts, and whether it is still open. */
+export function registrationView(e: CampusEvent, viewerId: string, now = Date.now()) {
+  const regs = db().registrations;
+  backfill(e, regs, () => newId("reg"));
+  const c = counts(e, regs);
+  const mine = findRegistration(regs, e.id, viewerId);
+  return {
+    type: e.registrationType!,
+    status: mine && mine.status !== "cancelled" ? mine.status : null,
+    waitlisted: c.waitlisted,
+    spotsLeft: e.capacity != null ? Math.max(0, e.capacity - e.attendees.length) : null,
+    closed: isClosed(e, now),
+    closesSoon: closesSoon(e, now),
+  };
+}
 
 export function addNotification(n: Omit<Notification, "id" | "createdAt" | "read">) {
   const full: Notification = { ...n, id: newId("n"), createdAt: new Date().toISOString(), read: false };

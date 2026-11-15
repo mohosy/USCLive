@@ -40,6 +40,10 @@ export function calloutHTML(c: Callout, now: Date) {
   if (c.kind === "busy" || c.kind === "quiet") {
     return `<div class="bz bz-${c.kind}${c.stacked ? " bz-up" : ""}"><span class="bz-ic">${placeIcon(c.id)}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
   }
+  // dining halls: fork-and-knife marker with the short name, and how busy it is when known
+  if (c.kind === "dining") {
+    return `<div class="bz bz-dining${c.level ? ` bz-${c.level}` : ""}${c.stacked ? " bz-up" : ""}"><span class="bz-ic">${UTENSILS}</span><span class="dn-t"><b>${esc(c.title)}</b>${c.meta ? `<span>${esc(c.meta)}</span>` : ""}</span></div><div class="co-foot"></div>`;
+  }
   const title = esc(c.title);
   const meta = c.meta ? esc(c.meta) : "";
   return `<div class="co-card">
@@ -100,8 +104,11 @@ function eventBanner(c: Callout) {
     : `<span class="evb-img evb-noimg" style="background-color:${v.color}">${SPARK}</span>`;
   const tags = `${v.state === "live" ? '<span class="evb-tag live"><i class="evb-dot"></i>Live</span>' : ""}${c.food ? `<span class="evb-tag food">${FORK}${esc(c.food)}</span>` : ""}`;
   const short = v.full.length > 22 ? `${v.full.slice(0, 21)}…` : v.full;
+  // the building's busyness, when its busy or dining marker gave way to this event
+  const crowd = c.crowd ? `<span class="evt-crowd lv-${c.crowd.level}"><i></i>${esc(c.crowd.text)}</span>` : "";
   return `<div class="evb evb-${v.state}">
     <div class="evb-mini evt">
+      ${crowd}
       ${v.photo ? `<span class="evt-img" style="background-image:url('${v.photo}')"></span>` : `<span class="evt-img evt-noimg" style="background-color:${v.color}">${SPARK}</span>`}
       <span class="evt-perf"></span>
       <span class="evt-body"><span class="evt-when">${v.state === "live" ? '<i class="evb-dot"></i>' : ""}${esc(v.whenShort)}${c.food ? `<em>${FORK}</em>` : ""}</span><b class="evt-title">${esc(short)}</b></span>
@@ -115,6 +122,7 @@ function eventBanner(c: Callout) {
         <div class="evb-when">${esc(v.when)}</div>
         <div class="evb-title">${esc(v.full)}</div>
         <div class="evb-place">${esc(v.place)}</div>
+        ${c.crowd ? `<div class="evb-crowd lv-${c.crowd.level}"><i></i>${esc(c.crowd.text)}</div>` : ""}
         <div class="evb-going">${USERS}<span>${v.going} going</span>${v.friends.length ? `<span class="evb-faces sm">${faces(v.friends, 3)}</span><span class="evb-fr">${friendsLine(v.friends)}</span>` : ""}</div>
       </div>
     </div>
