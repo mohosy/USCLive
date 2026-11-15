@@ -14,6 +14,8 @@ import type { CampusEvent, User } from "./types";
 export type ChatAction =
   | { type: "open_event"; eventId: string }
   | { type: "walk"; buildingId: string }
+  /** walk to an exact spot (a street address, a shop): not one of the campus buildings */
+  | { type: "walk_point"; lng: number; lat: number; name: string }
   | { type: "focus"; buildingId: string };
 export interface ChatMsg { role: "user" | "assistant"; content: string; eventIds?: string[] }
 export interface ChatReply { reply: string; actions: ChatAction[]; eventIds: string[]; ai: boolean }
@@ -64,6 +66,35 @@ function friendsByName(me: User, names: string[]) {
     if (u) found.push(u); else unknown.push(raw.trim());
   }
   return { found, unknown, friends };
+}
+
+/** Inside the area the map shows (same bounds as the Explore map). */
+const MAP_BOUNDS = { west: -118.3035, south: 34.0045, east: -118.2712, north: 34.0382 };
+const looksLikeAddress = (s: string) => /^\s*\d+\s+\S/.test(s) || /\b(st|street|ave|avenue|blvd|boulevard|pl|place|dr|drive|rd|road|pkwy|parkway)\b\.?/i.test(s);
+
+/** Street addresses and businesses near campus -> a point on the map (Mapbox geocoding). */
+async function geocode(q: string): Promise<{ lng: number; lat: number; name: string } | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!token) return null;
+  const bbox = `${MAP_BOUNDS.west},${MAP_BOUNDS.south},${MAP_BOUNDS.east},${MAP_BOUNDS.north}`;
+  try {
+    const res = await fetch(`https://api.mapbox.com/search/searchbox/v1/forward?q=${encodeURIComponent(q)}&proximity=-118.2851,34.0208&bbox=${bbox}&limit=1&access_token=${token}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const f = ((await res.json()) as { features?: { geometry: { coordinates: [number, number] }; properties?: { name?: string; full_address?: string } }[] }).features?.[0];
+    if (!f) return null;
+    const [lng, lat] = f.geometry.coordinates;
+    return { lng, lat, name: f.properties?.name ?? q };
+  } catch { return null; }
+}
+
+/** Where "take me to X" means: a campus building by name, else an address or business near campus. */
+async function resolvePlace(place: string): Promise<ChatAction | { error: string }> {
+  // addresses first: "1292 W 29th St" must not match a building because of a stray letter
+  const id = looksLikeAddress(place) ? null : matchBuilding(place);
+  if (id) return { type: "walk", buildingId: id };
+  const g = await geocode(/\bLos Angeles\b|\bLA\b/i.test(place) ? place : `${place}, Los Angeles, CA`);
+  if (g) return { type: "walk_point", ...g };
+  return { error: looksLikeAddress(place) ? "I couldn't find that address on the campus map (it may be outside the area the map covers)." : "I don't know that place." };
 }
 
 const TOOLS: Record<string, { description: string; parameters: Record<string, unknown>; run: (a: Record<string, unknown>, me: User, loc: Loc, t: Turn) => unknown }> = {
@@ -121,13 +152,13 @@ const TOOLS: Record<string, { description: string; parameters: Record<string, un
     run: (_a, me) => me.friends.map((id) => getUser(id)).filter(Boolean).map((u) => nameOf(u!)),
   },
   walk_to: {
-    description: "Start animated walking directions on the map to a building or place.",
-    parameters: { type: "object", properties: { place: { type: "string" } }, required: ["place"] },
-    run: (a, _me, _loc, t) => {
-      const id = matchBuilding(String(a.place));
-      if (!id) return { error: "I don't know that place." };
-      t.act({ type: "walk", buildingId: id });
-      return { ok: true, to: BUILDING_BY_ID[id].name };
+    description: "Start walking directions on the map to a campus building, a street address near campus, or a business near campus.",
+    parameters: { type: "object", properties: { place: { type: "string", description: "building name/code, street address, or business name" } }, required: ["place"] },
+    run: async (a, _me, _loc, t) => {
+      const r = await resolvePlace(String(a.place));
+      if ("error" in r) return r;
+      t.act(r);
+      return { ok: true, to: r.type === "walk" ? BUILDING_BY_ID[r.buildingId].name : r.type === "walk_point" ? r.name : "" };
     },
   },
   show_on_map: {
@@ -203,7 +234,7 @@ async function runModel(history: ChatMsg[], me: User, loc: Loc, t: Turn): Promis
       if (call.type !== "function") continue;
       const tool = TOOLS[call.function.name];
       let out: unknown;
-      try { out = tool ? tool.run(JSON.parse(call.function.arguments || "{}"), me, loc, t) : { error: "unknown tool" }; }
+      try { out = tool ? await tool.run(JSON.parse(call.function.arguments || "{}"), me, loc, t) : { error: "unknown tool" }; }
       catch (e) { out = { error: (e as Error).message }; }
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out).slice(0, 6000) });
     }
@@ -213,13 +244,15 @@ async function runModel(history: ChatMsg[], me: User, loc: Loc, t: Turn): Promis
 
 /* ------------------------------ without a model: rules ------------------------------ */
 
-function runRules(text: string, me: User, loc: Loc, t: Turn): string {
+async function runRules(text: string, me: User, loc: Loc, t: Turn): Promise<string> {
   const q = text.trim();
   const nav = parseNavQuery(q);
   if (nav) {
-    if (!nav.buildingId) return "Which building? Try a name or code, like Taper Hall (THH) or Leavey.";
-    t.act({ type: "walk", buildingId: nav.buildingId });
-    return `Walking you to ${BUILDING_BY_ID[nav.buildingId].name}.`;
+    const dest = q.replace(/^.*?\b(?:to|towards?)\s+/i, "").trim();
+    const r = await resolvePlace(dest || q);
+    if ("error" in r) return r.error;
+    t.act(r);
+    return `Walking you to ${r.type === "walk" ? BUILDING_BY_ID[r.buildingId].name : r.type === "walk_point" ? r.name : dest}.`;
   }
   const inv = q.match(/\binvite\s+(.+?)\s+(?:to|for)\s+(.+)/i);
   if (inv) {
@@ -267,8 +300,8 @@ export async function chat(history: ChatMsg[], loc: Loc): Promise<ChatReply> {
   let reply: string, ai = false;
   if (process.env.OPENAI_API_KEY) {
     try { reply = await runModel(history, me, loc, t); ai = true; }
-    catch (e) { console.error("[chat]", (e as Error).message); reply = runRules(last, me, loc, t); }
-  } else reply = runRules(last, me, loc, t);
+    catch (e) { console.error("[chat]", (e as Error).message); reply = await runRules(last, me, loc, t); }
+  } else reply = await runRules(last, me, loc, t);
   let ids = [...t.eventIds].filter((id) => { const e = db().events.find((x) => x.id === id); return e && canSee(e, me); });
   // cards follow the order the reply mentions them (so "the first one" means the same to everyone); unmentioned ones drop
   const at = (id: string) => reply.toLowerCase().indexOf((db().events.find((x) => x.id === id)?.title ?? "\u0000").toLowerCase());

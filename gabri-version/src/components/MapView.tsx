@@ -814,7 +814,7 @@ export default function MapView(props: Props) {
         onZoom={(by) => { const m = map.current; if (m && !props.walk) m.easeTo({ zoom: m.getZoom() + by, duration: 300 }); }}
         onNorth={() => { const m = map.current; if (m && !props.walk) m.easeTo({ bearing: 0, pitch: 60, duration: 600 }); }} />
       {rotateHint && !props.walk && (
-        <div className="glass fade-in pointer-events-none absolute left-1/2 top-5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
+        <div className="glass fade-in pointer-events-none absolute left-1/2 top-[calc(1.25rem+var(--sat))] z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
           Swipe sideways with two fingers to turn the map · <span className="text-muted">⌥ + swipe to tilt</span>
         </div>
       )}

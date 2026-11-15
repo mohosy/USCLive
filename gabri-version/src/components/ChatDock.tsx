@@ -119,9 +119,9 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
                     ) : null; })}
                   </div>
                 )}
-                {m.actions?.filter((a) => a.type === "walk").map((a) => a.type === "walk" && (
-                  <button key={a.buildingId} type="button" onClick={() => onAction(a)} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[12.5px] font-medium hover:bg-surface">
-                    <Navigation size={13} /> Walk to {BUILDING_BY_ID[a.buildingId]?.name}
+                {m.actions?.map((a, k) => (a.type === "walk" || a.type === "walk_point") && (
+                  <button key={k} type="button" onClick={() => onAction(a)} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[12.5px] font-medium hover:bg-surface">
+                    <Navigation size={13} /> Walk to {a.type === "walk" ? BUILDING_BY_ID[a.buildingId]?.name : a.name}
                   </button>
                 ))}
               </div>

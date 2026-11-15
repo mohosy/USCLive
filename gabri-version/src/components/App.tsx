@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
-import { api, applyFilters, DEFAULT_FILTERS, type AppState, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
+import { api, applyFilters, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
 import AlertDetail from "./AlertDetail";
@@ -103,7 +103,9 @@ export default function App() {
   const [googlePrefill, setGooglePrefill] = useState<GooglePrefill | null>(null);
   const [askRes, setAskRes] = useState<AskRes | null>(null);
   const [tick, setTick] = useState(0);
-  const [walk, setWalk] = useState<{ toId: string; key: number } | null>(null);
+  const [walk, setWalk] = useState<{ toId: string; key: number; to?: Building } | null>(null);
+  // where the walk goes: a campus building, or any point the assistant found (an address, a shop)
+  const walkTo = walk ? walk.to ?? BUILDING_BY_ID[walk.toId] ?? null : null;
   const seenNotifs = useRef<Set<string> | null>(null);
   const focusSeq = useRef(0); // makes every fly-to a new object, even to the same spot
 
@@ -293,6 +295,7 @@ export default function App() {
   function chatAction(a: ChatAction) {
     if (a.type === "open_event") openEvent(a.eventId);
     else if (a.type === "walk") { if (a.buildingId !== loc.buildingId) { setSelEvent(null); setSelBuilding(null); setWalk({ toId: a.buildingId, key: ++focusSeq.current }); } }
+    else if (a.type === "walk_point") { setSelEvent(null); setSelBuilding(null); setWalk({ toId: "point", to: { id: "point", code: "", name: a.name, lat: a.lat, lng: a.lng, kind: "outdoor", capacity: 0, minor: true }, key: ++focusSeq.current }); }
     else { const b = BUILDING_BY_ID[a.buildingId]; if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 17, key: ++focusSeq.current }); }
   }
   /** Locate button: with a fix, just re-center; otherwise ask the browser once. Off campus or denied keeps the demo spot. */
@@ -465,7 +468,7 @@ export default function App() {
               onCamera={onFlatCamera}
               intro={intro}
               onIntroDone={() => setIntro(false)}
-              walk={view === "map" && walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
+              walk={view === "map" && walk && walkTo ? { to: walkTo, key: walk.key } : null}
               onWalkEnd={endWalk}
             />
           )}
@@ -485,7 +488,7 @@ export default function App() {
                 follow={camBus}
                 onReady={() => { setSatLoaded(true); if (view === "3d") setTimeout(() => setFlatGone(true), 800); }}
                 onCamera={(c) => { camera.current = c; }}
-                walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
+                walk={walk && walkTo ? { to: walkTo, key: walk.key } : null}
                 onWalkEnd={endWalk}
                 callouts={walk ? noCallouts : callouts}
                 alerts={shownAlerts}
@@ -496,7 +499,7 @@ export default function App() {
             </div>
           )}
           {view === "3d" && !threeReady && (
-            <div className="glass absolute left-1/2 top-24 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
+            <div className="glass absolute left-1/2 top-[calc(6rem+var(--sat))] z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
           )}
 
           {/* Explore / Satellite: icon-only switch in the bottom-left corner (names show as tooltips) */}

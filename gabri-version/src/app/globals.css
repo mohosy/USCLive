@@ -2,6 +2,9 @@
 @import "mapbox-gl/dist/mapbox-gl.css";
 
 :root {
+  /* iPhone notch / home-bar insets (0 everywhere else) */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
   --cardinal: #990000;
   --cardinal-hover: #7a0000;
   --gold: #ffcc00;
@@ -207,11 +210,11 @@ html, body {
 /* compact DPS tag for older crime-log incidents */
 
 /* ---------- Map navigation, bottom dock and search (Ali's layout) ---------- */
-.map-menu-button { position: absolute; left: 24px; top: 20px; z-index: 35; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; color: #1d1d1f; cursor: pointer; }
+.map-menu-button { position: absolute; left: 24px; top: calc(20px + var(--sat)); z-index: 35; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; color: #1d1d1f; cursor: pointer; }
 .map-menu-button svg { filter: drop-shadow(0 1px 3px #fff) drop-shadow(0 -1px 2px #fff); }
 .map-menu-button:hover, .map-menu-button[aria-expanded="true"] { background: rgba(255,255,255,0.9); }
 /* Top-right: the cardinal initials button (gold dot = unread notifications) and the account panel it opens */
-.account-area { position: absolute; right: 24px; top: 20px; z-index: 35; }
+.account-area { position: absolute; right: 24px; top: calc(20px + var(--sat)); z-index: 35; }
 .map-profile { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--cardinal); color: #fff; font-size: 12px; font-weight: 650; box-shadow: 0 4px 14px rgba(65,0,0,0.22); cursor: pointer; }
 .map-profile::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
 .map-profile:hover { background: var(--cardinal-hover); }
@@ -224,7 +227,7 @@ html, body {
 .account-tabs [aria-selected="true"] { background: #fbefef; color: var(--cardinal); }
 .account-tabs button:hover { background: rgba(250,242,242,0.9); }
 .unread-count { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--cardinal); }
-.account-content { max-height: min(60dvh, calc(100dvh - 330px)); overflow-y: auto; overscroll-behavior: contain; }
+.account-content { max-height: min(60dvh, calc(100dvh - 330px - var(--sat))); overflow-y: auto; overscroll-behavior: contain; }
 .account-content input { min-width: 0; }
 .map-app .map-profile:focus-visible { outline-color: #fff; box-shadow: 0 0 0 5px var(--cardinal); }
 .icon-action { display: inline-grid; flex-shrink: 0; place-items: center; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; color: #55555b; }
@@ -275,7 +278,7 @@ html, body {
 
 /* The menu slides in from the left and covers only its own area: map dragging stays available beside it.
    It stops above the bottom-left view switch so that stays reachable. */
-.side { position: absolute; left: 16px; top: 84px; bottom: 96px; z-index: 25; width: 360px; border-radius: 16px; visibility: hidden;
+.side { position: absolute; left: 16px; top: calc(84px + var(--sat)); bottom: 96px; z-index: 25; width: 360px; border-radius: 16px; visibility: hidden;
   transform: translateX(calc(-100% - 24px)); transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1), visibility 0.28s; }
 .side-open { transform: none; visibility: visible; }
 .side-inner { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; background: rgba(255,255,255,0.98); box-shadow: 0 8px 28px rgba(30,20,20,0.14); }
@@ -283,10 +286,10 @@ html, body {
 .side .text-muted { color: #626267; }
 @media (min-width: 901px) { .side-on .map-dock { left: 400px; } }
 @media (max-width: 900px) {
-  .map-menu-button { left: 16px; top: 16px; }
-  .account-area { right: 16px; top: 16px; }
-  .weather-pill { top: 84px; right: 16px; }
-  .account-content { max-height: calc(100dvh - 370px); }
+  .map-menu-button { left: 16px; top: calc(16px + var(--sat)); }
+  .account-area { right: 16px; top: calc(16px + var(--sat)); }
+  .weather-pill { top: calc(84px + var(--sat)); right: 16px; }
+  .account-content { max-height: calc(100dvh - 370px - var(--sat)); }
   .map-dock { left: 16px; right: 16px; }
   .dock-options { flex-direction: column; gap: 6px; padding-bottom: 6px; }
   .map-view-controls { align-self: center; }
@@ -361,7 +364,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { position: absolute; top: 90px; right: 24px; z-index: 10; min-width: 108px; padding: 10px 14px 8px; border-radius: 18px; background: rgba(255,255,255,0.55); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 4px 16px rgba(20,20,30,0.12); color: #17171a; text-align: center; text-shadow: 0 0 6px rgba(255,255,255,0.55); }
+.weather-pill { position: absolute; top: calc(90px + var(--sat)); right: 24px; z-index: 10; min-width: 108px; padding: 10px 14px 8px; border-radius: 18px; background: rgba(255,255,255,0.55); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 4px 16px rgba(20,20,30,0.12); color: #17171a; text-align: center; text-shadow: 0 0 6px rgba(255,255,255,0.55); }
 .weather-current { display: flex; justify-content: center; align-items: center; gap: 8px; }
 .weather-sun { color: #8f4e00; }
 .weather-temperature { font-size: 30px; line-height: 1.15; font-weight: 500; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
@@ -388,9 +391,11 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .map-compass { transition: transform 0.12s linear; }
 .map-app .mapboxgl-ctrl-bottom-right { right: 46px; padding-right: 0; }
 .map-app .mapboxgl-ctrl-bottom-right > .mapboxgl-ctrl { margin-bottom: 14px; }
-/* phones: the dock fills the bottom, so the column and the credits move above it */
+/* phones: the dock fills the bottom, so the column and the credits move above it
+   (--dock-lift: how far the iPhone home bar pushes the dock up) */
 @media (max-width: 900px) {
-  .map-controls { bottom: 210px; }
-  .map-app .mapboxgl-ctrl-bottom-right { bottom: 198px; }
-  .map-app .satellite-credit { bottom: 212px; }
+  .map-app { --dock-lift: max(0px, var(--sab) - 12px); }
+  .map-controls { bottom: calc(210px + var(--dock-lift)); }
+  .map-app .mapboxgl-ctrl-bottom-right { bottom: calc(198px + var(--dock-lift)); }
+  .map-app .satellite-credit { bottom: calc(212px + var(--dock-lift)); }
 }
