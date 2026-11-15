@@ -75,7 +75,7 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
 
       {ev.friendsGoing.length > 0 && (
         <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2">
-          <div className="flex -space-x-1.5">{ev.friendsGoing.slice(0, 4).map((f) => <Avatar key={f.id} initials={f.avatar} size={26} />)}</div>
+          <div className="flex -space-x-1.5">{ev.friendsGoing.slice(0, 4).map((f) => <Avatar key={f.id} initials={f.avatar} photo={f.photo} size={26} />)}</div>
           <span className="text-sm"><span className="font-medium">{goingNames(ev.friendsGoing.map((f) => f.name.split(" ")[0]))}</span> <span className="text-muted">{ev.friendsGoing.length === 1 ? "is" : "are"} going</span></span>
         </div>
       )}

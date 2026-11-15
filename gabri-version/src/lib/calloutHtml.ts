@@ -8,11 +8,18 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 export function calloutHTML(c: Callout, now: Date) {
   // webcams: the 3D film camera is drawn by the map; this is just its name tag at the camera's feet
   if (c.kind === "webcam") {
+    // a small live tile of what the camera sees; hover grows it, click opens the stream
+    if (c.image) {
+      const src = `${c.image}${c.image.includes("?") ? "&" : "?"}t=${Math.floor(+now / 60_000)}`;
+      return `<div class="camt"><div class="camt-tile"><img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="camt-live" title="Live"><i></i></span></div><div class="camt-name">${esc(c.title)}</div><div class="camt-hint">${esc(c.eyebrow)} · Click to watch</div></div>`;
+    }
     return `<div class="cam-tag"><i></i>Live<span>${esc(c.title)}</span></div>`;
   }
   // DPS alerts: the 3D beacon is drawn by the map; this is its small tag (what happened shows on hover)
   if (c.kind === "alert" || c.kind === "alertmini") {
-    return `<div class="al-tag al-${c.severity ?? "medium"}"><i></i>DPS · ${esc(c.eyebrow)}<span>${esc(c.title)}</span></div>`;
+    // DPS: a white marker with a shield tinted by severity, how long ago, and (on hover) what happened
+    const ago = c.eyebrow.replace(" min ago", "m").replace(" h ago", "h").replace(" days ago", "d").replace("just now", "now").replace("yesterday", "1d");
+    return `<div class="dps dps-${c.severity ?? "medium"}"><span class="dps-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2 4 5v6c0 5.25 3.4 9.8 8 11 4.6-1.2 8-5.75 8-11V5l-8-3z"/><path d="M11 7h2v6h-2zM11 15h2v2h-2z" fill="#fff"/></svg></span><span class="dps-t"><b>${esc(ago)}</b><span>${esc(c.title)}</span></span></div>`;
   }
   // live games: a small score pill (team badges + score); hovering shows the full card, clicking opens the side panel
   if (c.game) {
@@ -28,13 +35,15 @@ export function calloutHTML(c: Callout, now: Date) {
     </div><div class="co-stem"></div><div class="co-foot"></div>`;
   }
   if (c.kind === "event" && c.ev) return eventBanner(c);
+  if (c.kind === "busy" || c.kind === "quiet") {
+    return `<div class="bz bz-${c.kind}"><span class="bz-ic">${USERS}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
+  }
   const title = esc(c.title);
   const meta = c.meta ? esc(c.meta) : "";
-  const dot = c.kind === "busy" ? "#ea580c" : c.kind === "quiet" ? "#16a34a" : "";
   return `<div class="co-card">
-    <div class="co-eyebrow">${dot ? `<i style="background:${dot}" class=""></i>` : ""}${esc(c.eyebrow)}</div>
-    <div class="co-title">${title}${meta && (c.kind === "busy" || c.kind === "quiet") ? ` <span class="co-meta">· ${meta}</span>` : ""}</div>
-    ${meta && c.kind !== "busy" && c.kind !== "quiet" ? `<div class="co-meta">${meta}</div>` : ""}
+    <div class="co-eyebrow">${esc(c.eyebrow)}</div>
+    <div class="co-title">${title}</div>
+    ${meta ? `<div class="co-meta">${meta}</div>` : ""}
     ${c.food ? `<div class="co-food">${esc(c.food)}</div>` : ""}
   </div><div class="co-stem"></div><div class="co-foot"></div>`;
 }
@@ -51,8 +60,8 @@ function friendsLine(f: { name: string }[]) {
   if (f.length === 1) return `${esc(f[0].name)} is going`;
   return `${esc(f[0].name)} and ${f.length - 1} friend${f.length > 2 ? "s" : ""}`;
 }
-function faces(f: { initials: string }[], max: number) {
-  return f.slice(0, max).map((x) => `<i>${esc(x.initials)}</i>`).join("") + (f.length > max ? `<i class="more">+${f.length - max}</i>` : "");
+function faces(f: { initials: string; photo?: string }[], max: number) {
+  return f.slice(0, max).map((x) => (x.photo ? `<i class="ph" style="background-image:url('${esc(x.photo)}')"></i>` : `<i>${esc(x.initials)}</i>`)).join("") + (f.length > max ? `<i class="more">+${f.length - max}</i>` : "");
 }
 
 /** Events: a small photo ring on the map (friends' faces on its corner) that grows into a full card on hover. */
@@ -64,9 +73,12 @@ function eventBanner(c: Callout) {
   const tags = `${v.state === "live" ? '<span class="evb-tag live"><i class="evb-dot"></i>Live</span>' : ""}${c.food ? `<span class="evb-tag food">${FORK}${esc(c.food)}</span>` : ""}`;
   const short = v.full.length > 22 ? `${v.full.slice(0, 21)}…` : v.full;
   return `<div class="evb evb-${v.state}">
-    <div class="evb-mini">
-      <div class="evb-ring">${pic}${v.friends.length ? `<span class="evb-faces">${faces(v.friends, 2)}</span>` : ""}${c.food ? `<span class="evb-food">${FORK}</span>` : ""}</div>
-      <div class="evb-label"><b>${esc(short)}</b><span>${v.state === "live" ? '<i class="evb-dot"></i>' : ""}${esc(v.whenShort)}</span></div>
+    <div class="evb-mini evt">
+      ${v.photo ? `<span class="evt-img" style="background-image:url('${v.photo}')"></span>` : `<span class="evt-img evt-noimg" style="background-color:${v.color}">${SPARK}</span>`}
+      <span class="evt-perf"></span>
+      <span class="evt-body"><span class="evt-when">${v.state === "live" ? '<i class="evb-dot"></i>' : ""}${esc(v.whenShort)}${c.food ? `<em>${FORK}</em>` : ""}</span><b class="evt-title">${esc(short)}</b></span>
+      ${v.friends.length ? `<span class="evb-faces evt-faces">${faces(v.friends, 2)}</span>` : ""}
+      <span class="evt-tail"></span>
     </div>
     <div class="evb-card">
       ${v.photo ? `<div class="evb-photo" style="background-image:url('${v.photo}')"><div class="evb-tags">${tags}</div></div>` : `<div class="evb-strip" style="background:${v.color}"></div>`}

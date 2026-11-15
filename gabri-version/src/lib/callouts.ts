@@ -24,6 +24,8 @@ export interface Callout {
   intensity?: number;
   /** webcams: compass direction the camera looks */
   heading?: number;
+  /** webcams: latest still from the camera (refreshed by the map every minute) */
+  image?: string;
   /** events with free food: what's offered (shown as a small badge, whatever the filters are) */
   food?: string;
   /** DPS alerts: how serious (sets the tag color) */
@@ -32,7 +34,7 @@ export interface Callout {
   ev?: {
     photo?: string; color: string; full: string; place: string;
     when: string; whenShort: string; state: "live" | "soon";
-    going: number; friends: { initials: string; name: string }[];
+    going: number; friends: { initials: string; name: string; photo?: string }[];
   };
 }
 
@@ -107,7 +109,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
       .filter((e) => !e.game && e.lat != null && e.lng != null && ((chips.events && (e.visibility === "open" || e.friendsGoing.length > 0)) || (chips.food && e.freeFood)))
       .filter((e) => +new Date(e.end) > +now && +new Date(e.start) - +now < 90 * 60_000)
       .sort((x, y) => y.friendsGoing.length - x.friendsGoing.length || +new Date(x.start) - +new Date(y.start))
-      .slice(0, 4);
+      .slice(0, 7);
     for (const e of soon) {
       const where = b(e.buildingId)?.name ?? "";
       // the label is always the event's type; free food is a badge on top, so turning a filter on/off never renames an event
@@ -126,7 +128,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
             whenShort: live ? "Live now" : mins < 60 ? `In ${mins} min` : fmtTime(e.start),
             state: live ? "live" as const : "soon" as const,
             going: e.attendeeCount,
-            friends: e.friendsGoing.map((f) => ({ initials: f.avatar, name: f.name.split(" ")[0] })),
+            friends: e.friendsGoing.map((f) => ({ initials: f.avatar, name: f.name.split(" ")[0], photo: f.photo })),
           };
         })(),
       });
@@ -134,7 +136,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
   }
 
   if (chips.webcams) {
-    for (const w of WEBCAMS) out.push({ id: `cam:${w.id}`, kind: "webcam", lng: w.lng, lat: w.lat, eyebrow: w.source, title: w.name, heading: w.heading });
+    for (const w of WEBCAMS) out.push({ id: `cam:${w.id}`, kind: "webcam", lng: w.lng, lat: w.lat, eyebrow: w.source, title: w.name, heading: w.heading, image: w.image });
   }
 
   // one bubble per spot: later (more specific) kinds don't stack on top of earlier ones

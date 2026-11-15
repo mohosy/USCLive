@@ -58,7 +58,7 @@ export default function FindFriends({ me, onClose, onChanged }: { me?: string; o
 
   const row = (p: PersonView) => (
     <li key={p.id} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-surface">
-      <Avatar initials={p.avatar} size={42} />
+      <Avatar initials={p.avatar} photo={p.photo} size={42} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] font-semibold leading-tight">{p.name}</div>
         <div className="truncate text-[12.5px] text-muted">@{p.username}{p.major ? ` · ${p.major}` : ` · ${schoolShort(p.school)}`}</div>

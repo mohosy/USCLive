@@ -521,3 +521,83 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .evb-going > span:first-of-type { white-space: nowrap; }
 .evb-going .evb-faces { position: static; margin-left: 2px; }
 .evb-fr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6e6e73; }
+
+/* someone just walked into the event: a green +1 floats up off the banner's photo and the ring bumps */
+.evb-plus { position: absolute; left: 50%; top: -8px; z-index: 2; padding: 1px 6px; border-radius: 99px; background: #16a34a; color: #fff; font: 800 11.5px var(--font-apple); white-space: nowrap; pointer-events: none; box-shadow: 0 0 0 1.5px #fff, 0 3px 8px rgba(0, 0, 0, 0.25); animation: evb-plus 1.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+@keyframes evb-plus { 0% { opacity: 0; transform: translate(-50%, 6px) scale(0.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); } 70% { opacity: 1; transform: translate(-50%, -16px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -26px) scale(0.95); } }
+.evb-bump { animation: evb-bump 0.5s ease; }
+@keyframes evb-bump { 0% { transform: scale(1); } 35% { transform: scale(1.14); } 100% { transform: scale(1); } }
+/* live events send a ripple across the ground from their pin */
+.co-event:has(.evb-live) .co-foot::after { width: 70px; height: 70px; border: 2px solid rgba(225, 29, 72, 0.5); animation: co-ring 2.2s ease-out infinite; }
+
+/* ---------- Webcams: a small rounded live tile (instead of the big 3D camera) that grows on hover ---------- */
+.co-webcam:hover { z-index: 30 !important; }
+.camt { display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: var(--font-apple); }
+.camt-tile { position: relative; width: 58px; height: 58px; border-radius: 18px; overflow: hidden; background: #1c1c1e; border: 2.5px solid #fff;
+  box-shadow: 0 0 0 1px rgba(255, 59, 48, 0.55), 0 6px 16px rgba(0, 0, 0, 0.28); transition: width 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 0.24s ease; }
+.camt-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camt-live { position: absolute; left: 4px; top: 4px; display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px; border-radius: 99px; background: rgba(255, 59, 48, 0.92); color: #fff; font: 800 8px/1.4 var(--font-apple); letter-spacing: 0.06em; }
+.camt-live i { width: 4px; height: 4px; border-radius: 99px; background: #fff; animation: co-blink 1.4s steps(2) infinite; }
+.camt-name { padding: 2px 8px; border-radius: 99px; background: rgba(28, 28, 30, 0.82); color: #fff; font: 600 10.5px var(--font-apple); white-space: nowrap; }
+.camt-hint { display: none; font: 500 10.5px var(--font-apple); color: #3a3a3c; padding: 2px 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.92); }
+.co-webcam:hover .camt-tile { width: 224px; height: 126px; border-radius: 16px; }
+.co-webcam:hover .camt-live { font-size: 10px; padding: 2px 7px; left: 8px; top: 8px; }
+.co-webcam:hover .camt-hint { display: block; }
+
+.evb-faces i.ph { background-size: cover; background-position: center; color: transparent; }
+
+/* a friend's moment over an event: their face + "just got here", floats up and fades */
+.evb-moment { position: absolute; left: 50%; bottom: calc(100% + 4px); z-index: 3; display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px; border-radius: 99px; white-space: nowrap; pointer-events: none;
+  background: rgba(255, 255, 255, 0.97); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 8px 22px rgba(0, 0, 0, 0.2); font: 500 12px var(--font-apple); color: #3a3a3c; animation: evb-moment 3.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+.evb-moment b { font-weight: 650; color: #1d1d1f; }
+.evb-moment i { width: 26px; height: 26px; border-radius: 99px; background: #e5e5ea center / cover no-repeat; display: grid; place-items: center; font: 700 9px var(--font-apple); font-style: normal; color: #1d1d1f; box-shadow: 0 0 0 2px #16a34a; }
+@keyframes evb-moment { 0% { opacity: 0; transform: translate(-50%, 10px) scale(0.85); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1); } 80% { opacity: 1; transform: translate(-50%, -6px); } 100% { opacity: 0; transform: translate(-50%, -14px); } }
+
+/* camera tile: just a blinking red dot for "live" */
+.camt-live { padding: 0; width: 9px; height: 9px; left: 6px; top: 6px; border-radius: 99px; background: #ff3b30; box-shadow: none; animation: none; }
+.camt-live i { display: none; }
+.co-webcam:hover .camt-live { width: 12px; height: 12px; left: 9px; top: 9px; padding: 0; }
+
+/* ---------- DPS alerts: a clean white marker with a severity-tinted shield (no 3D siren) ---------- */
+.co-alert:hover, .co-alertmini:hover { z-index: 30 !important; }
+.dps { --sev: #dc2626; --sev-soft: rgba(220, 38, 38, 0.14); display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 99px; font-family: var(--font-apple);
+  background: rgba(255, 255, 255, 0.96); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.16); transition: transform 0.2s ease; }
+.dps-medium { --sev: #ea580c; --sev-soft: rgba(234, 88, 12, 0.14); }
+.dps-low { --sev: #d97706; --sev-soft: rgba(217, 119, 6, 0.14); }
+.dps-ic { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 99px; background: var(--sev-soft); color: var(--sev); }
+.dps-t { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #3a3a3c; }
+.dps-t b { font-weight: 650; color: var(--sev); }
+.dps-t span { max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width 0.25s ease; }
+.co-alert:hover .dps-t span, .co-alertmini:hover .dps-t span { max-width: 220px; }
+.co-alert:hover .dps, .co-alertmini:hover .dps { transform: translateY(-2px); }
+.co-alertmini .dps { padding: 2px; }
+.co-alertmini .dps-t { display: none; }
+.co-alertmini:hover .dps-t { display: flex; padding-right: 6px; }
+
+/* ---------- Event mini ticket: photo stub, perforation, when + title, friends' faces; grows into the card on hover ---------- */
+.evt { position: relative; display: flex; align-items: center; height: 46px; padding-right: 10px; border-radius: 13px; background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 2px 5px rgba(0, 0, 0, 0.07), 0 10px 24px rgba(0, 0, 0, 0.16); gap: 0; flex-direction: row; }
+.evt-img { flex: none; width: 46px; height: 46px; border-radius: 13px 0 0 13px; background: #e5e5ea center / cover no-repeat; display: grid; place-items: center; color: #fff; }
+.evt-perf { flex: none; align-self: stretch; margin: 7px 0; border-left: 1.5px dotted #d1d1d6; margin-left: 9px; }
+.evt-body { display: flex; flex-direction: column; justify-content: center; padding-left: 9px; min-width: 0; }
+.evt-when { display: flex; align-items: center; gap: 4px; font: 700 9px var(--font-apple); letter-spacing: 0.09em; text-transform: uppercase; color: #8e8e93; }
+.evb-soon .evt-when { color: #b45309; }
+.evb-live .evt-when { color: #c8102e; }
+.evt-when em { display: inline-flex; color: #b45309; margin-left: 2px; }
+.evt-title { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 13px/1.25 var(--font-apple); letter-spacing: -0.01em; color: #1d1d1f; }
+.evt-faces { position: static; margin-left: 8px; }
+.evt-tail { position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; background: #fff; transform: translateX(-50%) rotate(45deg); border-radius: 2px; box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.06); }
+.evt.evb-bump { animation: evb-bump 0.5s ease; }
+.evt .evb-plus { top: -10px; left: 23px; }
+
+/* ---------- Busy / quiet places: a small marker; the name and how busy show only on hover ---------- */
+.co-busy:hover, .co-quiet:hover { z-index: 30 !important; }
+.bz { --c: #ea580c; display: inline-flex; align-items: center; gap: 6px; padding: 3px; border-radius: 99px; background: rgba(255, 255, 255, 0.96); font-family: var(--font-apple);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.16); transition: padding 0.2s ease, transform 0.2s ease; }
+.bz-quiet { --c: #16a34a; }
+.bz-ic { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 99px; background: var(--c); color: #fff; }
+.bz-ic svg { width: 13px; height: 13px; }
+.bz-t { max-width: 0; overflow: hidden; white-space: nowrap; font-size: 11.5px; color: #3a3a3c; transition: max-width 0.25s ease; }
+.bz-t b { font-weight: 650; color: #1d1d1f; margin-right: 5px; }
+.co-busy:hover .bz, .co-quiet:hover .bz { padding-right: 10px; transform: translateY(-2px); }
+.co-busy:hover .bz-t, .co-quiet:hover .bz-t { max-width: 280px; }
