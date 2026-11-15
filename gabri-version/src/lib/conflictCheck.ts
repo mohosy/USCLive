@@ -21,6 +21,14 @@ export function scheduleAround(me: User, ev: CampusEvent, events: CampusEvent[])
   return [...classes, ...going];
 }
 
+/** What is on `me`'s schedule on one day (YYYY-MM-DD): classes that meet that day and events they are going to that day. */
+export function scheduleOn(me: User, date: string, events: CampusEvent[]): Busy[] {
+  const [y, m, d] = date.split("-").map(Number);
+  const noon = new Date(y, (m || 1) - 1, d || 1, 12).toISOString();
+  const day = new Date(noon).toDateString();
+  return scheduleAround(me, { id: "", start: noon, end: noon } as CampusEvent, events).filter((b) => new Date(b.start).toDateString() === day);
+}
+
 /** Every clash between `ev` and `me`'s schedule: overlaps, and back-to-back events too far apart to walk. */
 export function conflictsFor(me: User, ev: CampusEvent, events: CampusEvent[]): Conflict[] {
   return findConflicts(ev, scheduleAround(me, ev, events), walk);
