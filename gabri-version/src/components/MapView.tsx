@@ -676,7 +676,7 @@ export default function MapView(props: Props) {
     if (process.env.NODE_ENV !== "production") (window as unknown as { __uscMap?: mapboxgl.Map }).__uscMap = m; // dev-only debugging handle
     m.touchZoomRotate.enableRotation();
     // weather on the map comes from Open-Meteo (CC BY 4.0): credited here with the map's own credits
-    m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a>' }), "bottom-right");
+    m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a> | <a href="/credits">About, credits and privacy</a>' }), "bottom-right");
     // Mapbox's own zoom + compass (drag the compass to tilt); phones pinch instead (hidden there in CSS)
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
     // "Play as your Trojan": one more button at the bottom of that same pill, drawn like the zoom icons
@@ -926,8 +926,9 @@ export default function MapView(props: Props) {
       const f = friends[Math.floor(Math.random() * friends.length)];
       const card = document.createElement("div");
       card.className = "evb-moment";
-      const face = f.photo ? `<i style="background-image:url('${f.photo}')"></i>` : `<i class="ini">${f.initials}</i>`;
-      card.innerHTML = `${face}<span><b>${f.name}</b> just got here</span>`;
+      // a friend's name is text they typed: never put it into the page as HTML
+      const face = f.photo ? `<i style="background-image:url('${escapeHtml(f.photo)}')"></i>` : `<i class="ini">${escapeHtml(f.initials)}</i>`;
+      card.innerHTML = `${face}<span><b>${escapeHtml(f.name)}</b> just got here</span>`;
       b.el.appendChild(card);
       setTimeout(() => card.remove(), 3400);
     }

@@ -35,7 +35,7 @@ async function POST_(req: Request) {
       continue;
     }
     try {
-      const text = htmlToText(await fetchText(u));
+      const text = htmlToText(await fetchText(u, undefined, ALLOW));
       const res = await extractEventsFromPage(text, u.toString());
       anyAi ||= res.ai;
       let added = 0;

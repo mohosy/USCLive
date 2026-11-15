@@ -100,7 +100,19 @@ export function conflictsIn(e: unknown): import("./conflicts").Conflict[] | null
   return (e as Partial<ApiError>)?.status === 409 && d?.code === "conflict" && Array.isArray(d.conflicts) ? d.conflicts : null;
 }
 
+/** GETs already on their way: a second caller asking for the same URL at the same moment shares the answer. */
+const inFlight = new Map<string, Promise<unknown>>();
+
 export async function api<T>(url: string, init?: RequestInit & { json?: unknown }): Promise<T> {
+  if (init) return send<T>(url, init); // anything that sends data is never shared
+  const going = inFlight.get(url) as Promise<T> | undefined;
+  if (going) return going;
+  const p = send<T>(url).finally(() => inFlight.delete(url));
+  inFlight.set(url, p);
+  return p;
+}
+
+async function send<T>(url: string, init?: RequestInit & { json?: unknown }): Promise<T> {
   const res = await fetch(url, {
     ...init,
     method: init?.method ?? (init?.json !== undefined ? "POST" : "GET"),
