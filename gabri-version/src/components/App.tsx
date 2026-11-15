@@ -493,13 +493,12 @@ export default function App() {
               <StudyPanel loc={loc} tick={tick} onOpenBuilding={openBuilding} />
             )}
           </div>
-          <div className="border-t border-line p-3">
-            {isCreator ? (
+          {/* creators (clubs, departments) post events from here; everyone else just gets more room */}
+          {isCreator && (
+            <div className="border-t border-line p-3">
               <Button className="w-full !rounded-full" onClick={requestAddEvent}><Plus size={16} /> Add event</Button>
-            ) : (
-              <Button variant="secondary" className="w-full !rounded-full" onClick={requestAddEvent} title="Only Student Creator accounts can post events">✦ Become a creator to post events</Button>
-            )}
-          </div>
+            </div>
+          )}
           </div>
         </aside>
 
