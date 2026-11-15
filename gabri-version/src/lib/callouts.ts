@@ -6,6 +6,7 @@ import { BUILDING_BY_ID, CATEGORY_META } from "./campus";
 import { fmtTime, isLive, type AppState } from "./client-types";
 import type { GameInfo } from "./types";
 import { WEBCAMS } from "./webcams";
+import { eventPhoto } from "./eventPhotos";
 
 export type CalloutKind = "game" | "busy" | "quiet" | "event" | "schedule" | "alert" | "alertmini" | "webcam";
 
@@ -27,6 +28,12 @@ export interface Callout {
   food?: string;
   /** DPS alerts: how serious (sets the tag color) */
   severity?: "high" | "medium" | "low";
+  /** events: what the small photo ring and its hover card show */
+  ev?: {
+    photo?: string; color: string; full: string; place: string;
+    when: string; whenShort: string; state: "live" | "soon";
+    going: number; friends: { initials: string; name: string }[];
+  };
 }
 
 /** The one filter row on the map. Each chip adds a layer; none hides another (Free food adds food highlights, it never hides sports). */
@@ -109,6 +116,19 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
         id: `ev:${e.id}`, kind: "event", lng: e.lng!, lat: e.lat!, eyebrow: `${label} · ${where}`, food: e.freeFood ? e.foodDetail ?? "Free food" : undefined,
         title: e.title.length > 26 ? `${e.title.slice(0, 25)}…` : e.title,
         meta: `${isLive(e, now) ? "Now" : fmtTime(e.start)} · ${e.attendeeCount} going`,
+        ev: (() => {
+          const live = isLive(e, now);
+          const mins = Math.max(1, Math.round((+new Date(e.start) - +now) / 60_000));
+          return {
+            photo: eventPhoto(e)?.src, color: CATEGORY_META[e.category]?.color ?? "#9333ea",
+            full: e.title, place: e.room ? `${where} · ${e.room}` : where,
+            when: live ? `Live now · until ${fmtTime(e.end)}` : mins < 60 ? `Starts in ${mins} min · ${fmtTime(e.start)}` : `Today · ${fmtTime(e.start)}`,
+            whenShort: live ? "Live now" : mins < 60 ? `In ${mins} min` : fmtTime(e.start),
+            state: live ? "live" as const : "soon" as const,
+            going: e.attendeeCount,
+            friends: e.friendsGoing.map((f) => ({ initials: f.avatar, name: f.name.split(" ")[0] })),
+          };
+        })(),
       });
     }
   }
