@@ -275,3 +275,6 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .mapboxgl-ctrl-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: center; column-gap: 6px; padding-right: 10px; }
 .mapboxgl-ctrl-bottom-right > .mapboxgl-ctrl { float: none; margin: 0 0 10px 0; clear: none; }
 .mapboxgl-ctrl-bottom-right > .mapboxgl-ctrl-group { grid-column: 1 / -1; }
+/* the folded ⓘ matches the circle in the Mapbox logo (20px instead of 24px) */
+.mapboxgl-ctrl-attrib.mapboxgl-compact:not(.mapboxgl-compact-show) { min-height: 20px; height: 20px; width: 20px; padding: 0; }
+.mapboxgl-ctrl-attrib.mapboxgl-compact:not(.mapboxgl-compact-show) .mapboxgl-ctrl-attrib-button { width: 20px; height: 20px; background-size: 20px 20px; top: 0; right: 0; }
