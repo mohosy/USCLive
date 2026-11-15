@@ -138,21 +138,18 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
       <div className="fade-in my-auto w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-xl">
         <div className="text-[22px] font-semibold tracking-tight">USC<span className="text-cardinal">Live</span></div>
         {step === "email" ? (
-          <form className="mt-1" onSubmit={(e) => { e.preventDefault(); next(email); }}>
+          // real accounts come only from Google (a verified email); anyone can look around as the demo student
+          <div className="mt-1">
             <p className="text-sm text-muted">Sign in to see what is happening on campus.</p>
-            <label className="mt-4 block">
-              <div className="mb-1 text-xs font-medium text-muted">USC email</div>
-              <input className={inputCls} type="email" inputMode="email" autoComplete="email" placeholder="ttrojan@usc.edu" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
-            </label>
-            {err && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{err}</p>}
-            <Button type="submit" className="mt-4 w-full" disabled={busy || !email.trim()}>Continue</Button>
+            {err && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{err}</p>}
             {googleReady && (
-              <a href="/api/auth/google/start" className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium hover:bg-surface">
+              <a href="/api/auth/google/start" className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:bg-surface">
                 <GoogleMark /> Continue with Google
               </a>
             )}
-            <Button variant="secondary" className="mt-2 w-full" disabled={busy} onClick={() => { setEmail("ttrojan@usc.edu"); next("ttrojan@usc.edu"); }}>Use the demo student</Button>
-          </form>
+            <Button variant="secondary" className={googleReady ? "mt-2 w-full" : "mt-4 w-full"} disabled={busy} onClick={() => { setEmail("ttrojan@usc.edu"); next("ttrojan@usc.edu"); }}>{busy ? "Opening…" : "Try the demo student"}</Button>
+            <p className="mt-3 text-center text-[11px] leading-relaxed text-muted">The demo student comes with a full schedule, friends and events, so you can try everything.</p>
+          </div>
         ) : (
           <form className="mt-1 space-y-3" onSubmit={(e) => { e.preventDefault(); create(); }}>
             <p className="text-sm text-muted">{google ? "Signed in with Google. Pick your school to finish" : "Create your account"} for <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>.</p>
@@ -180,7 +177,7 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
             </label>
             {err && <p role="alert" className="text-sm font-medium text-red-700">{err}</p>}
             <Button type="submit" className="w-full" disabled={busy || !first.trim() || !last.trim() || !school || uStatus.state !== "ok"}>Create account</Button>
-            <button type="button" className="w-full text-center text-xs text-muted hover:text-foreground" onClick={() => { setStep("email"); setErr(null); }}>Use a different email</button>
+            <button type="button" className="w-full text-center text-xs text-muted hover:text-foreground" onClick={() => { setStep("email"); setErr(null); }}>Back</button>
           </form>
         )}
         <p className="mt-4 text-center text-[11px] text-muted">Not an official USC service.</p>
