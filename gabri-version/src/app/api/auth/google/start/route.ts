@@ -10,7 +10,7 @@ async function GET_(req: Request) {
   const state = randomUUID();
   return new Response(null, {
     status: 302,
-    headers: { Location: authUrl(req, state), "Set-Cookie": `g_state=${state}; Path=/api/auth/google; HttpOnly; SameSite=Lax; Max-Age=600` },
+    headers: { Location: authUrl(req, state, new URL(req.url).searchParams.get("gmail") === "1"), "Set-Cookie": `g_state=${state}; Path=/api/auth/google; HttpOnly; SameSite=Lax; Max-Age=600` },
   });
 }
 

@@ -5,15 +5,20 @@
  */
 import { randomUUID } from "node:crypto";
 import type { CalItem } from "./calendarImport";
+import type { InboxItem } from "./types";
 import { initialsOf } from "./directory";
 import { currentUserId, db, signInAs } from "./store";
 
 const SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.readonly";
+/** asked for only when someone taps "Connect Gmail" (read-only; nothing is ever sent or changed) */
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 export interface GoogleSession {
   accessToken: string; refreshToken?: string; expiresAt: number;
   email: string; firstName: string; lastName: string; picture?: string;
   lastSync?: string;
+  /** read-only Gmail access was granted (Connect Gmail in the Inbox) */
+  gmail?: boolean;
 }
 
 const cfg = () => ({ id: process.env.GOOGLE_CLIENT_ID ?? "", secret: process.env.GOOGLE_CLIENT_SECRET ?? "", domain: process.env.GOOGLE_ALLOWED_DOMAIN ?? "" });
@@ -35,9 +40,9 @@ export function disconnect() {
   save(null);
 }
 
-export function authUrl(req: Request, state: string) {
+export function authUrl(req: Request, state: string, gmail = false) {
   const p = new URLSearchParams({
-    client_id: cfg().id, redirect_uri: redirectUri(req), response_type: "code", scope: SCOPES, state,
+    client_id: cfg().id, redirect_uri: redirectUri(req), response_type: "code", scope: gmail ? `${SCOPES} ${GMAIL_SCOPE}` : SCOPES, state,
     access_type: "offline", prompt: "consent", include_granted_scopes: "true",
   });
   if (cfg().domain) p.set("hd", cfg().domain); // pre-selects the school account; still checked on the way back
@@ -51,7 +56,7 @@ async function tokenRequest(params: Record<string, string>) {
   });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error_description ?? d.error ?? `Google token error ${res.status}`);
-  return d as { access_token: string; refresh_token?: string; expires_in: number; id_token?: string };
+  return d as { access_token: string; refresh_token?: string; expires_in: number; id_token?: string; scope?: string };
 }
 
 /** Finish sign-in: trade the one-time code for tokens and read who signed in. */
@@ -66,6 +71,7 @@ export async function finishSignIn(req: Request, code: string) {
   const s: GoogleSession = {
     accessToken: t.access_token, refreshToken: t.refresh_token, expiresAt: Date.now() + (t.expires_in - 60) * 1000,
     email, firstName: claims.given_name ?? "", lastName: claims.family_name ?? "", picture: claims.picture,
+    gmail: (t.scope ?? "").includes("gmail.readonly"),
   };
   // the Google account is the person: sign this browser into the account with that email (new one if needed)
   const d = db();
@@ -119,3 +125,44 @@ export async function fetchCalendarItems(): Promise<CalItem[]> {
   if (s) save({ ...s, lastSync: new Date().toISOString() });
   return items;
 }
+
+/* ------------------------------ Gmail (read-only) ------------------------------ */
+
+type GPart = { mimeType?: string; body?: { data?: string }; parts?: GPart[] };
+type GMsg = { id: string; snippet?: string; internalDate?: string; payload?: GPart & { headers?: { name: string; value: string }[] } };
+const b64 = (s: string) => Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+function textOf(p: GPart | undefined): string {
+  if (!p) return "";
+  if (p.mimeType === "text/plain" && p.body?.data) return b64(p.body.data);
+  for (const c of p.parts ?? []) { const t = textOf(c); if (t) return t; }
+  if (p.mimeType === "text/html" && p.body?.data) return b64(p.body.data).replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ");
+  return "";
+}
+
+/**
+ * The last week of the student's real email (skipping promotions and social), read-only, for the AI scan.
+ * Nothing is stored: the messages are scanned in this request and only their ids are remembered.
+ */
+export async function fetchGmailItems(max = 15): Promise<InboxItem[]> {
+  const s = getSession();
+  if (!s?.gmail) throw new Error("Connect Gmail first.");
+  const h = { Authorization: `Bearer ${await accessToken()}` };
+  const q = encodeURIComponent("newer_than:7d -category:promotions -category:social");
+  const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${max}&q=${q}`, { headers: h, signal: AbortSignal.timeout(15_000) });
+  if (listRes.status === 401 || listRes.status === 403) throw new Error("Gmail access was turned off. Connect Gmail again.");
+  if (!listRes.ok) throw new Error(`Gmail ${listRes.status}`);
+  const list = (await listRes.json()) as { messages?: { id: string }[] };
+  const msgs = await Promise.all((list.messages ?? []).map(async ({ id }) => {
+    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, { headers: h, signal: AbortSignal.timeout(15_000) });
+    return r.ok ? ((await r.json()) as GMsg) : null;
+  }));
+  return msgs.filter((m): m is GMsg => !!m).map((m) => {
+    const head = (n: string) => m.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
+    const body = (textOf(m.payload) || m.snippet || "").replace(/\s+/g, " ").trim().slice(0, 1500);
+    return {
+      id: `gm_${m.id}`, source: "gmail" as const, from: head("from"), subject: head("subject") || "(no subject)", body,
+      receivedAt: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : new Date().toISOString(),
+    };
+  });
+}
+

@@ -14,6 +14,8 @@ async function GET_() {
     /** this Google account already finished sign-up (school + username), so it can go straight to the map */
     registered: !!s && !!getMe().username && getMe().school !== "all",
     lastSync: s?.lastSync ?? null,
+    /** read-only Gmail access granted (Connect Gmail in the Inbox) */
+    gmail: !!s?.gmail,
   });
 }
 

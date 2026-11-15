@@ -105,8 +105,13 @@ export function activeAlerts(now = new Date()) {
   const dayAgo = +now - 24 * 3600_000;
   if (d.alerts.some((a) => +new Date(a.expiresAt) < dayAgo)) d.alerts = d.alerts.filter((a) => +new Date(a.expiresAt) >= dayAgo);
   const today = campusMidnight(now);
-  // only today's incidents: older crime-log entries are history, not something to steer around now
-  return d.alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now && +new Date(a.createdAt) >= today);
+  const recent = +now - 3 * 24 * 3600_000;
+  const live = d.alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now);
+  // real reports from USC's Daily Crime Log stay for 3 days (DPS posts each morning for the day before)
+  const real = live.filter((a) => a.source === "dps_log" && +new Date(a.createdAt) >= recent);
+  // the seeded demo alerts only fill in when the real log has nothing to show
+  const demo = real.length ? [] : live.filter((a) => a.source !== "dps_log" && +new Date(a.createdAt) >= today);
+  return [...real, ...demo];
 }
 
 /** Start of today on campus (Los Angeles time), whatever time zone the server runs in. */

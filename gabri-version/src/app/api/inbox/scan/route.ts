@@ -1,16 +1,33 @@
 import { scanInbox } from "@/lib/ai";
 import { BUILDING_BY_ID, INTERSECTIONS } from "@/lib/campus";
 import { toIso } from "@/lib/http";
-import { addNotification, db, getMe, newId } from "@/lib/store";
-import type { CampusEvent, Notification } from "@/lib/types";
+import { addNotification, currentUserId, db, getMe, newId } from "@/lib/store";
+import { fetchGmailItems } from "@/lib/google";
+import type { CampusEvent, InboxItem, Notification } from "@/lib/types";
 import { withState } from "@/lib/state";
 
-/** Scan connected sources (demo: seeded Gmail / Brightspace / Google Calendar items). */
-async function POST_() {
+/**
+ * Scan an inbox with the AI: the demo inbox (seeded Gmail / Brightspace / Calendar items), or with
+ * { source: "gmail" } the student's real Gmail (read-only). Real email is never stored: it is scanned in
+ * this request, only message ids are remembered, and what it finds goes to that student only.
+ */
+async function POST_(req: Request) {
   const d = db();
   const me = getMe();
-  const pending = d.inbox.filter((i) => !d.scannedInbox.includes(i.id));
-  if (!pending.length) return Response.json({ results: [], created: [], ai: false, message: "Inbox already scanned" });
+  const body = (await req.json().catch(() => ({}))) as { source?: string };
+  const real = body.source === "gmail";
+  let pending: InboxItem[];
+  if (real) {
+    try { pending = (await fetchGmailItems()).filter((i) => !d.scannedInbox.includes(i.id)); }
+    catch (e) { return Response.json({ error: (e as Error).message }, { status: 400 }); }
+    if (!pending.length) return Response.json({ results: [], created: [], items: [], ai: false, message: "No new email from the past week." });
+  } else {
+    pending = d.inbox.filter((i) => !d.scannedInbox.includes(i.id));
+    if (!pending.length) return Response.json({ results: [], created: [], ai: false, message: "Inbox already scanned" });
+  }
+  // real email: what it finds is yours alone (the demo inbox is shared by everyone trying the demo)
+  const uid = currentUserId();
+  const notify = (n: Parameters<typeof addNotification>[0]) => addNotification(real ? { ...n, userId: uid } : n);
 
   const res = await scanInbox(pending);
   const created: Notification[] = [];
@@ -23,7 +40,7 @@ async function POST_() {
     const src = item.source;
 
     if (r.kind === "phishing") {
-      created.push(addNotification({ kind: "system", title: " Phishing email detected", body: `"${item.subject}" from ${item.from} — don't click or enter your password.`, source: src }));
+      created.push(notify({ kind: "system", title: " Phishing email detected", body: `"${item.subject}" from ${item.from} — don't click or enter your password.`, source: src }));
       continue;
     }
     if (r.kind === "safety" && r.safety) {
@@ -36,14 +53,14 @@ async function POST_() {
           createdAt: new Date(now).toISOString(), expiresAt: new Date(now + 90 * 60_000).toISOString(), source: "dps_email" as const, resolved: false,
         };
         d.alerts.push(alert);
-        created.push(addNotification({ kind: "safety", title: `DPS: ${alert.title}`, body: `${alert.locationText} · ${alert.advice}`, alertId: alert.id, source: src }));
+        created.push(notify({ kind: "safety", title: `DPS: ${alert.title}`, body: `${alert.locationText} · ${alert.advice}`, alertId: alert.id, source: src }));
       } else {
-        created.push(addNotification({ kind: "safety", title: `DPS: ${r.safety.title}`, body: r.safety.advice, source: src }));
+        created.push(notify({ kind: "safety", title: `DPS: ${r.safety.title}`, body: r.safety.advice, source: src }));
       }
       continue;
     }
     if (r.kind === "deadline") {
-      created.push(addNotification({ kind: "deadline", title: r.title, body: r.summary, dueAt: toIso(r.dueAt) ?? undefined, source: src }));
+      created.push(notify({ kind: "deadline", title: r.title, body: r.summary, dueAt: toIso(r.dueAt) ?? undefined, source: src }));
       continue;
     }
     if ((r.kind === "event" || r.kind === "invite") && r.start && r.buildingId !== "unknown") {
@@ -64,17 +81,19 @@ async function POST_() {
         eventId = ev.id;
         addedEvents.push(ev.id);
       }
-      created.push(addNotification({
+      created.push(notify({
         kind: r.freeFood ? "food" : r.kind === "invite" ? "invite" : "event",
         title: r.title, body: `${r.summary} · ${BUILDING_BY_ID[r.buildingId]?.name ?? ""}`, eventId, buildingId: r.buildingId, source: src,
       }));
       continue;
     }
     if (r.kind === "event" || r.kind === "invite" || r.kind === "announcement")
-      created.push(addNotification({ kind: r.kind === "invite" ? "invite" : "event", title: r.title, body: r.summary, source: src, dueAt: toIso(r.start) ?? undefined }));
+      created.push(notify({ kind: r.kind === "invite" ? "invite" : "event", title: r.title, body: r.summary, source: src, dueAt: toIso(r.start) ?? undefined }));
   }
 
-  return Response.json({ results: res.data.items, created, addedEvents, ai: res.ai, error: res.error });
+  // real email: send back just what the list needs (subject, sender, date), never stored anywhere
+  const items = real ? pending.map(({ id, source, from, subject, receivedAt }) => ({ id, source, from, subject, receivedAt, body: "", scanned: true })) : undefined;
+  return Response.json({ results: res.data.items, created, addedEvents, items, ai: res.ai, error: res.error });
 }
 
 export const POST = withState(POST_);

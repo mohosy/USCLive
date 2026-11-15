@@ -29,6 +29,11 @@ export interface LogIncident {
 /* ---------------- fetch + parse ---------------- */
 
 export async function findLatestLogPdf(): Promise<string> {
+  return (await findRecentLogPdfs(1))[0];
+}
+
+/** The newest `n` daily logs (one per day DPS published), newest first. */
+export async function findRecentLogPdfs(n: number): Promise<string[]> {
   const res = await fetch(LOG_PAGE, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`DPS log page: ${res.status}`);
   const html = await res.text();
@@ -37,7 +42,7 @@ export async function findLatestLogPdf(): Promise<string> {
   if (!links.length) throw new Error("No daily log PDF found on the DPS page");
   const key = (mmddyy: string) => `${mmddyy.slice(4, 6)}${mmddyy.slice(0, 2)}${mmddyy.slice(2, 4)}`;
   links.sort((a, b) => key(b[2]).localeCompare(key(a[2])));
-  return links[0][1];
+  return [...new Set(links.map((l) => l[1]))].slice(0, n);
 }
 
 const HEADERS = ["Date Reported", "Event #", "Case #", "Offense", "Initial Incident", "Final Incident", "Date From", "Date To", "Location", "Disposition"] as const;
@@ -220,12 +225,20 @@ export async function incidentsToAlerts(incidents: LogIncident[]): Promise<Safet
   return out;
 }
 
-/** Full sync: newest daily log -> alerts. */
+/** Full sync: the last few daily logs (the map shows the past 3 days) -> alerts. */
 export async function syncDpsLog() {
-  const url = await findLatestLogPdf();
-  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new Error(`DPS PDF: ${res.status}`);
-  const incidents = await parseLogPdf(new Uint8Array(await res.arrayBuffer()));
+  const urls = await findRecentLogPdfs(3);
+  const byEvent = new Map<string, LogIncident>();
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) throw new Error(`DPS PDF: ${res.status}`);
+      for (const inc of await parseLogPdf(new Uint8Array(await res.arrayBuffer()))) byEvent.set(inc.event || `${inc.caseNo}:${inc.reportedAt}`, inc);
+    } catch (e) {
+      if (url === urls[0]) throw e; // the newest log must load; an older one failing just means fewer days
+    }
+  }
+  const incidents = [...byEvent.values()];
   const alerts = await incidentsToAlerts(incidents);
-  return { url, incidents: incidents.length, alerts };
+  return { url: urls[0], incidents: incidents.length, alerts };
 }
