@@ -276,7 +276,7 @@ html, body {
 .dock-options > .chip-row { min-height: 0; overflow-y: hidden; }
 .dock-options-open { grid-template-rows: 1fr; opacity: 1; transform: none; }
 /* locate: a glass circle right above the zoom / rotate column (centered on its 33px width) */
-.map-locate { position: absolute; right: 24px; bottom: 224px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
+.map-locate { position: absolute; right: 24px; bottom: 202px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
 .map-locate:hover { background: rgba(255,255,255,0.5); }
 .dock-search-row > * { pointer-events: auto; }
@@ -350,7 +350,6 @@ html, body {
 @media (max-width: 900px) {
   .map-menu-button { left: 16px; top: calc(16px + var(--sat)); }
   .account-area { right: 16px; top: calc(16px + var(--sat)); }
-  .weather-pill { top: calc(66px + var(--sat)); right: 16px; }
   .account-content { max-height: calc(100dvh - 370px - var(--sat)); }
   .map-dock { left: 16px; right: 16px; }
   .dock-options-open { padding-bottom: 6px; }
@@ -472,7 +471,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .map-app[data-night="true"] .weather-hours { border-top-color: rgba(255,255,255,0.2); }
 .map-app[data-night="true"] .weather-hour-sky i { color: #7cc4ff; }
 .weather-sun { color: #e8a200; }
-.weather-temperature { font-size: 16px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.weather-temperature { font-size: 14px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
 .weather-range { font-size: 12px; font-weight: 500; color: #6e6e73; font-variant-numeric: tabular-nums; }
 
@@ -500,7 +499,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
   .map-app { --dock-lift: max(0px, var(--sab) - 12px); }
   .map-controls { bottom: calc(210px + var(--dock-lift)); }
   .map-app .mapboxgl-ctrl-bottom-right { bottom: calc(198px + var(--dock-lift)); }
-  .map-locate { bottom: calc(422px + var(--dock-lift)); right: 16px; }
+  .map-locate { bottom: calc(400px + var(--dock-lift)); right: 16px; }
   .map-app .mapboxgl-ctrl-bottom-right { right: 16px; }
   .map-app .satellite-credit { bottom: calc(212px + var(--dock-lift)); }
 }
@@ -634,13 +633,10 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .co-busy:hover .bz-t, .co-quiet:hover .bz-t { max-width: 280px; }
 
 /* ---------- Play as your Trojan ---------- */
-.mapboxgl-ctrl-group.play-ctrl { position: relative; overflow: visible; width: 44px; height: 44px; margin-right: 8px !important; border-radius: 99px; background: linear-gradient(160deg, #b8141a, #8a0000) !important;
-  box-shadow: 0 0 0 2.5px #ffc72c, 0 8px 20px rgba(153, 0, 0, 0.45) !important; transition: transform 0.15s ease; }
-.mapboxgl-ctrl-group.play-ctrl:hover { transform: translateY(-1px) scale(1.06); }
-.play-ctrl button { width: 44px !important; height: 44px !important; border-radius: 99px !important; background: transparent !important; }
-.play-tip { position: absolute; right: 54px; top: 50%; transform: translate(6px, -50%); opacity: 0; pointer-events: none; white-space: nowrap; padding: 5px 10px; border-radius: 99px;
-  background: rgba(28, 28, 30, 0.88); color: #fff; font: 600 12px var(--font-apple); transition: opacity 0.15s ease, transform 0.15s ease; }
-.play-ctrl:hover .play-tip { opacity: 1; transform: translate(0, -50%); }
+.mapboxgl-ctrl-play { display: grid !important; place-items: center; color: #333; }
+.map-app[data-night="true"] .mapboxgl-ctrl-play { color: #e8e8ea; }
+.mapboxgl-ctrl-play[aria-pressed="true"] { color: #990000; }
+.map-app[data-night="true"] .mapboxgl-ctrl-play[aria-pressed="true"] { color: #ffc72c; }
 .play-hud { position: absolute; top: calc(70px + var(--sat, 0px)); left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 99px;
   background: rgba(28, 28, 30, 0.82); color: #fff; font: 500 12.5px var(--font-apple); white-space: nowrap; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); backdrop-filter: blur(12px); }
 .play-hud button { padding: 5px 12px; border-radius: 99px; background: #fff; color: #1d1d1f; font-weight: 600; }
@@ -661,6 +657,14 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .evt-tail { width: 8px; height: 8px; bottom: -4px; }
 .evt .evb-plus { left: 19px; }
 
+/* Play as your Trojan: the red helmet button under the zoom pill */
+.mapboxgl-ctrl-group.play-ctrl { position: relative; overflow: visible; width: 44px; height: 44px; margin-right: 8px !important; border-radius: 99px; background: linear-gradient(160deg, #b8141a, #8a0000) !important;
+  box-shadow: 0 0 0 2.5px #ffc72c, 0 8px 20px rgba(153, 0, 0, 0.45) !important; transition: transform 0.15s ease; }
+.mapboxgl-ctrl-group.play-ctrl:hover { transform: translateY(-1px) scale(1.06); }
+.play-ctrl button { width: 44px !important; height: 44px !important; border-radius: 99px !important; background: transparent !important; }
+.play-tip { position: absolute; right: 54px; top: 50%; transform: translate(6px, -50%); opacity: 0; pointer-events: none; white-space: nowrap; padding: 5px 10px; border-radius: 99px;
+  background: rgba(28, 28, 30, 0.88); color: #fff; font: 600 12px var(--font-apple); transition: opacity 0.15s ease, transform 0.15s ease; }
+.play-ctrl:hover .play-tip { opacity: 1; transform: translate(0, -50%); }
 .play-ic { display: grid; place-items: center; width: 100%; height: 100%; }
 .play-ic svg { transition: transform 0.15s ease; }
 .play-ctrl button:hover .play-ic svg { transform: scale(1.1) rotate(-4deg); }

@@ -16,7 +16,7 @@ const RUN_MPS = 20; // hold Shift
 const BODY_M = 1.8; // keeps the (drawn larger) character off the walls
 const DRAW_SCALE = 2.8; // the Trojan is drawn bigger than life so it reads like a game character
 const CELL = 40;
-const TURN_DPS = 150; // how fast left/right turns the character (degrees per second)
+const TURN_DPS = 170; // how fast left/right turns the character (degrees per second)
 
 /** Building footprints in local meters (x east, z south), bucketed on a grid so collision checks stay cheap. */
 class Walls {
@@ -105,8 +105,8 @@ export class PlayMode {
     setTimeout(() => { if (!this.moving) this.layer?.play("Idle"); }, 1600); // unless you already started walking
     map.keyboard.disable(); // arrows drive the character, not the map
     this.flyIn();
-    window.addEventListener("keydown", this.down);
-    window.addEventListener("keyup", this.up);
+    window.addEventListener("keydown", this.down, true); // capture: the character hears its keys before the page's other shortcuts do
+    window.addEventListener("keyup", this.up, true);
     window.addEventListener("blur", this.clear);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.tick);
@@ -136,8 +136,8 @@ export class PlayMode {
     if (!this.active || this.gone) return;
     this.active = false;
     cancelAnimationFrame(this.raf);
-    window.removeEventListener("keydown", this.down);
-    window.removeEventListener("keyup", this.up);
+    window.removeEventListener("keydown", this.down, true);
+    window.removeEventListener("keyup", this.up, true);
     window.removeEventListener("blur", this.clear);
     this.keys.clear();
     this.stick = { x: 0, y: 0 };
@@ -153,8 +153,8 @@ export class PlayMode {
     this.active = true;
     this.map.keyboard.disable();
     this.flyIn();
-    window.addEventListener("keydown", this.down);
-    window.addEventListener("keyup", this.up);
+    window.addEventListener("keydown", this.down, true); // capture: the character hears its keys before the page's other shortcuts do
+    window.addEventListener("keyup", this.up, true);
     window.addEventListener("blur", this.clear);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.tick);
@@ -222,7 +222,11 @@ export class PlayMode {
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
     if (e.key === "Escape") { this.onExit(); return; }
     const k = e.key.toLowerCase();
-    if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) { this.keys.add(k); e.preventDefault(); }
+    if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) {
+      this.keys.add(k);
+      e.preventDefault();
+      e.stopImmediatePropagation(); // W also cycles the demo weather; while you play it only walks
+    }
   };
   private up = (e: KeyboardEvent) => { this.keys.delete(e.key.toLowerCase()); };
   private clear = () => { this.keys.clear(); };
@@ -251,7 +255,7 @@ export class PlayMode {
       else if (!this.walls.blocked(this.x, this.z + dz)) this.z += dz;
     }
     if (this.started) this.layer.heading = this.hdg;
-    this.layer.timeScale = !walking ? 1.2 : k.has("shift") ? 2.6 : 1.7;
+    this.layer.timeScale = !walking ? 1.4 : k.has("shift") ? 3.4 : 2.5;
     if (going !== this.moving) { this.moving = going; this.layer.play(going ? "Walk" : "Idle"); }
     const p = this.walls.toLL(this.x, this.z);
     this.layer.pos = p;
@@ -285,8 +289,8 @@ export class PlayMode {
   destroy() {
     this.gone = true;
     cancelAnimationFrame(this.raf);
-    window.removeEventListener("keydown", this.down);
-    window.removeEventListener("keyup", this.up);
+    window.removeEventListener("keydown", this.down, true);
+    window.removeEventListener("keyup", this.up, true);
     window.removeEventListener("blur", this.clear);
     try {
       this.map.keyboard.enable();
