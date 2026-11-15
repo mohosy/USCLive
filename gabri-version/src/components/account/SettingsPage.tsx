@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { api } from "@/lib/client-types";
 import { INTERESTS } from "@/lib/directory";
-import { loadMapLighting, saveMapLighting, type MapLighting } from "@/lib/mapLighting";
+import { loadMapLighting, loadShowPeople, saveMapLighting, saveShowPeople, type MapLighting } from "@/lib/mapLighting";
 import { AccountTypePicker, clearSession, updateSavedSession, type AccountType } from "../SignIn";
 import { Avatar, cx, inputCls } from "../ui";
 import { UsernameInput, useUsernameStatus } from "../UsernameField";
@@ -62,6 +62,7 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
   const [orgId, setOrgId] = useState(initial.creatorOrgId ?? "");
   // a preference kept in this browser; it applies straight away, without the Save bar (this form only renders in the browser)
   const [lighting, setLighting] = useState<MapLighting>(loadMapLighting);
+  const [people, setPeople] = useState(loadShowPeople);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -198,6 +199,16 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
               </button>
             ))}
           </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
+          <div>
+            <div className="text-sm font-medium" id="map-people-label">Show people on the map</div>
+            <div className="text-xs text-muted">Little Trojans at busy spots when you zoom in</div>
+          </div>
+          <button type="button" role="switch" aria-checked={people} aria-labelledby="map-people-label" onClick={() => { setPeople(!people); saveShowPeople(!people); }}
+            className={cx("relative h-6 w-10 shrink-0 rounded-full transition-colors", people ? "bg-foreground" : "bg-line")}>
+            <span className={cx("absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform", people && "translate-x-4")} />
+          </button>
         </div>
       </Card>
 

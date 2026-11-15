@@ -27,6 +27,7 @@ function alertPoints(alerts: SafetyAlert[]): FC {
 }
 import { LEVEL_COLOR } from "./ui";
 import type { WalkGuide, WalkProgress } from "./walk/WalkGuide";
+import { CROWD_MIN_ZOOM, CrowdLayer, type CrowdSpot } from "./walk/CrowdLayer";
 import WalkHUD from "./walk/WalkHUD";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
@@ -184,6 +185,13 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, light: L
 }
 
 // Keep the camera on USC University Park Campus (plus a little margin).
+const byIdCache = new WeakMap<Building[], Record<string, Building>>();
+function BYID(list: Building[]) {
+  let m = byIdCache.get(list);
+  if (!m) { m = Object.fromEntries(list.map((b) => [b.id, b])); byIdCache.set(list, m); }
+  return m;
+}
+
 const USC_BOUNDS: [[number, number], [number, number]] = [[-118.3035, 34.0045], [-118.2712, 34.0382]]; // the 3D neighborhood plus a little margin
 
 export interface Camera { longitude: number; latitude: number; zoom: number; pitch: number; bearing: number }
@@ -197,6 +205,8 @@ interface Props {
   buildings: Building[];
   me: Loc;
   layers: MapLayers;
+  /** "Show people on the map" (Settings): crowd avatars at busy spots */
+  people?: boolean;
   mapStyle: MapStyle;
   selectedEventId: string | null;
   highlightIds: string[] | null; // when set, everything else is dimmed
@@ -323,6 +333,28 @@ export default function MapView(props: Props) {
   const area = useRef<FeatureCollection | null>(null);
   const [rotateHint, setRotateHint] = useState(false);
   const needle = useRef<SVGSVGElement>(null); // the compass needle in the control column
+  const crowd = useRef<CrowdLayer | null>(null);
+
+  /** Zoomed into a busy area: let little Trojans hang out at the crowded spots on screen. */
+  function updateCrowd() {
+    const m = map.current;
+    const layer = crowd.current;
+    if (!m || !layer || !ready.current) return;
+    const p = cb.current;
+    if (p.people === false || !p.layers.hotspots || p.walk || m.getZoom() < CROWD_MIN_ZOOM) return layer.setSpots([]);
+    // spots near the middle of the view (a tilted view's bounds reach far into the distance)
+    const c = m.getCenter();
+    const reach = 0.0025 * 2 ** (18 - m.getZoom()); // ~550m at z17, ~280m at z18, ~140m at z19
+    const byId = BYID(p.buildings);
+    const spots: CrowdSpot[] = [];
+    for (const h of p.hotspots) {
+      const bd = byId[h.buildingId];
+      if (h.suppressed || !bd) continue;
+      if (Math.abs(bd.lng - c.lng) > reach * 1.2 || Math.abs(bd.lat - c.lat) > reach) continue;
+      spots.push({ id: bd.id, lng: bd.lng, lat: bd.lat, count: h.count, level: h.level, fill: Math.min(1, h.count / Math.max(1, bd.capacity)) });
+    }
+    layer.setSpots(spots);
+  }
 
   /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
   function tidyBubbles() {
@@ -494,6 +526,14 @@ export default function MapView(props: Props) {
     });
     ready.current = true;
     syncLayers();
+    if (!crowd.current) {
+      crowd.current = new CrowdLayer();
+      // footprints that loaded before the crowd layer existed
+      if (campus.current) crowd.current.addObstacles(campus.current.buildings);
+      if (area.current) crowd.current.addObstacles(area.current);
+    }
+    if (!m.getLayer(crowd.current.id)) m.addLayer(crowd.current);
+    updateCrowd();
     walkRef.current?.install(); // keep an active walk alive across Map/Satellite switches
   }
 
@@ -543,9 +583,10 @@ export default function MapView(props: Props) {
     loadCampus().then(
       (c) => {
         campus.current = c;
+        crowd.current?.addObstacles(c.buildings); // people walk around buildings, never through them
         if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, cb.current.light ?? "day", "alert-fill");
         // the neighborhood's buildings come after campus (a bigger file; campus shows first)
-        if (!PHONE) loadArea().then((fc) => { area.current = fc; if (ready.current && map.current === m && styleRef.current !== "satellite") installArea(m, fc, cb.current.light ?? "day"); }, () => {});
+        if (!PHONE) loadArea().then((fc) => { area.current = fc; crowd.current?.addObstacles(fc); if (ready.current && map.current === m && styleRef.current !== "satellite") installArea(m, fc, cb.current.light ?? "day"); }, () => {});
       },
       () => { /* no campus data: fall back to the plain map */ },
     );
@@ -614,6 +655,7 @@ export default function MapView(props: Props) {
     };
     m.on("move", emit);
     m.on("move", tidyBubbles);
+    m.on("moveend", updateCrowd);
     emit();
 
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
@@ -684,6 +726,7 @@ export default function MapView(props: Props) {
     data.current.points = g.points;
     data.current.columns = g.columns;
     if (ready.current) { setSource("hot-points", g.points); setSource("hot-columns", g.columns); }
+    updateCrowd();
   }, [props.hotspots, props.buildings]);
 
   useEffect(() => {
@@ -694,6 +737,7 @@ export default function MapView(props: Props) {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(syncLayers, [props.layers]);
+  useEffect(updateCrowd, [props.layers, props.walk?.key, props.people]);
 
   useEffect(() => {
     const fc = alertGeo(props.alerts);

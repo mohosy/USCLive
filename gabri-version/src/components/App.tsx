@@ -2,7 +2,7 @@
 
 import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
-import { loadMapLighting, type MapLighting } from "@/lib/mapLighting";
+import { loadMapLighting, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,6 +32,8 @@ import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
 import { AccountBadge, Avatar, Button, cx } from "./ui";
 
+/** Phones can't hold Mapbox and the photoreal 3D tiles in memory at once, so they unload Satellite when you leave it. */
+const SAT_PHONE = typeof window !== "undefined" && window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
 
@@ -71,7 +73,8 @@ export default function App() {
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
   const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
-  const [warmSat, setWarmSat] = useState(false); // Satellite pre-loads while you hover its button
+  // Satellite stays loaded once opened (desktop): Google bills every fresh start of the 3D tiles, so never reload it per switch or hover
+  const [keepSat, setKeepSat] = useState(false);
   // map lighting follows the real sun over campus; rechecked every minute
   // (read in the browser, not during the prerender; the map mounts after the first data load, so it starts in the right light)
   const [sunLight, setSunLight] = useState<LightPreset>("day");
@@ -83,10 +86,10 @@ export default function App() {
   }, []);
   // "Map lighting" in Settings: Auto follows the real sun, or hold one time of day (read in the browser, after the prerender)
   const [lightTest, setLightTest] = useState<MapLighting>("auto");
-  useEffect(() => { const t = setTimeout(() => setLightTest(loadMapLighting()), 0); return () => clearTimeout(t); }, []);
+  const [showPeople, setShowPeople] = useState(true); // "Show people on the map" in Settings
+  useEffect(() => { const t = setTimeout(() => { setLightTest(loadMapLighting()); setShowPeople(loadShowPeople()); }, 0); return () => clearTimeout(t); }, []);
   // the Map lighting setting wins; then demo weather (W key: its "night" turns the map to night); otherwise the real sun
   const light: LightPreset = lightTest !== "auto" ? lightTest : weatherDemo ? (weather.isDay ? "day" : "night") : sunLight;
-  const coolSat = useRef<ReturnType<typeof setTimeout>>(undefined); // ...and unloads 5s after you move away
   // campus glide on first load (bubbles wait for it); phones skip it and land straight on the map
   const [intro, setIntro] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches);
   useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
@@ -116,9 +119,8 @@ export default function App() {
     if (v === view) return;
     setStartCam(camera.current);
     setFlatGone(false);
-    clearTimeout(coolSat.current);
-    if (v === "map") { setSatLoaded(false); setWarmSat(false); } // free the GPU when leaving Satellite
-    else if (satLoaded) setTimeout(() => setFlatGone(true), 800); // pre-warmed: fade straight in
+    if (v === "map") { if (SAT_PHONE) setSatLoaded(false); } // phones free the GPU when leaving Satellite; desktops keep it
+    else { setKeepSat(!SAT_PHONE); if (satLoaded) setTimeout(() => setFlatGone(true), 800); } // already loaded: fade straight in
     setView(v);
   }
   const onFlatCamera = (c: Camera) => {
@@ -485,6 +487,7 @@ export default function App() {
               buildings={BUILDINGS}
               me={loc}
               layers={mapLayers}
+              people={showPeople}
               leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 384 : 0}
               mapStyle="map"
               light={light}
@@ -504,7 +507,7 @@ export default function App() {
               onWalkEnd={endWalk}
             />
           )}
-          {(view === "3d" || warmSat) && (
+          {(view === "3d" || keepSat) && (
             <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
               <Google3DView
                 weather={weather}
@@ -514,13 +517,13 @@ export default function App() {
                 me={loc}
                 selectedEventId={selEvent}
                 highlightIds={highlight}
-                focus={focus}
+                focus={view === "3d" ? focus : null}
                 onSelectEvent={openEvent}
                 initialCamera={startCam}
                 follow={camBus}
                 onReady={() => { setSatLoaded(true); if (view === "3d") setTimeout(() => setFlatGone(true), 800); }}
                 onCamera={(c) => { camera.current = c; }}
-                walk={walk && walkTo ? { to: walkTo, key: walk.key } : null}
+                walk={view === "3d" && walk && walkTo ? { to: walkTo, key: walk.key } : null}
                 onWalkEnd={endWalk}
                 callouts={walk ? noCallouts : callouts}
                 alerts={shownAlerts}
@@ -537,9 +540,7 @@ export default function App() {
           {/* Explore / Satellite: icon-only switch in the bottom-left corner (names show as tooltips) */}
           <div className="view-switch" role="group" aria-label="Map view">
             {([["map", "Explore", MapIcon], ["3d", "Satellite", Satellite]] as const).map(([k, l, Icon]) => (
-              <button key={k} type="button" aria-label={l} aria-pressed={view === k} data-tip={l} onClick={() => switchView(k)}
-                onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
-                onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }}>
+              <button key={k} type="button" aria-label={l} aria-pressed={view === k} data-tip={l} onClick={() => switchView(k)}>
                 <Icon size={19} aria-hidden="true" />
               </button>
             ))}

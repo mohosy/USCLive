@@ -207,8 +207,10 @@ export default function Google3DView(props: Props) {
       ...(session.current ? [new TileLayer<ImageBitmap>({
         id: "google-2d",
         data: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${session.current}&key=${KEY}`,
-        minZoom: 0,
-        maxZoom: 19,
+        // only over the neighborhood and close up: Google bills every 2D tile (the 3D tiles cover the rest)
+        extent: [BOUNDS.west, BOUNDS.south, BOUNDS.east, BOUNDS.north],
+        minZoom: 14,
+        maxZoom: PHONE ? 18 : 19,
         tileSize: 256,
         maxRequests: 16,
         onViewportLoad: () => markReady(),
@@ -647,10 +649,10 @@ export default function Google3DView(props: Props) {
     setView({ ...viewState.current, bearing: 0, pitch: 60, transitionDuration: 600 } as MapViewState);
   }
 
-  // follow the flat map's camera until the 3D campus is ready; give up waiting after 15s
+  // follow the flat map's camera until the 3D campus is ready (not after: kept loaded behind Explore, it must not fetch tiles for every pan)
   useEffect(() => {
     const bus = props.follow;
-    const fn = (c: Camera) => { if (!ready.current || !activeRef.current) setView({ ...viewState.current, ...c }); };
+    const fn = (c: Camera) => { if (!ready.current) setView({ ...viewState.current, ...c }); };
     bus?.listeners?.add(fn);
     const t = setTimeout(markReady, 15_000);
     const mb = setInterval(measureBubbles, 1000);
