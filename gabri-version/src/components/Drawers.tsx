@@ -12,7 +12,7 @@ import RegisterBox from "./RegisterBox";
 import { Avatar, Button, CatLabel, LevelDot, Tag, cx } from "./ui";
 
 const VIS_LABEL = { public: "Public", school: "School only", open: "Open invite, anyone can join", invite: "Invite only" } as const;
-const SRC_LABEL: Record<string, string> = { flyer: "Added from a flyer", scrape: "Imported from usc.edu", brightspace: "From Brightspace", email: "From your email", calendar: "From your calendar" };
+const SRC_LABEL: Record<string, string> = { flyer: "Filled in by AI from a post or flyer", scrape: "Imported from usc.edu", brightspace: "From Brightspace", email: "From your email", calendar: "From your calendar" };
 
 /** "Maya", "Maya and Ryan", "Maya, Ryan and 2 others" */
 function goingNames(n: string[]) {

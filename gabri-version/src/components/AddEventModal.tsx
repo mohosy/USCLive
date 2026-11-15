@@ -44,12 +44,6 @@ async function fileToJpegBase64(file: File): Promise<{ data: string; mediaType: 
 }
 
 const VIS = [["public", "Everyone"], ["school", "My school"], ["open", "Open invite"], ["invite", "Invite only"]] as const;
-const VIS_HINT: Record<string, string> = {
-  public: "Everyone at USC sees it on the map.",
-  school: "Only students in the schools you pick see it.",
-  open: "Anyone can see it and join. Friends you pick get a heads-up.",
-  invite: "Only the people you invite can see it.",
-};
 /** quick starts for the time fields */
 const atHour = (addDays: number, h: number) => { const d = new Date(); d.setDate(d.getDate() + addDays); d.setHours(h, 0, 0, 0); return d; };
 const QUICK_STARTS: [string, () => Date][] = [
@@ -91,7 +85,8 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
 }) {
   const [step, setStep] = useState<Step>("source");
   // anyone can make an event; campus-wide ("Everyone") is for clubs and departments (creator accounts)
-  const creator = state.me.accountType === "creator";
+  const creator = state.me.accountType === "creator" || !!asOrg;
+  const [more, setMore] = useState(false);
   const [mode, setMode] = useState<"text" | "flyer" | "link">("text");
   const [link, setLink] = useState("");
   const [imported, setImported] = useState<string | null>(null); // what happened with the pasted link
@@ -106,7 +101,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
   const [fromFlyer, setFromFlyer] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const reset = () => { setStep("source"); setText(""); setImg(null); setForm(blank()); setErr(null); setResult(null); setPrecheck(null); setFromFlyer(false); setLink(""); setImported(null); };
+  const reset = () => { setMore(false); setStep("source"); setText(""); setImg(null); setForm(blank()); setErr(null); setResult(null); setPrecheck(null); setFromFlyer(false); setLink(""); setImported(null); };
   const close = () => { reset(); onClose(); };
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -165,8 +160,8 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
           registrationUrl: form.registrationType && form.registrationUrl.trim() ? form.registrationUrl.trim() : null,
         },
       });
-      setResult(r); setStep("result");
-      if (r.moderation.status === "approved") onCreated(r.event);
+      if (r.moderation.status === "approved") { onCreated(r.event); close(); }
+      else { setResult(r); setStep("result"); }
     } catch (e) { setErr((e as Error).message); }
     setBusy(false);
   }
@@ -180,11 +175,11 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
           <div className="flex rounded-lg border border-line p-0.5 text-sm">
             {(["text", "flyer", "link"] as const).filter((m) => creator || m !== "link").map((m) => (
               <button key={m} onClick={() => { setMode(m); setErr(null); }} className={cx("flex-1 rounded-md py-1.5 font-medium", mode === m ? "bg-surface" : "text-muted")}>
-                {m === "text" ? "Paste text" : m === "flyer" ? "Upload flyer" : "Engage or Handshake link"}
+                {m === "text" ? "Paste text" : m === "flyer" ? "Flyer" : "Link"}
               </button>
             ))}
           </div>
-          <p className="text-sm text-muted">{mode === "text" ? "Paste an Instagram caption, group chat message or email. We'll fill in the details." : mode === "flyer" ? "Upload a photo or screenshot of a flyer. We'll read it and fill in the details." : "Import from Engage or Handshake: paste the event's link. USCLive reads the public page's title, date, time and location to fill in the form. Students then register here with one tap, and the link is kept as the official page."}</p>
+          <p className="text-sm text-muted">{mode === "text" ? "Paste a caption, group chat message or email. AI fills in the rest." : mode === "flyer" ? "Drop a flyer. AI reads it and fills in the rest." : "Paste an Engage or Handshake link."}</p>
           {mode === "link" && (
             <input className={inputCls} type="url" inputMode="url" placeholder="https://engage.usc.edu/…  or  https://usc.joinhandshake.com/…" value={link} onChange={(e) => setLink(e.target.value)} />
           )}
@@ -198,7 +193,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
           {mode !== "link" && <textarea className={cx(inputCls, "min-h-28")} placeholder={mode === "flyer" ? "Optional extra context" : "Event text"} value={text} onChange={(e) => setText(e.target.value)} />}
           {mode === "text" && (
             <div className="space-y-1">
-              <div className="text-xs text-muted">Examples</div>
+              <div className="text-xs text-muted">Try one</div>
               {SAMPLES.map((s, i) => <button key={i} onClick={() => setText(s)} className="block w-full truncate text-left text-xs text-foreground/70 hover:text-foreground">{s}</button>)}
             </div>
           )}
@@ -217,14 +212,9 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
           {precheck && precheck.status !== "approved" && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">This may not pass review: {precheck.reasons[0]}</p>}
           {imported && <p className="rounded-lg bg-surface px-3 py-2 text-sm">{imported}</p>}
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><Field label="Title"><input className={inputCls} value={form.title} onChange={(e) => set("title", e.target.value)} /></Field></div>
-            <div className="col-span-2"><Field label="Description"><textarea className={cx(inputCls, "min-h-20")} value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
-            <Field label="Category">
-              <select className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)}>
-                {EVENT_TYPES.map((k) => <option key={k} value={k}>{CATEGORY_META[k].label}</option>)}
-              </select>
-            </Field>
+            <div className="col-span-2"><Field label="Title"><input className={inputCls} value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="What's happening?" /></Field></div>
             <Field label="Where"><PlacePicker value={form.buildingId} onChange={(id) => set("buildingId", id)} /></Field>
+            <Field label="Room"><input className={inputCls} value={form.room} onChange={(e) => set("room", e.target.value)} placeholder="Optional" /></Field>
             <Field label="Starts"><input type="datetime-local" className={inputCls} value={form.start} onChange={(e) => set("start", e.target.value)} /></Field>
             <Field label="Ends"><input type="datetime-local" className={inputCls} value={form.end} onChange={(e) => set("end", e.target.value)} /></Field>
             <div className="col-span-2 -mt-1 flex flex-wrap gap-1.5">
@@ -237,68 +227,70 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
                   onClick={() => setForm((f) => ({ ...f, end: local(new Date(+new Date(f.start) + h * 3600_000)) }))}>{h}h</button>
               ))}
             </div>
-            <Field label="Room"><input className={inputCls} value={form.room} onChange={(e) => set("room", e.target.value)} placeholder="Optional" /></Field>
-            <Field label="Class"><input className={inputCls} value={form.course} onChange={(e) => set("course", e.target.value)} placeholder="Optional, e.g. FBE 403" /></Field>
             <div className="col-span-2">
-              <Field label="Visible to">
+              <Field label="Who sees it">
                 <div className="flex rounded-lg border border-line p-0.5 text-sm">
                   {VIS.filter(([v]) => creator || v !== "public").map(([v, l]) => (
-                    <button key={v} onClick={() => set("visibility", v)} className={cx("flex-1 rounded-md py-1.5 font-medium", vis === v ? "bg-surface" : "text-muted")}>{l}</button>
+                    <button key={v} type="button" onClick={() => set("visibility", v)} className={cx("flex-1 rounded-md py-1.5 font-medium", vis === v ? "bg-surface" : "text-muted")}>{l}</button>
                   ))}
                 </div>
               </Field>
-              <p className="mt-1.5 text-xs text-muted">{VIS_HINT[vis]}</p>
             </div>
             {vis === "school" && (
               <div className="col-span-2 flex flex-wrap gap-1.5">
                 {SCHOOLS.filter((s) => s.id !== "all").map((s) => (
-                  <button key={s.id} onClick={() => set("schools", toggle(form.schools.filter((x) => x !== "all"), s.id))}
+                  <button key={s.id} type="button" onClick={() => set("schools", toggle(form.schools.filter((x) => x !== "all"), s.id))}
                     className={cx("rounded-full border px-2.5 py-1 text-xs", form.schools.includes(s.id) ? "border-foreground bg-foreground text-white" : "border-line")}>{s.short}</button>
                 ))}
               </div>
             )}
-            {(vis === "invite" || vis === "open") && (
+            {(vis === "invite" || vis === "open") && state.me.friends.length > 0 && (
               <div className="col-span-2">
-                <Field label={vis === "invite" ? "Invite" : "Notify friends (optional)"}>
-                  <div className="flex flex-wrap gap-1.5">
-                    {state.me.friends.map((f) => (
-                      <button key={f.id} onClick={() => set("invitees", toggle(form.invitees, f.id))}
-                        className={cx("rounded-full border px-2.5 py-1 text-xs", form.invitees.includes(f.id) ? "border-foreground bg-foreground text-white" : "border-line")}>{f.name}</button>
-                    ))}
-                  </div>
-                </Field>
-                {vis === "open" && form.course && <p className="mt-1.5 text-xs text-muted">Students in {form.course.toUpperCase()} will see this marked as their class.</p>}
+                <div className="mb-1.5 text-xs text-muted">{vis === "invite" ? "Invite" : "Let friends know"}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {state.me.friends.map((f) => (
+                    <button key={f.id} type="button" onClick={() => set("invitees", toggle(form.invitees, f.id))}
+                      className={cx("rounded-full border px-2.5 py-1 text-xs", form.invitees.includes(f.id) ? "border-foreground bg-foreground text-white" : "border-line")}>{f.name}</button>
+                  ))}
+                </div>
               </div>
             )}
-            <Field label="Capacity"><input type="number" className={inputCls} value={form.capacity} placeholder="Optional" onChange={(e) => set("capacity", e.target.value)} /></Field>
-            <Field label="Free food">
-              <div className="flex items-center gap-2">
-                <input type="checkbox" checked={form.freeFood} onChange={() => set("freeFood", !form.freeFood)} className="h-4 w-4" />
-                <input className={inputCls} disabled={!form.freeFood} value={form.foodDetail} placeholder="What food?" onChange={(e) => set("foodDetail", e.target.value)} />
-              </div>
-            </Field>
-            <div className="col-span-2">
-              <Field label="Registration">
-                <select className={inputCls} value={form.registrationType} onChange={(e) => set("registrationType", e.target.value as Form["registrationType"])}>
-                  <option value="">No registration (people just RSVP)</option>
-                  <option value="native">One tap in USCLive (capacity, waitlist and deadline handled here)</option>
-                  <option value="handshake">On Handshake (USCLive opens the official page)</option>
-                  <option value="engage">On Engage (USCLive opens the official page)</option>
-                  <option value="external">On another website (USCLive opens it)</option>
-                </select>
-              </Field>
-            </div>
-            {form.registrationType && (
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.freeFood} onChange={() => set("freeFood", !form.freeFood)} className="h-4 w-4 accent-[#990000]" />
+              Free food
+              {form.freeFood && <input className={cx(inputCls, "ml-1 flex-1 !py-1.5")} value={form.foodDetail} placeholder="What food?" onChange={(e) => set("foodDetail", e.target.value)} />}
+            </label>
+
+            <button type="button" onClick={() => setMore((m) => !m)} className="col-span-2 -mb-1 text-left text-sm font-medium text-cardinal">
+              {more ? "Fewer options" : "More options"}
+            </button>
+            {more && (
               <>
-                <Field label="Registration closes"><input type="datetime-local" className={inputCls} value={form.registrationDeadline} onChange={(e) => set("registrationDeadline", e.target.value)} /></Field>
-                <Field label={form.registrationType === "native" ? "Official page (optional)" : "Official registration page"}>
-                  <input className={inputCls} type="url" inputMode="url" placeholder="https://" value={form.registrationUrl} onChange={(e) => set("registrationUrl", e.target.value)} />
+                <div className="col-span-2"><Field label="Description"><textarea className={cx(inputCls, "min-h-20")} value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
+                <Field label="Type">
+                  <select className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)}>
+                    {EVENT_TYPES.map((k) => <option key={k} value={k}>{CATEGORY_META[k].label}</option>)}
+                  </select>
                 </Field>
-                <p className="col-span-2 -mt-1 text-xs text-muted">
-                  {form.registrationType === "native"
-                    ? "Students register with one tap. When the capacity is reached, new sign-ups join a waitlist and move up as people cancel."
-                    : "USCLive only opens this page in a new tab. It never registers anyone there; students can tell USCLive afterwards that they signed up."}
-                </p>
+                <Field label="Capacity"><input type="number" className={inputCls} value={form.capacity} placeholder="Optional" onChange={(e) => set("capacity", e.target.value)} /></Field>
+                <Field label="Class"><input className={inputCls} value={form.course} onChange={(e) => set("course", e.target.value)} placeholder="Optional, e.g. FBE 403" /></Field>
+                <Field label="Sign-ups">
+                  <select className={inputCls} value={form.registrationType} onChange={(e) => set("registrationType", e.target.value as Form["registrationType"])}>
+                    <option value="">Just RSVPs</option>
+                    <option value="native">Register in USCLive</option>
+                    <option value="handshake">On Handshake</option>
+                    <option value="engage">On Engage</option>
+                    <option value="external">Another website</option>
+                  </select>
+                </Field>
+                {form.registrationType && (
+                  <>
+                    <Field label="Sign-ups close"><input type="datetime-local" className={inputCls} value={form.registrationDeadline} onChange={(e) => set("registrationDeadline", e.target.value)} /></Field>
+                    <Field label={form.registrationType === "native" ? "Official page (optional)" : "Sign-up link"}>
+                      <input className={inputCls} type="url" inputMode="url" placeholder="https://" value={form.registrationUrl} onChange={(e) => set("registrationUrl", e.target.value)} />
+                    </Field>
+                  </>
+                )}
               </>
             )}
           </div>

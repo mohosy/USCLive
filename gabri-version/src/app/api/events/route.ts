@@ -37,7 +37,8 @@ async function POST_(req: Request) {
   const me = getMe();
   // any student can make an event (pickup games, study sessions, parties) for their school, an open invite
   // or invite-only; campus-wide "Everyone" posts and posting as an org are for creator accounts (clubs, departments)
-  if (me.accountType !== "creator" && (input.visibility === "public" || input.hostAs === "org"))
+  // (posting for an org comes from the organizer dashboard, where the org is picked)
+  if (me.accountType !== "creator" && input.visibility === "public" && input.hostAs !== "org")
     return Response.json({ error: "Campus-wide events come from clubs and departments. Share it with your school, as an open invite, or invite people." }, { status: 403 });
   const start = toIso(input.start);
   const end = toIso(input.end);
