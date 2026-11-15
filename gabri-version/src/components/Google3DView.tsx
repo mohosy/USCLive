@@ -27,6 +27,8 @@ import type { Camera } from "./MapView";
 import type { WalkPhase, WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
 import { trojanGlbUrl } from "./walk/trojanModel";
+import { MeMotion, meCirclePx } from "@/lib/meMotion";
+import type { MeLive } from "./MapView";
 
 /** Tiny pub/sub so the flat map can drive this camera while the 3D tiles load (no React re-renders per frame). */
 export interface CameraBus { listeners: Set<(c: Camera) => void> }
@@ -102,7 +104,13 @@ interface Props {
   hotspots: Hotspot[];
   showHeat: boolean;
   onCallout: (c: Callout) => void;
+  /** live facts about your location, read every frame: accuracy in meters and the phone's compass heading */
+  meLive?: { current: MeLive };
+  /** your Trojan was tapped */
+  onMe?: () => void;
 }
+
+const prefersStill = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 interface WalkState {
   path: Path;
@@ -176,6 +184,10 @@ export default function Google3DView(props: Props) {
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
   // the Trojan walker as a .glb blob URL (null until built; falls back to a gold dot)
   const walkerUrl = useRef<string | null>(null);
+  // "you are here" is your Trojan (the same one as in Explore): where it stands between two location fixes, and which way it faces
+  const meMotion = useRef<MeMotion | null>(null);
+  const meModelFailed = useRef(false); // the 3D model could not be built: a plain dot marks you instead
+  const mePulse = useRef(0.5);
 
   function layers() {
     const p = cb.current;
@@ -335,21 +347,7 @@ export default function Google3DView(props: Props) {
         billboard: true,
         
       }),
-      new ScatterplotLayer<Loc>({
-        id: "me",
-        data: [p.me],
-        getPosition: (d) => [d.lng, d.lat, gz],
-        getFillColor: [37, 99, 235, 255],
-        getLineColor: [255, 255, 255, 255],
-        getRadius: 7,
-        radiusUnits: "pixels",
-        lineWidthUnits: "pixels",
-        getLineWidth: 3,
-        stroked: true,
-        billboard: true,
-        
-        parameters: { depthCompare: "always" },
-      }),
+      ...meLayers(gz),
     ];
   }
 
@@ -398,6 +396,43 @@ export default function Google3DView(props: Props) {
         },
       });
     return tiles.current;
+  }
+
+  /** You on the map: a soft pulsing accuracy circle and, standing on it, your Trojan. A tour's guide stands in for you during a walk. */
+  function meLayers(gz: number) {
+    if (walk.current) return [];
+    const p = cb.current;
+    const mo = (meMotion.current ??= new MeMotion({ lat: p.me.lat, lng: p.me.lng }));
+    const here = { lng: mo.pos.lng, lat: mo.pos.lat, heading: mo.heading };
+    const still = prefersStill();
+    const pulse = still ? 0.5 : mePulse.current;
+    // the circle under the feet: 28-48 px wide at every zoom, flat on the ground (so it tilts with the map),
+    // drawn as three stacked rings so the edge fades out softly
+    const r = (meCirclePx(p.meLive?.current.accuracyM) / 2) * (1 + 0.08 * pulse);
+    const rings = [1, 0.74, 0.48].map((k) => ({ ...here, r: r * k }));
+    const clip = mo.moving ? "Walk" : "Idle";
+    return [
+      new ScatterplotLayer({
+        id: "me-accuracy", data: rings, getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat, gz],
+        getRadius: (d: { r: number }) => d.r, radiusUnits: "pixels", stroked: false,
+        getFillColor: [59, 130, 246, Math.round(26 + 14 * pulse)],
+        updateTriggers: { getPosition: [here.lng, here.lat], getRadius: r, getFillColor: pulse },
+        parameters: { depthCompare: "always" },
+      }),
+      ...(walkerUrl.current ? [new ScenegraphLayer({
+        id: "me-trojan", data: [here], scenegraph: walkerUrl.current, pickable: true,
+        getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat, gz],
+        getOrientation: (d: { heading: number }) => [0, 180 - d.heading, 90],
+        // the same size rule as play mode: 2.4 m tall, never under 24 px on screen
+        sizeScale: 1.2, sizeMinPixels: 12,
+        _animations: Object.fromEntries(WALKER_CLIPS.map((c) => [c, { playing: !still && c === clip, speed: c === "Walk" ? 1.4 : 1 }])),
+        _lighting: "pbr",
+        updateTriggers: { getPosition: [here.lng, here.lat], getOrientation: Math.round(here.heading), _animations: [clip, still] },
+        parameters: { depthCompare: "always" },
+      })] : meModelFailed.current ? [
+        new ScatterplotLayer({ id: "me-dot", data: [here], pickable: true, getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat, gz], getFillColor: [37, 99, 235, 255], getLineColor: [255, 255, 255, 255], getRadius: 7, radiusUnits: "pixels", stroked: true, getLineWidth: 3, lineWidthUnits: "pixels", billboard: true, updateTriggers: { getPosition: [here.lng, here.lat] }, parameters: { depthCompare: "always" } }),
+      ] : []),
+    ];
   }
 
   function walkLayersFor(w: WalkState, terrain: InstanceType<typeof TerrainExtension>) {
@@ -486,7 +521,8 @@ export default function Google3DView(props: Props) {
 
   async function startWalk(to: Building, key: number) {
     stopWalk();
-    const me = cb.current.me;
+    const at = meMotion.current?.pos; // from your Trojan, wherever it is standing right now
+    const me = at ? { ...cb.current.me, lat: at.lat, lng: at.lng } : cb.current.me;
     setWalkP({ phase: "loading", traveledM: 0, totalM: 0, realMinutes: 0 });
     const [r, glb] = await Promise.all([
       fetchWalkRoute(me, to, process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ""),
@@ -705,6 +741,7 @@ export default function Google3DView(props: Props) {
       controller: { dragRotate: true, touchRotate: true, inertia: 250 },
       onViewStateChange: ({ viewState: v }) => setView(v as MapViewState),
       onClick: (info: PickingInfo) => {
+        if (info.layer?.id === "me-trojan" || info.layer?.id === "me-dot") { cb.current.onMe?.(); return; }
         if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent((info.object as Pin).id);
         if (info.layer?.id === "building-hit" && info.object) cb.current.onSelectBuilding?.((info.object as Building).id);
         if (info.layer?.id === "cams-3d" && info.object) cb.current.onCallout(info.object as Callout);
@@ -754,6 +791,44 @@ export default function Google3DView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.events, props.buildings, props.me, props.selectedEventId, props.highlightIds, props.alerts, props.hotspots, props.showHeat]);
   const lastBuildings = useRef<Building[] | null>(null);
+
+  // your Trojan: built once this view is in use; a new location walks it there (it appears there with reduced motion)
+  const active = props.active !== false;
+  useEffect(() => {
+    if (!active || walkerUrl.current || meModelFailed.current) return;
+    let gone = false;
+    trojanGlbUrl().then((url) => { if (!gone) { walkerUrl.current = url; deck.current?.setProps({ layers: layers() }); } },
+      () => { if (!gone) { meModelFailed.current = true; deck.current?.setProps({ layers: layers() }); } });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+  useEffect(() => {
+    const mo = (meMotion.current ??= new MeMotion({ lat: props.me.lat, lng: props.me.lng }));
+    mo.setTarget({ lat: props.me.lat, lng: props.me.lng }, performance.now(), prefersStill() || !active);
+    deck.current?.setProps({ layers: layers() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.me, active]);
+  useEffect(() => {
+    if (!active || prefersStill()) return;
+    let raf = 0, lastDraw = 0, lastHeading = -1;
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame);
+      const mo = meMotion.current;
+      if (!mo || walk.current || !deck.current) return; // during a tour the walk's own loop draws
+      mo.setCompass(cb.current.meLive?.current.compass ?? null);
+      mo.setFallbackHeading((viewState.current.bearing ?? 0) + 180); // nothing to go on yet: face the camera
+      const busy = mo.step(now);
+      const turned = Math.abs(mo.heading - lastHeading) > 0.5;
+      // walking or turning redraws every frame; standing still only the circle's slow pulse does (10 times a second)
+      if (!busy && !turned && now - lastDraw < 100) return;
+      lastDraw = now; lastHeading = mo.heading;
+      mePulse.current = 0.5 + 0.5 * Math.sin(now / 450);
+      deck.current.setProps({ layers: layers() });
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   // HTML bubbles (same as Explore): create/update/remove by id, then position on every frame
   useEffect(() => {

@@ -59,7 +59,9 @@ function placeMatches(raw: string) {
  * invite friends, walk somewhere) goes to the assistant. Replies can act on the map right away; events it
  * mentions show up as cards you can open.
  */
-export default function ChatDock({ events, loc, now, onAction, onAnswer, onChanged, onOpenBuilding }: {
+export default function ChatDock({ events, loc, now, onAction, onAnswer, onChanged, onOpenBuilding, ask }: {
+  /** a question asked from elsewhere in the app (the "you" card's "What's near me"); a new key asks it */
+  ask?: { text: string; key: number } | null;
   /** the map-layer banner attached to the top of the bar (hidden while you're typing or chatting) */
   events: EventView[]; loc: { lat: number; lng: number }; now: Date;
   onAction: (a: ChatAction) => void;
@@ -101,6 +103,9 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
     }
     setBusy(false);
   }
+  const askKey = ask?.key;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new key asks; `send` and the text are read at that moment
+  useEffect(() => { if (ask) void send(ask.text); }, [askKey]);
   const byId = (id: string) => events.find((e) => e.id === id);
   const showThread = open && msgs.length > 0 && !showPlaces;
 
