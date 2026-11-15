@@ -618,19 +618,19 @@ export default function MapView(props: Props) {
     // weather on the map comes from Open-Meteo (CC BY 4.0): credited here with the map's own credits
     m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a>' }), "bottom-right");
     // Mapbox's own zoom + compass (drag the compass to tilt); phones pinch instead (hidden there in CSS)
-    // "Play as your Trojan" sits just under the zoom buttons (bottom corners stack newest on top, so add it first)
-    const playBtn: mapboxgl.IControl = {
-      onAdd: () => {
-        const box = document.createElement("div");
-        box.className = "mapboxgl-ctrl mapboxgl-ctrl-group play-ctrl";
-        box.innerHTML = `<button type="button" aria-label="Walk around as your Trojan" title="Walk around as your Trojan"><span class="play-ic"><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5C3 6 7 2 12.5 1.6c4-.3 7 1.2 8.5 3.6-3.2-.4-6 .1-8 1.4-3.5 0-6.7 2-9 5.9z" fill="#FFC72C"/><path d="M5.6 13c0-4.4 3-7 6.9-7 4 0 7 2.8 7 6.5V14h-4.4v2.4l3.4 1-1 3.6h-4.4c-1-2-2.1-3-4.1-3H6.6c-.7-1.5-1-3-1-5z" fill="#fff"/></svg></span><span class="play-tip">Play as your Trojan</span></button>`;
-        box.querySelector("button")!.addEventListener("click", () => togglePlay.current());
-        return box;
-      },
-      onRemove: () => {},
-    };
-    m.addControl(playBtn, "bottom-right");
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
+    // "Play as your Trojan": one more button at the bottom of that same pill, drawn like the zoom icons
+    const navGroup = m.getContainer().querySelector(".mapboxgl-ctrl-zoom-in")?.closest(".mapboxgl-ctrl-group");
+    if (navGroup) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mapboxgl-ctrl-play";
+      b.setAttribute("aria-label", "Walk around as your Trojan");
+      b.title = "Walk around as your Trojan";
+      b.innerHTML = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="1.6"/><path d="m9 20 3-6 3 6"/><path d="m6 8.5 6 1.5 6-1.5"/><path d="M12 10v4"/></svg>';
+      b.addEventListener("click", () => togglePlay.current());
+      navGroup.appendChild(b);
+    }
     const turnNeedle = () => { if (needle.current) needle.current.style.transform = `rotate(${-m.getBearing()}deg)`; };
     m.on("rotate", turnNeedle);
     turnNeedle();
@@ -855,6 +855,8 @@ export default function MapView(props: Props) {
     play.current = null;
     setPlaying(false);
   }
+  // the walk button in the zoom pill turns cardinal while you're playing
+  useEffect(() => { map.current?.getContainer().querySelector(".mapboxgl-ctrl-play")?.setAttribute("aria-pressed", String(playing)); }, [playing]);
   useEffect(() => {
     togglePlay.current = () => {
       const m = map.current;
