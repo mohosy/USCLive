@@ -87,10 +87,15 @@ async function POST_(req: Request) {
   };
   db().events.push(ev);
 
-  if (ev.moderation.status === "approved" && ev.invitees.length)
-    addNotification({ kind: "invite", title: `You sent ${ev.invitees.length} invite${ev.invitees.length > 1 ? "s" : ""}`, body: ev.title, eventId: ev.id, source: "live" });
+  // what creating it means for people: the host hears back, each person invited gets their own invite (nobody else sees these)
+  if (ev.moderation.status === "approved" && ev.invitees.length) {
+    addNotification({ kind: "invite", title: `You sent ${ev.invitees.length} invite${ev.invitees.length > 1 ? "s" : ""}`, body: ev.title, eventId: ev.id, source: "live", userId: me.id });
+    const when = new Date(start).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
+    for (const uid of ev.invitees)
+      addNotification({ kind: "invite", title: `${me.name} invited you`, body: `${ev.title} · ${BUILDING_BY_ID[ev.buildingId]?.name ?? ""} · ${when}`, eventId: ev.id, buildingId: ev.buildingId, source: "live", userId: uid });
+  }
   if (ev.moderation.status !== "approved")
-    addNotification({ kind: "system", title: ev.moderation.status === "rejected" ? "Your event was blocked" : "Your event is pending review", body: ev.moderation.reasons.join(" ·") ||"A USG reviewer will take a look.", eventId: ev.id, source: "live" });
+    addNotification({ userId: me.id, kind: "system", title: ev.moderation.status === "rejected" ? "Your event was blocked" : "Your event is pending review", body: ev.moderation.reasons.join(" ·") ||"A USG reviewer will take a look.", eventId: ev.id, source: "live" });
 
   return Response.json({ event: publicEvent(ev, me), moderation: ev.moderation, ai: mod.ai });
 }

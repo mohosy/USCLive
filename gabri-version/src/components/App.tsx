@@ -481,7 +481,8 @@ export default function App() {
               <OrgDetail host={selHost.host} state={state} loc={loc} onOpenEvent={openEvent}
                 onClose={() => { const from = selHost.from; setSelHost(null); if (from) openEvent(from); }} />
             ) : event ? (
-              <EventDetail ev={event} state={state} loc={loc} onOpenHost={openHost} onClose={closeDetail} onRsvp={rsvp} onUpdated={(e) => setState((s) => (s ? { ...s, events: s.events.map((x) => (x.id === e.id ? e : x)) } : s))} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
+              <EventDetail ev={event} state={state} loc={loc} onOpenHost={openHost} onClose={closeDetail}
+                onCancel={async (id) => { try { await api(`/api/events/${id}`, { method: "DELETE" }); closeDetail(); refresh(); } catch (e) { window.alert((e as Error).message); } }} onRsvp={rsvp} onUpdated={(e) => setState((s) => (s ? { ...s, events: s.events.map((x) => (x.id === e.id ? e : x)) } : s))} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selHall ? (
               <DiningDetail key={selHall.id} hall={selHall.id} loc={loc} now={now} hotspot={state.hotspots.find((h) => h.buildingId === selHall.buildingId)} onClose={closeDetail} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} />
             ) : selBuilding ? (
