@@ -334,16 +334,15 @@ export default function MapView(props: Props) {
     if (!m || !layer || !ready.current) return;
     const p = cb.current;
     if (!p.layers.hotspots || p.walk || m.getZoom() < CROWD_MIN_ZOOM) return layer.setSpots([]);
-    const b = m.getBounds();
-    if (!b) return;
+    // spots near the middle of the view (a tilted view's bounds reach far into the distance)
+    const c = m.getCenter();
+    const reach = 0.0025 * 2 ** (18 - m.getZoom()); // ~550m at z17, ~280m at z18, ~140m at z19
     const byId = BYID(p.buildings);
     const spots: CrowdSpot[] = [];
     for (const h of p.hotspots) {
       const bd = byId[h.buildingId];
       if (h.suppressed || !bd) continue;
-      // a little margin so people are already there as you pan in
-      const pad = 0.0006;
-      if (bd.lng < b.getWest() - pad || bd.lng > b.getEast() + pad || bd.lat < b.getSouth() - pad || bd.lat > b.getNorth() + pad) continue;
+      if (Math.abs(bd.lng - c.lng) > reach * 1.2 || Math.abs(bd.lat - c.lat) > reach) continue;
       spots.push({ id: bd.id, lng: bd.lng, lat: bd.lat, count: h.count, level: h.level });
     }
     layer.setSpots(spots);
