@@ -1,14 +1,17 @@
 // All campus times are Pacific; make server-side Date math match (Replit runs in UTC).
 process.env.TZ = "America/Los_Angeles";
 /**
- * In-memory store (resets on server restart — fine for a hackathon demo, and the demo data
- * is generated relative to "now" so a restart keeps it fresh). Swap for Postgres/Supabase later.
+ * The app's data. Each API request runs inside withState() (lib/state.ts): the whole state is loaded
+ * (from Supabase when configured, otherwise kept in memory), the request runs as the signed-in person,
+ * and any change is saved back. db() and getMe() read the current request's copy.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { BUILDING_BY_ID } from "./campus";
 import { ME, ORGS, seedAlerts, seedEvents, seedHistory, seedInbox, seedNotifications, seedUsers } from "./seed";
 import type { CampusEvent, InboxItem, Notification, SafetyAlert, User } from "./types";
+import type { GoogleSession } from "./google";
 
-interface DB {
+export interface DB {
   seededAt: number;
   users: User[];
   events: CampusEvent[];
@@ -18,17 +21,23 @@ interface DB {
   scannedInbox: string[];
   notifications: Notification[];
   alerts: SafetyAlert[];
-  dps: { lastSync: number; lastUrl: string | null; error: string | null; syncing: boolean };
+  dps: { lastSync: number; lastUrl: string | null; error: string | null; syncing: boolean; startedAt?: number };
   lastLiveTick: number;
   liveScriptIndex: number;
   /** events we already gave you a "sign up before it fills" heads-up for */
   reminded: string[];
   lastReminder: number;
+  /** Google sign-in tokens, per person (server-side only) */
+  google: Record<string, GoogleSession>;
 }
+
+/** The current request: its copy of the state and who is signed in. */
+export interface ReqCtx { db: DB; uid: string; setCookie?: string }
+export const requestCtx = new AsyncLocalStorage<ReqCtx>();
 
 const g = globalThis as unknown as { __usclive?: DB };
 
-function fresh(): DB {
+export function fresh(): DB {
   const now = new Date();
   const events = seedEvents(now);
   // the demo student is already registered for a couple of upcoming events (shows on their profile)
@@ -47,22 +56,37 @@ function fresh(): DB {
     liveScriptIndex: 0,
     reminded: [],
     lastReminder: 0,
+    google: {},
   };
 }
 
+/** Memory copy, used when Supabase isn't configured (local dev) and outside requests. */
+export function memoryDb(): DB {
+  return (g.__usclive ??= fresh());
+}
+
 export function db(): DB {
-  if (!g.__usclive) g.__usclive = fresh();
-  // fill fields added after the store was created (hot reload keeps the old object around)
-  const d = g.__usclive;
+  const d = requestCtx.getStore()?.db ?? memoryDb();
+  // fill fields added after the state was first saved
   d.alerts ??= seedAlerts(new Date());
   d.history ??= seedHistory(new Date());
   d.dps ??= { lastSync: 0, lastUrl: null, error: null, syncing: false };
   d.reminded ??= [];
   d.lastReminder ??= 0;
+  d.google ??= {};
   return d;
 }
 
+/** Fresh demo content, keeping people's accounts and Google connections. */
 export function resetDb() {
+  const c = requestCtx.getStore();
+  if (c) {
+    const old = c.db, f = fresh();
+    f.users = [...f.users, ...old.users.filter((u) => !f.users.some((s) => s.id === u.id))];
+    f.google = old.google ?? {};
+    c.db = f;
+    return c.db;
+  }
   g.__usclive = fresh();
   return g.__usclive;
 }
@@ -88,13 +112,32 @@ function campusMidnight(now: Date) {
   return +now - ((p.hour * 60 + p.minute) * 60 + p.second) * 1000 - now.getMilliseconds();
 }
 
-const MAX_NOTIFICATIONS = 200;
+const MAX_NOTIFICATIONS = 300;
+
+/** Notifications this person should see: campus-wide ones plus their own, with their own read state. */
+export function myNotifications() {
+  const uid = currentUserId();
+  return db().notifications
+    .filter((n) => !n.userId || n.userId === uid)
+    .map((n) => (n.userId ? n : { ...n, read: (n.readBy ?? []).includes(uid) }));
+}
+/** Mark notifications read for the signed-in person only. */
+export function markRead(ids: string[] | "all") {
+  const uid = currentUserId();
+  for (const n of db().notifications) {
+    if (n.userId && n.userId !== uid) continue;
+    if (ids !== "all" && !ids.includes(n.id)) continue;
+    if (n.userId) n.read = true; else n.readBy = Array.from(new Set([...(n.readBy ?? []), uid]));
+  }
+}
 
 /** Pull the DPS Daily Crime Log (at most every 30 min) and merge its incidents into the alerts. */
 export async function syncDps(force = false) {
   const d = db();
-  if (d.dps.syncing || (!force && Date.now() - d.dps.lastSync < 30 * 60_000)) return d.dps;
+  // a refresh that crashed mid-way must not block the next one forever
+  if ((d.dps.syncing && Date.now() - (d.dps.startedAt ?? 0) < 120_000) || (!force && Date.now() - d.dps.lastSync < 30 * 60_000)) return d.dps;
   d.dps.syncing = true;
+  d.dps.startedAt = Date.now();
   try {
     const { syncDpsLog } = await import("./dps");
     const r = await syncDpsLog();
@@ -111,7 +154,12 @@ export async function syncDps(force = false) {
   return d.dps;
 }
 
-export const currentUserId = () => ME;
+/** Who this request is for: the cookie's account, or the shared demo student. */
+export const currentUserId = () => requestCtx.getStore()?.uid ?? ME;
+/** Switch this browser to an account (sets the session cookie on the response). */
+export function signInAs(uid: string) { const c = requestCtx.getStore(); if (c) { c.uid = uid; c.setCookie = uid; } }
+export function signOutCookie() { const c = requestCtx.getStore(); if (c) { c.uid = ME; c.setCookie = ""; } }
+export const DEMO_ID = ME;
 export const findByUsername = (u: string) => db().users.find((x) => x.username === u);
 /** Is this @username free for `forId` (taken by anyone else = not free)? */
 export const usernameFree = (u: string, forId: string) => { const owner = findByUsername(u); return !owner || owner.id === forId; };
@@ -126,7 +174,7 @@ export function setFriends(a: User, b: User, on: boolean) {
   link(a, b); link(b, a);
 }
 export const getUser = (id: string) => db().users.find((u) => u.id === id);
-export const getMe = () => getUser(ME)!;
+export const getMe = () => getUser(currentUserId()) ?? getUser(ME)!;
 export const orgs = () => ORGS;
 
 let counter = 0;

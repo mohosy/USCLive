@@ -1,8 +1,9 @@
 import { importCalendarItems } from "@/lib/calendarImport";
 import { fetchCalendarItems, getSession } from "@/lib/google";
+import { withState } from "@/lib/state";
 
 /** Live sync: pull the next two weeks from Google Calendar and replace what was there (moved/deleted entries update too). */
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   if (!getSession()) return Response.json({ error: "Google isn't connected." }, { status: 401 });
   const first = new URL(req.url).searchParams.get("first") === "1";
   try {
@@ -12,3 +13,5 @@ export async function POST(req: Request) {
     return Response.json({ error: (e as Error).message }, { status: 502 });
   }
 }
+
+export const POST = withState(POST_);

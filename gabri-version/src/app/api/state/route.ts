@@ -1,14 +1,17 @@
-import { connection } from "next/server";
+import { after, connection } from "next/server";
+import { runWithState } from "@/lib/state";
 import { aiEnabled } from "@/lib/ai";
 import { computeHotspots } from "@/lib/hotspots";
 import { freeWindow, todaysClasses } from "@/lib/planner";
 import { photoVersion } from "@/lib/account";
-import { activeAlerts, canSee, db, getMe, getUser, orgs, publicEvent, syncDps } from "@/lib/store";
+import { activeAlerts, canSee, db, getMe, getUser, myNotifications, orgs, publicEvent, syncDps } from "@/lib/store";
+import { withState } from "@/lib/state";
 
 
-export async function GET() {
+async function GET_() {
   await connection();
-  void syncDps(); // background refresh of the DPS crime log (throttled to every 30 min)
+  // refresh the DPS crime log after responding (every 30 min); runs in its own saved state, so serverless hosts don't cut it off
+  if (Date.now() - db().dps.lastSync > 30 * 60_000) after(() => runWithState(() => syncDps()));
   const me = getMe();
   const now = new Date();
   const d = db();
@@ -36,6 +39,8 @@ export async function GET() {
     hotspots: computeHotspots(d.events, now),
     alerts: activeAlerts(now),
     orgs: orgs(),
-    unread: d.notifications.filter((n) => !n.read).length,
+    unread: myNotifications().filter((n) => !n.read).length,
   });
 }
+
+export const GET = withState(GET_);

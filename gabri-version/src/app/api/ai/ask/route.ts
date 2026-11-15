@@ -5,10 +5,11 @@ import { computeHotspots } from "@/lib/hotspots";
 import { body } from "@/lib/http";
 import { candidateEvents, freeWindow, hotspotLabel, studySpots, todaysClasses } from "@/lib/planner";
 import { db, getMe } from "@/lib/store";
+import { withState } from "@/lib/state";
 
 const Input = z.object({ question: z.string().trim().min(2).max(300), lat: z.number(), lng: z.number() });
 
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   const parsed = await body(req, Input);
   if (!parsed.ok) return parsed.res;
   const { question, lat, lng } = parsed.data;
@@ -55,3 +56,5 @@ STUDY SPOTS (best first): ${studySpots(loc, now).slice(0, 5).map((s) => `${s.bui
   res.data.eventIds = res.data.eventIds.filter((id) => ids.has(id));
   return Response.json({ ...res.data, ai: res.ai, error: res.error });
 }
+
+export const POST = withState(POST_);

@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { db, getMe, usernameFree } from "@/lib/store";
 import { normalizeUsername, usernameProblem } from "@/lib/username";
 import type { User } from "@/lib/types";
+import { withState } from "@/lib/state";
 
 /** What a student can see about another student: no email, schedule or clubs. */
 function personView(u: User, me: User) {
@@ -21,7 +22,7 @@ export type PersonView = ReturnType<typeof personView>;
  * GET /api/users              -> your friends + suggestions (most mutual friends first)
  * GET /api/users?username=x   -> { available, problem } for sign-up / Settings
  */
-export async function GET(req: Request) {
+async function GET_(req: Request) {
   await connection();
   const url = new URL(req.url);
   const me = getMe();
@@ -61,3 +62,5 @@ export async function GET(req: Request) {
     .map((x) => personView(x.u, me));
   return Response.json({ results });
 }
+
+export const GET = withState(GET_);

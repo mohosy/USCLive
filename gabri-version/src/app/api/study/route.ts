@@ -1,6 +1,7 @@
 import { hotspotLabel, studySpots } from "@/lib/planner";
+import { withState } from "@/lib/state";
 
-export async function GET(req: Request) {
+async function GET_(req: Request) {
   const sp = new URL(req.url).searchParams;
   const lat = Number(sp.get("lat") ?? 34.0208);
   const lng = Number(sp.get("lng") ?? -118.2851);
@@ -10,3 +11,5 @@ export async function GET(req: Request) {
   }));
   return Response.json({ spots });
 }
+
+export const GET = withState(GET_);

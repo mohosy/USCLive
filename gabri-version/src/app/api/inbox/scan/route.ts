@@ -3,9 +3,10 @@ import { BUILDING_BY_ID, INTERSECTIONS } from "@/lib/campus";
 import { toIso } from "@/lib/http";
 import { addNotification, db, getMe, newId } from "@/lib/store";
 import type { CampusEvent, Notification } from "@/lib/types";
+import { withState } from "@/lib/state";
 
 /** Scan connected sources (demo: seeded Gmail / Brightspace / Google Calendar items). */
-export async function POST() {
+async function POST_() {
   const d = db();
   const me = getMe();
   const pending = d.inbox.filter((i) => !d.scannedInbox.includes(i.id));
@@ -75,3 +76,5 @@ export async function POST() {
 
   return Response.json({ results: res.data.items, created, addedEvents, ai: res.ai, error: res.error });
 }
+
+export const POST = withState(POST_);

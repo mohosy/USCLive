@@ -8,7 +8,7 @@ import { BUILDING_BY_ID, CORE_BUILDINGS, matchBuilding } from "./campus";
 import { computeHotspots } from "./hotspots";
 import { parseNavQuery } from "./nav";
 import { candidateEvents, hotspotLabel, studySpots, todaysClasses } from "./planner";
-import { activeAlerts, addNotification, canSee, db, getMe, getUser } from "./store";
+import { activeAlerts, addNotification, canSee, db, getMe, getUser, myNotifications } from "./store";
 import type { CampusEvent, User } from "./types";
 
 export type ChatAction =
@@ -110,7 +110,7 @@ const TOOLS: Record<string, { description: string; parameters: Record<string, un
       if (ev.visibility === "invite" && ev.host.id !== me.id) return { error: "Only the host can invite people to this one." };
       const { found, unknown } = friendsByName(me, (a.friends as string[]) ?? []);
       ev.invitees = Array.from(new Set([...ev.invitees, ...found.map((u) => u.id)]));
-      if (found.length) addNotification({ kind: "invite", title: `Invites sent: ${ev.title}`, body: `To ${found.map((u) => u.name.split(" ")[0]).join(", ")}`, eventId: ev.id, source: "live" });
+      if (found.length) addNotification({ userId: me.id, kind: "invite", title: `Invites sent: ${ev.title}`, body: `To ${found.map((u) => u.name.split(" ")[0]).join(", ")}`, eventId: ev.id, source: "live" });
       t.eventIds.add(ev.id);
       return { invited: found.map(nameOf), not_your_friends_or_unknown: unknown };
     },
@@ -163,7 +163,7 @@ const TOOLS: Record<string, { description: string; parameters: Record<string, un
       return {
         classes_today: todaysClasses(me, new Date()).map((c) => ({ class: c.code, room: c.room, start: fmt(c.start.toISOString()) })),
         going_this_week: visibleEvents(me, loc, 7 * 24 * 60).filter((e) => e.going).map((e) => ({ title: e.title, when: fmt(e.start), where: e.buildingName })),
-        due_dates: db().notifications.filter((n) => n.kind === "deadline" && n.dueAt && +new Date(n.dueAt) > now && +new Date(n.dueAt) < week).map((n) => ({ what: n.title, due: fmt(n.dueAt!) })),
+        due_dates: myNotifications().filter((n) => n.kind === "deadline" && n.dueAt && +new Date(n.dueAt) > now && +new Date(n.dueAt) < week).map((n) => ({ what: n.title, due: fmt(n.dueAt!) })),
       };
     },
   },

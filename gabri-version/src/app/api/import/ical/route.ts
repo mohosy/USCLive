@@ -2,6 +2,7 @@ import ical from "node-ical";
 import { z } from "zod";
 import { importCalendarItems, type CalItem } from "@/lib/calendarImport";
 import { body, fetchText, safeExternalUrl } from "@/lib/http";
+import { withState } from "@/lib/state";
 
 /**
  * Import a Brightspace (or Google/Outlook) calendar via its private iCal subscription URL.
@@ -9,7 +10,7 @@ import { body, fetchText, safeExternalUrl } from "@/lib/http";
  * Imported items are private to the student (visibility "invite", only them). Repeating entries (weekly classes)
  * are expanded into every occurrence in the next two weeks; entries with no campus location are listed back, not dropped silently.
  */
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   const parsed = await body(req, z.object({ url: z.string().min(10).max(2000).optional(), ics: z.string().max(2_000_000).optional() }));
   if (!parsed.ok) return parsed.res;
   let text = parsed.data.ics;
@@ -39,3 +40,5 @@ export async function POST(req: Request) {
   }
   return Response.json(importCalendarItems(items, "brightspace"));
 }
+
+export const POST = withState(POST_);

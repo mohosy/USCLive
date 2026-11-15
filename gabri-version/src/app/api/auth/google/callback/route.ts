@@ -1,8 +1,9 @@
 import { connection } from "next/server";
 import { finishSignIn } from "@/lib/google";
+import { withState } from "@/lib/state";
 
 /** Google sends people back here. Check the state (stops forged sign-ins), store tokens, return to the map. */
-export async function GET(req: Request) {
+async function GET_(req: Request) {
   await connection();
   const u = new URL(req.url);
   const cookieState = req.headers.get("cookie")?.match(/(?:^|;\s*)g_state=([^;]+)/)?.[1];
@@ -17,3 +18,5 @@ export async function GET(req: Request) {
     return back(`google=error&reason=${encodeURIComponent((e as Error).message.slice(0, 120))}`);
   }
 }
+
+export const GET = withState(GET_);

@@ -1,11 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/store";
+import { withState } from "@/lib/state";
 
 /**
  * DPS staff mark an alert as resolved, which takes it off the map. Students can't: the request needs the
  * staff key (DPS_STAFF_KEY, server-side only). Without one set, nobody can clear alerts; they expire on their own.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function POST_(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const key = process.env.DPS_STAFF_KEY ?? "";
   const given = req.headers.get("x-staff-key") ?? "";
   const ok = key.length > 0 && given.length === key.length && timingSafeEqual(Buffer.from(given), Buffer.from(key));
@@ -16,3 +17,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   a.resolved = true;
   return Response.json({ ok: true });
 }
+
+export const POST = withState(POST_);

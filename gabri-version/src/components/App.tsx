@@ -25,7 +25,7 @@ import type { Camera, MapLayers } from "./MapView";
 import MenuPanel from "./MenuPanel";
 import WeatherPill from "./weather/WeatherPill";
 import { useCampusWeather } from "./weather/useCampusWeather";
-import SignIn, { clearSession, loadSession, signIn, type GooglePrefill } from "./SignIn";
+import SignIn, { clearSession, loadSession, saveGoogleSession, signIn, type GooglePrefill } from "./SignIn";
 import FindFriends from "./FindFriends";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
@@ -123,7 +123,7 @@ export default function App() {
 
   const loadGoogle = useCallback(async () => {
     try {
-      const st = await api<{ configured: boolean; connected: boolean; lastSync: string | null; profile: GooglePrefill | null }>("/api/auth/google/status");
+      const st = await api<{ configured: boolean; connected: boolean; lastSync: string | null; profile: GooglePrefill | null; registered: boolean }>("/api/auth/google/status");
       setGoogle(st);
       return st;
     } catch { return null; }
@@ -169,8 +169,16 @@ export default function App() {
     if (gq) {
       const reason = new URLSearchParams(window.location.search).get("reason");
       window.history.replaceState(null, "", "/");
-      if (gq === "connected") setTimeout(() => void loadGoogle().then((st) => { if (!saved && st?.profile) setGooglePrefill(st.profile); }), 0);
-      else if (gq === "error") setTimeout(() => alert(`Google sign-in didn't work: ${reason ?? "unknown error"}`), 0);
+      if (gq === "connected") {
+        // the server already signed this browser into the Google account's own account
+        const t0 = setTimeout(() => void loadGoogle().then((st) => {
+          if (!st?.profile) { setSignedIn(false); refresh(); return; }
+          if (st.registered) { saveGoogleSession(st.profile.email); setSignedIn(true); refresh(); }
+          else { clearSession(); setGooglePrefill(st.profile); setSignedIn(false); refresh(); }
+        }), 0);
+        return () => clearTimeout(t0);
+      }
+      if (gq === "error") setTimeout(() => alert(`Google sign-in didn't work: ${reason ?? "unknown error"}`), 0);
     } else setTimeout(() => void loadGoogle(), 0);
     // one data load at startup: after the saved sign-in is re-applied, or straight away for the sign-in screen
     const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(async () => {
@@ -356,7 +364,7 @@ export default function App() {
                 <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item"><Settings size={17} /> Settings</Link>
                 <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item"><LayoutDashboard size={17} /> Organizer dashboard</Link>
                 <div className="menu-sep" />
-                <button className="menu-item text-cardinal" onClick={() => { clearSession(); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={17} /> Sign out</button>
+                <button className="menu-item text-cardinal" onClick={() => { clearSession(); void api("/api/session", { json: { action: "signout" } }).then(refresh); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={17} /> Sign out</button>
               </div>}
               {accountTab === "inbox" && <div className="p-4"><InboxModal open embedded onClose={() => setAccountOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} /></div>}
               {accountTab === "notifications" && <div className="p-2">

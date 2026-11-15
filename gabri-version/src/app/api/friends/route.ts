@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { body } from "@/lib/http";
 import { getMe, getUser, setFriends } from "@/lib/store";
+import { withState } from "@/lib/state";
 
 const Input = z.object({ userId: z.string().max(40) });
 
@@ -16,6 +17,6 @@ async function change(req: Request, on: boolean) {
 }
 
 /** Add a friend (demo: accepted right away, both ways). */
-export const POST = (req: Request) => change(req, true);
+export const POST = withState((req: Request) => change(req, true));
 /** Remove a friend. */
-export const DELETE = (req: Request) => change(req, false);
+export const DELETE = withState((req: Request) => change(req, false));

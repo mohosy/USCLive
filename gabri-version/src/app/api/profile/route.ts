@@ -4,6 +4,7 @@ import { body } from "@/lib/http";
 import { db, getMe, publicEvent, usernameFree } from "@/lib/store";
 import { normalizeUsername, usernameProblem } from "@/lib/username";
 import type { CampusEvent, User } from "@/lib/types";
+import { withState } from "@/lib/state";
 
 function profileOf(me: User) {
   return {
@@ -29,7 +30,7 @@ function profileOf(me: User) {
 export type ProfileView = ReturnType<typeof profileOf>;
 
 /** Your profile plus the events you're registered for, went to, and host. */
-export async function GET() {
+async function GET_() {
   await connection();
   const me = getMe();
   const now = Date.now();
@@ -44,7 +45,7 @@ export async function GET() {
 }
 
 /** Update your own profile (name, pronouns, bio, photo, interests, account type). */
-export async function PATCH(req: Request) {
+async function PATCH_(req: Request) {
   const b = await body(req, ProfileInput);
   if (!b.ok) return b.res;
   const me = getMe();
@@ -58,3 +59,7 @@ export async function PATCH(req: Request) {
   applyProfile(me, b.data);
   return Response.json({ profile: profileOf(me) });
 }
+
+export const GET = withState(GET_);
+
+export const PATCH = withState(PATCH_);
