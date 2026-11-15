@@ -1,7 +1,8 @@
 "use client";
 
-import { Bell, BookOpen, CalendarDays, ChevronDown, House, LayoutDashboard, LogOut, Moon, Navigation, Plus, Settings, Sun, Sunrise, Sunset, UserPlus, UserRound } from "lucide-react";
+import { Bell, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
+import { loadMapLighting, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,12 +23,13 @@ import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
 import type { Camera, MapLayers } from "./MapView";
 import MenuPanel from "./MenuPanel";
+import WeatherPill from "./weather/WeatherPill";
+import { useCampusWeather } from "./weather/useCampusWeather";
 import SignIn, { clearSession, loadSession, saveGoogleSession, signIn, type GooglePrefill } from "./SignIn";
 import FindFriends from "./FindFriends";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
-import { ExploreThumb, SatelliteThumb } from "./ViewThumb";
 import { AccountBadge, Avatar, Button, cx } from "./ui";
 
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
@@ -46,6 +48,7 @@ function mergeState(prev: AppState | null, next: AppState): AppState {
 }
 
 export default function App() {
+  const { weather, demo: weatherDemo } = useCampusWeather(); // live campus weather; W cycles demo weather, Shift+W goes back to live
   const [state, setState] = useState<AppState | null>(null);
   const [tab, setTab] = useState<Tab>("menu");
   const [menuOpen, setMenuOpen] = useState(false); // the side panel: pushes the map on desktop, bottom sheet on phones
@@ -53,6 +56,10 @@ export default function App() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false); // Find friends sheet
   const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const [accountTab, setAccountTab] = useState<"account" | "inbox" | "notifications">("account");
+  const accountArea = useRef<HTMLDivElement>(null);
+  const accountButton = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
   const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
@@ -72,9 +79,11 @@ export default function App() {
     const t = setInterval(tick, 60_000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, []);
-  // TEMP (testing): force a time of day. Remove this and the switch under the view toggle before the demo.
-  const [lightTest, setLightTest] = useState<LightPreset | "auto">("auto");
-  const light = lightTest === "auto" ? sunLight : lightTest;
+  // "Map lighting" in Settings: Auto follows the real sun, or hold one time of day (read in the browser, after the prerender)
+  const [lightTest, setLightTest] = useState<MapLighting>("auto");
+  useEffect(() => { const t = setTimeout(() => setLightTest(loadMapLighting()), 0); return () => clearTimeout(t); }, []);
+  // the Map lighting setting wins; then demo weather (W key: its "night" turns the map to night); otherwise the real sun
+  const light: LightPreset = lightTest !== "auto" ? lightTest : weatherDemo ? (weather.isDay ? "day" : "night") : sunLight;
   const coolSat = useRef<ReturnType<typeof setTimeout>>(undefined); // ...and unloads 5s after you move away
   const [intro, setIntro] = useState(true); // campus glide on first load (bubbles wait for it)
   useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
@@ -88,7 +97,6 @@ export default function App() {
   const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number; key: number } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [toasts, setToasts] = useState<Notification[]>([]);
   const [google, setGoogle] = useState<{ configured: boolean; connected: boolean; lastSync: string | null } | null>(null);
@@ -183,10 +191,20 @@ export default function App() {
     return () => clearTimeout(t);
   }, [refresh, loadGoogle]);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenuOpen(false); setAccountOpen(false); setNotifOpen(false); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") {
+      if (accountOpen) { setAccountOpen(false); accountButton.current?.focus(); }
+      else if (menuOpen) { setMenuOpen(false); menuButton.current?.focus(); }
+    } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [accountOpen, menuOpen]);
+  // the account panel closes when you click the map or anything else outside it
+  useEffect(() => {
+    if (!accountOpen) return;
+    const dismiss = (e: PointerEvent) => { if (!accountArea.current?.contains(e.target as Node)) setAccountOpen(false); };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [accountOpen]);
 
   useEffect(() => {
     const first = setTimeout(pollNotifs, 0);
@@ -304,92 +322,93 @@ export default function App() {
   const detailOpen = !!(event || selBuilding || openAlert);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-background">
+    <div className="map-app relative h-dvh w-full overflow-hidden bg-background" data-night={light === "night"}>
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
-      {/* No header: the logo sits top-left; the bell and your profile float top-right */}
-      <Link href="/" className="glass absolute left-3 top-[calc(0.75rem+var(--sat))] z-30 flex h-10 items-center rounded-full px-4 text-[16px] font-semibold tracking-tight">
-        USC<span className="text-cardinal">Live</span>
-      </Link>
-      <div className="absolute right-3 top-[calc(0.75rem+var(--sat))] z-30 flex items-center gap-2">
-          <div className="relative">
-            <button onClick={() => { setAccountOpen(false); setNotifOpen((o) => !o); }} className="glass relative grid h-10 w-10 place-items-center rounded-full" aria-label="Notifications" aria-expanded={notifOpen}>
-              <Bell size={18} />
-              {unread > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-cardinal" />}
-            </button>
-            {notifOpen && (
-              <div className="menu absolute right-0 top-12 z-40 w-[380px] max-w-[calc(100vw-24px)] overflow-hidden">
-                <div className="flex items-center justify-between px-4 pb-1 pt-3">
-                  <span className="text-[15px] font-semibold">Notifications</span>
-                  {unread > 0 && <button onClick={markAllRead} className="text-[13px] font-medium text-[#0a84ff] hover:opacity-80">Mark all read</button>}
-                </div>
-                <div className="scroll-thin max-h-[60vh] overflow-y-auto p-1.5">
-                  {!notifs.length && <p className="px-3 py-6 text-center text-sm text-muted">You&apos;re all caught up.</p>}
-                  {notifs.map((n) => (
-                    <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setNotifOpen(false); }} className="menu-item !items-start">
-                      <span className={cx("mt-[7px] h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-[#0a84ff]")} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className={cx("truncate text-[14px]", n.read ? "font-medium" : "font-semibold")}>{n.title}</span>
-                          <span className="shrink-0 text-[12px] text-muted">{new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
-                        </div>
-                        <div className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted">{n.body}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+      {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
+      <button ref={menuButton} onClick={() => setMenuOpen((o) => !o)} className="map-menu-button" aria-label="Menu" aria-expanded={menuOpen} aria-controls="campus-menu"><Menu size={28} strokeWidth={2} /></button>
+      <div ref={accountArea} className="account-area">
+        <button ref={accountButton} onClick={() => { setAccountOpen((o) => !o); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label="Account" aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
+          {state?.me.avatar ?? <UserRound size={16} />}
+          {unread > 0 && <span className="profile-unread" aria-label={`${unread} unread notifications`} />}
+        </button>
+        {accountOpen && state && (
+          <section id="account-panel" className="account-panel" aria-label="Your account">
+            <div className="flex items-center gap-2.5 px-3 pb-2 pt-3">
+              <Avatar initials={state.me.avatar} photo={state.me.photo} size={32} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-semibold">{state.me.name}</div>
+                <div className="truncate text-xs text-muted">{state.me.major || SCHOOLS.find((x) => x.id === state.me.school)?.name}</div>
               </div>
-            )}
-          </div>
-          {state && (
-            <div className="relative">
-              <button onClick={() => { setNotifOpen(false); setAccountOpen((o) => !o); }} title={state.me.name} aria-label="Account" aria-expanded={accountOpen} className="rounded-full bg-white shadow-[0_4px_14px_rgba(0,0,0,0.14)] transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={40} /></button>
-              {accountOpen && (
-                <div className="menu absolute right-0 top-11 z-40 w-72 p-1.5 text-sm">
-                  <div className="flex items-center gap-3 px-2.5 py-2">
-                    <Avatar initials={state.me.avatar} photo={state.me.photo} size={44} />
-                    <div className="min-w-0">
-                      <div className="truncate text-[14px] font-semibold">{state.me.name}{state.me.pronouns && <span className="ml-1.5 text-xs font-normal text-muted">({state.me.pronouns})</span>}</div>
-                      <div className="truncate text-[12px] text-muted">{state.me.username ? `@${state.me.username}` : state.me.major || SCHOOLS.find((x) => x.id === state.me.school)?.name}</div>
-                      <AccountBadge type={state.me.accountType} className="mt-1" />
-                    </div>
-                  </div>
-                  <div className="menu-sep" />
-                  <Link href="/profile" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><UserRound size={16} className="text-muted" /> View profile</Link>
-                  <button onClick={() => { setAccountOpen(false); setFindOpen(true); }} className="menu-item text-[14px]"><UserPlus size={16} className="text-muted" /> Find friends</button>
-                  <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><Settings size={16} className="text-muted" /> Settings</Link>
-                  <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item text-[14px]"><LayoutDashboard size={16} className="text-muted" /> Organizer dashboard</Link>
-                  <div className="menu-sep" />
-                  <button className="menu-item text-[14px] text-[#d70015]" onClick={() => { clearSession(); void api("/api/session", { json: { action: "signout" } }).then(refresh); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={16} /> Sign out</button>
-                </div>
-              )}
+              <button aria-label="Close account" className="icon-action" onClick={() => { setAccountOpen(false); accountButton.current?.focus(); }}><X size={18} /></button>
             </div>
-          )}
-        </div>
+            <div className="account-tabs" role="tablist" aria-orientation="vertical" aria-label="Account sections" onKeyDown={(e) => {
+              const tabs = ["account", "inbox", "notifications"] as const;
+              let index = tabs.indexOf(accountTab);
+              if (e.key === "ArrowDown") index = (index + 1) % tabs.length;
+              else if (e.key === "ArrowUp") index = (index + tabs.length - 1) % tabs.length;
+              else if (e.key === "Home") index = 0;
+              else if (e.key === "End") index = tabs.length - 1;
+              else return;
+              e.preventDefault(); setAccountTab(tabs[index]);
+              e.currentTarget.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
+            }}>
+              {([["account", "Profile", UserRound], ["inbox", "Inbox", Inbox], ["notifications", "Notifications", Bell]] as const).map(([key, label, Icon]) => (
+                <button key={key} role="tab" id={`account-tab-${key}`} aria-selected={accountTab === key} aria-controls={`account-content-${key}`} tabIndex={accountTab === key ? 0 : -1} onClick={() => setAccountTab(key)}>
+                  <Icon size={15} /><span>{label}</span>{key === "notifications" && unread > 0 && <span className="unread-count">{unread}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="account-content scroll-thin" role="tabpanel" id={`account-content-${accountTab}`} aria-labelledby={`account-tab-${accountTab}`} tabIndex={0}>
+              {accountTab === "account" && <div className="p-2 text-sm">
+                <div className="px-3 py-2"><AccountBadge type={state.me.accountType} /></div>
+                <Link href="/profile" onClick={() => setAccountOpen(false)} className="menu-item"><UserRound size={17} /> View profile</Link>
+                <button onClick={() => { setAccountOpen(false); setFindOpen(true); }} className="menu-item"><UserPlus size={17} /> Find friends</button>
+                <Link href="/settings" onClick={() => setAccountOpen(false)} className="menu-item"><Settings size={17} /> Settings</Link>
+                <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="menu-item"><LayoutDashboard size={17} /> Organizer dashboard</Link>
+                <div className="menu-sep" />
+                <button className="menu-item text-cardinal" onClick={() => { clearSession(); void api("/api/session", { json: { action: "signout" } }).then(refresh); setAccountOpen(false); setMenuOpen(false); setSignedIn(false); }}><LogOut size={17} /> Sign out</button>
+              </div>}
+              {accountTab === "inbox" && <div className="p-4"><InboxModal open embedded onClose={() => setAccountOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} /></div>}
+              {accountTab === "notifications" && <div className="p-2">
+                {unread > 0 && <div className="flex justify-end px-2 pb-2"><button onClick={markAllRead} className="min-h-10 text-sm font-medium text-cardinal">Mark all read</button></div>}
+                {!notifs.length && <p className="px-3 py-8 text-center text-sm text-muted">You&apos;re all caught up.</p>}
+                {notifs.map((n) => (
+                  <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setAccountOpen(false); }} className="menu-item !items-start">
+                    <span className={cx("mt-[7px] h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-cardinal")} />
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className={cx("block text-sm", n.read ? "font-medium" : "font-semibold")}>{n.title}</span>
+                      <span className="mt-1 block text-[13px] leading-relaxed text-muted">{n.body}</span>
+                      <span className="mt-1 block text-xs text-muted">{new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>}
+            </div>
+          </section>
+        )}
+      </div>
       {findOpen && <FindFriends me={state?.me.username} onClose={() => setFindOpen(false)} onChanged={refresh} />}
+      <WeatherPill weather={weather} />
 
       <div className="absolute inset-0">
         {/* Sidebar */}
         {/* Menu panel (see .side in globals.css): opened by the menu button, pushes the map on desktop, bottom sheet on phones */}
-        <aside className={cx("side", menuOpen && "side-open")}>
+        <aside id="campus-menu" aria-label="Campus menu" className={cx("side", menuOpen && "side-open")} aria-hidden={!menuOpen} inert={!menuOpen}>
           <div className="side-inner">
-          <button className="side-grip" aria-label={menuOpen ? "Fold up the panel" : "Open the panel"} onClick={() => setMenuOpen((o) => !o)}
+          <button className="side-grip" aria-label="Collapse menu" onClick={() => setMenuOpen(false)}
             onPointerDown={(e) => { grip.current = e.clientY; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerUp={(e) => { if (grip.current != null && e.clientY - grip.current > 50) setMenuOpen(false); grip.current = null; }} />
-          {/* Always-visible bar: tap a tab to open the panel on it, tap the open tab (or the chevron) to fold it up */}
-          <nav className="side-bar flex items-center gap-1 px-2">
-            {([["menu", "Home", House], ["events", "Events", CalendarDays], ["study", "Study spots", BookOpen]] as const).map(([t, l, Icon]) => {
-              const on = tab === t && menuOpen && !detailOpen;
-              return (
-                <button key={t} aria-pressed={on} onClick={() => { closeDetail(); if (on) setMenuOpen(false); else { setTab(t); setMenuOpen(true); } }}
-                  className={cx("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium", on ? "bg-foreground text-white" : "text-foreground hover:bg-black/5")}>
-                  <Icon size={15} /> {l}
-                </button>
-              );
-            })}
-            <button onClick={() => setMenuOpen((o) => !o)} className="ml-auto rounded-full p-1.5 text-muted hover:bg-black/5 hover:text-foreground" aria-label={menuOpen ? "Fold up the panel" : "Open the panel"} aria-expanded={menuOpen}>
-              <ChevronDown size={18} className={cx("transition-transform duration-300", menuOpen && "rotate-180")} />
-            </button>
-          </nav>
+          <div className="flex shrink-0 items-center justify-between px-5 pb-2 pt-4">
+            <Link href="/" className="text-xl font-semibold tracking-tight">USC<span className="text-cardinal">Live</span></Link>
+            <button onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }} className="icon-action" aria-label="Close menu"><X size={20} /></button>
+          </div>
+          {!detailOpen && (
+            <nav className="flex items-center gap-4 border-b border-line px-4">
+              {([["menu", "Home"], ["events", "Events"], ["study", "Study spots"]] as const).map(([t, l]) => (
+                <button key={t} onClick={() => setTab(t)} className={cx("-mb-px border-b-2 py-3 text-sm font-medium", tab === t ? "border-cardinal text-foreground" : "border-transparent text-muted hover:text-foreground")}>{l}</button>
+              ))}
+            </nav>
+          )}
           <div className={cx("min-h-0 flex-1 p-4", !detailOpen && tab === "events" ? "overflow-hidden" : "scroll-thin overflow-y-auto")}>
             {!state ? (
               <div className="space-y-2"><div className="skeleton h-24" /><div className="skeleton h-16" /><div className="skeleton h-16" /></div>
@@ -428,6 +447,7 @@ export default function App() {
           {/* Flat map. In 3D mode it shows satellite as a placeholder until the 3D campus has loaded. */}
           {state && (view === "map" || !flatGone) && (
             <MapView
+              weather={weather}
               events={shownEvents}
               hotspots={state.hotspots}
               buildings={BUILDINGS}
@@ -455,6 +475,7 @@ export default function App() {
           {state && (view === "3d" || warmSat) && (
             <div className="absolute inset-0 z-[1] transition-opacity duration-700" style={{ opacity: threeReady ? 1 : 0, pointerEvents: threeReady ? "auto" : "none" }}>
               <Google3DView
+                weather={weather}
                 active={view === "3d"}
                 events={shownEvents}
                 buildings={BUILDINGS}
@@ -478,55 +499,48 @@ export default function App() {
             </div>
           )}
           {view === "3d" && !threeReady && (
-            <div className="glass absolute bottom-[88px] left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
+            <div className="glass absolute left-1/2 top-[calc(6rem+var(--sat))] z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
           )}
 
-          {/* Apple-style segmented control */}
-          <div className="absolute right-3 top-[calc(60px+var(--sat))] z-10 flex items-center gap-2">
-            <div className="glass flex rounded-full p-1 text-xs">
-              {([["map", "Explore", ExploreThumb], ["3d", "Satellite", SatelliteThumb]] as const).map(([k, l, Thumb]) => (
-                <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
-                  onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }} className={cx("group flex items-center gap-1.5 rounded-full py-[3px] pl-[3px] pr-3 font-medium", view === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>
-                  {/* Maps-style preview of what this view looks like */}
-                  <span className={cx("h-[22px] w-[22px] overflow-hidden rounded-full shadow-[0_0_0_0.5px_rgba(0,0,0,0.18)] transition-opacity", view === k ? "opacity-100" : "opacity-75 group-hover:opacity-100")}><Thumb /></span>
-                  {l}
-                </button>
-              ))}
-            </div>
-            {/* Maps-style locate button: centers on you, asks for location the first time */}
-            <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
-              className={cx("glass grid h-9 w-9 place-items-center rounded-full", gps === "on" ? "text-[#0a84ff]" : "text-foreground")}>
-              {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={15} className={cx(gps === "on" && "fill-current")} />}
-            </button>
-          </div>
-
-          {/* TEMP (testing): time-of-day switch. "Auto" = real time at USC. */}
-          {view === "map" && (
-            <div className="glass absolute right-3 top-[124px] z-10 hidden items-center gap-0.5 rounded-full p-1 text-xs md:flex" title="Lighting test: Auto follows the real time">
-              {([["auto", null, `Auto · ${sunLight}`], ["dawn", Sunrise, "Dawn"], ["day", Sun, "Day"], ["dusk", Sunset, "Dusk"], ["night", Moon, "Night"]] as const).map(([k, Icon, label]) => (
-                <button key={k} onClick={() => setLightTest(k)} aria-label={label} aria-pressed={lightTest === k} title={label}
-                  className={cx("grid h-7 place-items-center rounded-full font-medium", Icon ? "w-7" : "px-2.5", lightTest === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>
-                  {Icon ? <Icon size={14} /> : "Auto"}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* One filter row: each chip is a layer on the map (and its legend) */}
-          <div className="chip-row absolute left-3 right-3 top-[calc(112px+var(--sat))] z-10 flex gap-1.5 overflow-x-auto pb-1">
-            {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
-              <button key={k} aria-pressed={chips[k]}
-                onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
-                className={cx("whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors", chips[k] ? "bg-foreground text-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]" : "bg-white/85 text-foreground shadow-[0_0_0_0.5px_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.06)] hover:bg-white")}>{l}</button>
+          {/* Explore / Satellite: icon-only switch in the bottom-left corner (names show as tooltips) */}
+          <div className="view-switch" role="group" aria-label="Map view">
+            {([["map", "Explore", MapIcon], ["3d", "Satellite", Satellite]] as const).map(([k, l, Icon]) => (
+              <button key={k} type="button" aria-label={l} aria-pressed={view === k} data-tip={l} onClick={() => switchView(k)}
+                onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
+                onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }}>
+                <Icon size={19} aria-hidden="true" />
+              </button>
             ))}
           </div>
 
-          {state && (
-            <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction}
-              onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
-              onChanged={() => { refresh(); pollNotifs(); }} />
-          )}
-          <div className="pointer-events-none absolute right-3 top-[calc(112px+var(--sat))] z-20 flex w-80 flex-col gap-2">
+          {/* Bottom dock: locate + one filter row (each chip is a layer on the map and its legend), then search and assistant in one bar */}
+          <div className="map-dock">
+            <div className="dock-inner">
+              <div className="dock-options">
+                <div className="map-view-controls">
+                  {/* Maps-style locate button: centers on you, asks for location the first time */}
+                  <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
+                    className={cx("glass grid h-11 w-11 place-items-center rounded-full", gps === "on" ? "text-[#0a84ff]" : "text-foreground")}>
+                    {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={15} className={cx(gps === "on" && "fill-current")} />}
+                  </button>
+                </div>
+                <div className="chip-row" role="group" aria-label="Map layers">
+                  {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
+                    <button key={k} aria-pressed={chips[k]} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))} className="map-layer-chip">{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="dock-search-row">
+                {state && (
+                  <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction} onOpenBuilding={openBuilding}
+                    onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
+                    onChanged={() => { refresh(); pollNotifs(); }} />
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pointer-events-none absolute bottom-44 right-14 z-20 flex w-80 max-w-[calc(100vw-32px)] flex-col gap-2">
             {toasts.map((n) => (
               <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setToasts((t) => t.filter((x) => x.id !== n.id)); }}
                 className="glass glass-strong fade-in pointer-events-auto rounded-2xl p-3 text-left">

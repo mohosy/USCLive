@@ -12,7 +12,9 @@ import { iconCanvas, iconKey, ICON_PX } from "@/lib/eventIcons";
 import { alertStyle } from "@/lib/alertStyle";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
-import { RotateCcw, RotateCw, Compass } from "lucide-react";
+import type { CampusWeather } from "@/lib/weather";
+import WeatherEffects from "./weather/WeatherEffects";
+import MapControls from "./MapControls";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { calloutHTML } from "@/lib/calloutHtml";
@@ -73,6 +75,7 @@ const GROUND_Z = -30;
 const hex = (h: string, a = 255): [number, number, number, number] => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
 interface Props {
+  weather: CampusWeather;
   /** false while it pre-loads hidden behind Explore: no ground measuring */
   active?: boolean;
   events: EventView[];
@@ -165,6 +168,7 @@ export default function Google3DView(props: Props) {
   // surface height right under each bubble / the walker (measured by picking the 3D tiles)
   const zAt = useRef(new Map<string, number>());
   const overlay = useRef<HTMLDivElement>(null);
+  const needle = useRef<SVGSVGElement>(null); // the compass needle in the control column
   const bubbles = useRef(new Map<string, { el: HTMLDivElement; html: string; c: Callout }>());
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
   // the Trojan walker as a .glb blob URL (null until built; falls back to a gold dot)
@@ -352,6 +356,10 @@ export default function Google3DView(props: Props) {
   const lastReset = useRef(0);
   const groundDirty = useRef(true);
   const settled = useRef(new Set<string>()); // bubble ids whose ground height is known
+  const tries = useRef(new Map<string, number>()); // looks spent on each bubble since the last reset
+  const lastMove = useRef(0); // when the camera last moved (no measuring while it does)
+  const placedFor = useRef(""); // the camera the bubbles were last positioned for
+  const bubblesDirty = useRef(true); // a bubble was added, removed or got a new height
   const activeRef = useRef(props.active !== false); // false while pre-loading behind Explore
   const outline = useRef<[number, number][][]>([]);
   // shown at last: start exactly where the Explore map was looking
@@ -502,7 +510,7 @@ export default function Google3DView(props: Props) {
     if (walk.current) cancelAnimationFrame(walk.current.raf);
     walk.current = null;
     setWalkP(null);
-    deck.current?.setProps({ controller: { touchRotate: true, inertia: 250 }, layers: layers() });
+    deck.current?.setProps({ controller: { dragRotate: true, touchRotate: true, inertia: 250 }, layers: layers() });
   }
 
   /** Measure the photoreal ground height by picking a few open spaces (fields, the quad). */
@@ -550,12 +558,14 @@ export default function Google3DView(props: Props) {
    * Measure the ground under bubbles. Every pick re-renders the whole 3D scene, so we only measure a spot
    * until its height settles, and again only after sharper tiles have streamed in. Idle = zero picks.
    */
+  /* eslint-disable react-hooks/purity -- these two run from a timer and after frames, never during render */
   function measureBubbles() {
     if (document.hidden || !activeRef.current) return;
-    // eslint-disable-next-line react-hooks/purity -- runs on a timer, never during render
+    if (performance.now() - lastMove.current < 600) return; // each pick re-renders the scene: never while the camera is moving
     const t = Date.now();
     if (tileGen.current !== measuredGen.current && t - lastReset.current > 3000) {
       settled.current.clear(); // new detail loaded: heights may have changed
+      tries.current.clear();
       measuredGen.current = tileGen.current;
       lastReset.current = t;
       groundDirty.current = true;
@@ -569,16 +579,30 @@ export default function Google3DView(props: Props) {
       const z = surfaceZ(b.c.lng, b.c.lat, prev ?? groundZ.current ?? GROUND_Z);
       picks++;
       if (z == null) continue; // off screen: try again when it's in view
+      const n = (tries.current.get(b.c.id) ?? 0) + 1;
+      tries.current.set(b.c.id, n);
       zAt.current.set(b.c.id, z);
+      if (prev == null || Math.abs(prev - z) >= 0.5) bubblesDirty.current = true;
       if ((b.c.kind === "webcam" || b.c.kind === "alert" || b.c.kind === "alertmini") && (prev == null || Math.abs(prev - z) > 0.5)) { camZ.current++; deck.current?.setProps({ layers: layers() }); }
-      if (prev != null && Math.abs(prev - z) < 0.5) settled.current.add(b.c.id);
+      // done when two looks agree. A spot on a roof edge can flip forever, so three looks is the limit:
+      // without it this timer kept re-rendering the scene 8-12 times a second while nothing moved.
+      if ((prev != null && Math.abs(prev - z) < 0.5) || n >= 3) settled.current.add(b.c.id);
     }
+    if (bubblesDirty.current) positionBubbles(); // heights changed: move the bubbles now (DOM only, no redraw)
   }
 
-  /** Keep the HTML bubbles pinned to their spots on the 3D scene (runs after every frame). */
+  /**
+   * Keep the HTML bubbles pinned to their spots on the 3D scene. Called after every frame, but it only
+   * touches the page when the camera actually moved or a bubble changed.
+   */
   function positionBubbles() {
     const vp = viewport();
     if (!vp) return;
+    const cam = `${vp.viewProjectionMatrix.join()}|${vp.width}x${vp.height}|${groundZ.current}`; // changes exactly when the view does
+    if (cam !== placedFor.current) lastMove.current = performance.now();
+    else if (!bubblesDirty.current) return; // nothing moved
+    placedFor.current = cam;
+    bubblesDirty.current = false;
     const shown = [];
     for (const b of bubbles.current.values()) {
       const z = zAt.current.get(b.c.id) ?? groundZ.current ?? GROUND_Z;
@@ -590,6 +614,7 @@ export default function Google3DView(props: Props) {
     }
     declutter(shown); // no overlaps: the more important bubble wins
   }
+  /* eslint-enable react-hooks/purity */
 
   function markReady() {
     if (ready.current) return;
@@ -604,13 +629,21 @@ export default function Google3DView(props: Props) {
     const z = (viewState.current.zoom ?? 0) >= ZOOM_LABELS;
     if (z !== zoomedIn.current) { zoomedIn.current = z; deck.current?.setProps({ layers: layers() }); }
     const { longitude, latitude, zoom, pitch = 0, bearing = 0 } = viewState.current;
+    if (needle.current) needle.current.style.transform = `rotate(${-bearing}deg)`;
     if (ready.current) cb.current.onCamera({ longitude, latitude, zoom, pitch, bearing });
   }
 
+  // the control column (the walk owns the camera while it plays)
   function rotate(by: number) {
+    if (walk.current) return;
     setView({ ...viewState.current, bearing: (viewState.current.bearing ?? 0) + by, transitionDuration: 500 } as MapViewState);
   }
+  function zoomBy(by: number) {
+    if (walk.current) return;
+    setView({ ...viewState.current, zoom: Math.min(20, Math.max(15, (viewState.current.zoom ?? 16.6) + by)), transitionDuration: 300 } as MapViewState);
+  }
   function resetNorth() {
+    if (walk.current) return;
     setView({ ...viewState.current, bearing: 0, pitch: 60, transitionDuration: 600 } as MapViewState);
   }
 
@@ -629,6 +662,31 @@ export default function Google3DView(props: Props) {
     if (!el.current || !KEY || deck.current) return;
     const host = el.current;
     host.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Trackpad orbit, same as the Explore map: two-finger swipe sideways turns the view; with ⌥ held, swiping
+    // left/right turns it and up/down tilts it. Capture phase, so deck.gl's scroll-zoom never sees these.
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || walk.current) return; // pinch-zoom, or the walk owns the camera
+      const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+      const v = viewState.current;
+      if (e.altKey && ay > ax) {
+        e.preventDefault(); e.stopPropagation();
+        setView({ ...v, pitch: Math.max(0, Math.min(80, (v.pitch ?? 0) - e.deltaY * 0.2)), transitionDuration: 0 } as MapViewState);
+      } else if (e.altKey || ax > ay * 1.2) {
+        e.preventDefault(); e.stopPropagation();
+        setView({ ...v, bearing: (v.bearing ?? 0) - e.deltaX * 0.25, transitionDuration: 0 } as MapViewState);
+      }
+    };
+    host.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    // Safari reports the two-finger trackpad twist itself
+    let twistFrom = 0;
+    const onGestureStart = (e: Event) => { e.preventDefault(); twistFrom = viewState.current.bearing ?? 0; };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      if (walk.current) return;
+      setView({ ...viewState.current, bearing: twistFrom - (e as Event & { rotation: number }).rotation, transitionDuration: 0 } as MapViewState);
+    };
+    host.addEventListener("gesturestart", onGestureStart);
+    host.addEventListener("gesturechange", onGestureChange);
     // Create the engine on the next tick: React dev mode mounts twice, and a Deck finalized before it
     // finished starting keeps rendering as an orphan. Deferring means only one Deck is ever created.
     let created: Deck | null = null;
@@ -638,7 +696,8 @@ export default function Google3DView(props: Props) {
       // retina at 2-3x renders 4-9x the pixels; 1.5x looks the same on campus imagery and is much smoother
       useDevicePixels: Math.min(typeof window !== "undefined" ? window.devicePixelRatio : 1, PHONE ? 1 : 1.5),
       viewState: viewState.current,
-      controller: { touchRotate: true, inertia: 250 },
+      // right-click drag and Ctrl + drag rotate and tilt; two fingers on a phone twist to rotate
+      controller: { dragRotate: true, touchRotate: true, inertia: 250 },
       onViewStateChange: ({ viewState: v }) => setView(v as MapViewState),
       onClick: (info: PickingInfo) => {
         if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent((info.object as Pin).id);
@@ -659,6 +718,9 @@ export default function Google3DView(props: Props) {
     }, 0);
     return () => {
       clearTimeout(t);
+      host.removeEventListener("wheel", onWheel, { capture: true });
+      host.removeEventListener("gesturestart", onGestureStart);
+      host.removeEventListener("gesturechange", onGestureChange);
       created?.finalize();
       if (deck.current === created) deck.current = null;
       host.querySelectorAll("canvas").forEach((c) => c.remove());
@@ -703,14 +765,16 @@ export default function Google3DView(props: Props) {
       if (c.intensity != null) b.el.style.setProperty("--intensity", String(c.intensity));
     }
     for (const [id, b] of bubbles.current) if (!keep.has(id)) { b.el.remove(); bubbles.current.delete(id); }
+    bubblesDirty.current = true;
     positionBubbles();
     deck.current?.setProps({ layers: layers() }); // webcam models follow the Cams filter
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.callouts, walkP?.phase]);
 
-  // live game clocks
+  // live game clocks: once a second, and not at all while the tab is hidden
   useEffect(() => {
     const t = setInterval(() => {
+      if (document.hidden) return;
       const now = new Date();
       for (const b of bubbles.current.values()) {
         if (!b.c.game) continue;
@@ -742,16 +806,13 @@ export default function Google3DView(props: Props) {
   return (
     <div className="absolute inset-0">
       <div ref={el} className="absolute inset-0" />
-      <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" />
-      <div className="pointer-events-none absolute bottom-2 right-14 z-10 max-w-[60%] truncate rounded bg-white/80 px-2 py-0.5 text-[10px] text-gray-700">
+      <WeatherEffects weather={props.weather} active={props.active !== false} />
+      <div ref={overlay} className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" />
+      <div className="satellite-credit pointer-events-none absolute bottom-3 right-14 z-10 max-w-[60%] truncate rounded bg-white/80 px-2 py-0.5 text-[10px] text-gray-700">
         <span className="font-semibold">Google</span>{credits ? ` · ${credits}` : ""}
       </div>
-      <div className="absolute bottom-10 right-3 z-10 flex flex-col overflow-hidden rounded-lg border border-line bg-white shadow-sm">
-        <button onClick={() => rotate(-45)} className="p-2 text-foreground hover:bg-surface" title="Rotate left"><RotateCcw size={16} /></button>
-        <button onClick={resetNorth} className="border-y border-line p-2 text-foreground hover:bg-surface" title="Reset view"><Compass size={16} /></button>
-        <button onClick={() => rotate(45)} className="p-2 text-foreground hover:bg-surface" title="Rotate right"><RotateCw size={16} /></button>
-      </div>
-      <div className="glass pointer-events-none absolute bottom-[84px] left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-muted max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
+      <MapControls needle={needle} onRotate={rotate} onZoom={zoomBy} onNorth={resetNorth} />
+      <div className="glass pointer-events-none absolute left-1/2 top-5 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-muted max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}

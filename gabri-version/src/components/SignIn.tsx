@@ -122,6 +122,7 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
     try {
       const r = await api<{ profile: DirectoryEntry | null; isNew: boolean }>("/api/session", { json: { action: "lookup", email: address } });
       if (r.profile) return go({ email: r.profile.email, interests: [] }); // demo student: straight in
+      if (!r.isNew) return go({ email: address.trim().toLowerCase(), interests: [] }); // account already created: straight in, school stays as first chosen
       setStep("create");
       setBusy(false);
     } catch (e) { setErr((e as Error).message); setBusy(false); }
@@ -171,6 +172,7 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
                 <option value="" disabled>Select your school</option>
                 {SCHOOLS.filter((x) => x.id !== "all").map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
+              <p className="mt-1 text-[11px] text-muted">Your school can&apos;t be changed after this. In the real app it comes from your USC sign-in.</p>
             </label>
             <label className="block">
               <div className="mb-1 text-xs font-medium text-muted">Username</div>

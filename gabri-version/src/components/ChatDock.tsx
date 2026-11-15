@@ -1,24 +1,43 @@
 "use client";
 
-import { ArrowUp, ChevronDown, ChevronUp, Navigation, SquarePen } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowUp, ChevronDown, ChevronUp, LoaderCircle, MapPin, MessageCircle, Navigation, Search, SquarePen, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fmtWhen, type EventView } from "@/lib/client-types";
-import { BUILDING_BY_ID } from "@/lib/campus";
+import { BUILDING_BY_ID, BUILDINGS } from "@/lib/campus";
 import type { ChatAction } from "@/lib/agent";
-import { cx } from "./ui";
 
 interface Msg { role: "user" | "assistant"; content: string; eventIds?: string[]; actions?: ChatAction[] }
 interface Reply { reply: string; actions: ChatAction[]; eventIds: string[]; ai: boolean }
 
 const SUGGESTIONS = ["What's happening right now?", "Free food near me", "Invite Priya to pickup soccer", "Take me to Leavey", "Is the gym busy?", "What's due this week?"];
 
+/** Places whose name or code matches what is being typed (main buildings first), for the instant results. */
+function placeMatches(raw: string) {
+  const q = raw.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const rank = (b: (typeof BUILDINGS)[number]) => {
+    const name = b.name.toLowerCase(), code = b.code.toLowerCase();
+    if (code === q || name === q) return 0;
+    if (name.startsWith(q) || code.startsWith(q)) return 1;
+    if (name.split(/\s+/).some((w) => w.startsWith(q))) return 2;
+    return name.includes(q) ? 3 : -1;
+  };
+  return BUILDINGS.map((b) => ({ b, r: rank(b) })).filter((x) => x.r >= 0)
+    .sort((a, b) => a.r - b.r || Number(!!a.b.minor) - Number(!!b.b.minor) || a.b.name.length - b.b.name.length)
+    .slice(0, 5).map((x) => x.b);
+}
+
 /**
- * The chat bar at the bottom of the map: ask anything, or tell it what to do (RSVP, invite friends, walk somewhere).
- * Replies can act on the map right away; events it mentions show up as cards you can open.
+ * The one bar at the bottom of the map: search and assistant together.
+ * Typing a place name lists matching places straight away; anything else (a question, or a request such as RSVP,
+ * invite friends, walk somewhere) goes to the assistant. Replies can act on the map right away; events it
+ * mentions show up as cards you can open.
  */
-export default function ChatDock({ events, loc, now, onAction, onAnswer, onChanged }: {
+export default function ChatDock({ events, loc, now, onAction, onAnswer, onChanged, onOpenBuilding }: {
   events: EventView[]; loc: { lat: number; lng: number }; now: Date;
   onAction: (a: ChatAction) => void;
+  /** a place picked from the instant results */
+  onOpenBuilding: (id: string) => void;
   /** the events the latest answer is about (highlighted on the map), or null to clear */
   onAnswer: (eventIds: string[] | null) => void;
   onChanged: () => void;
@@ -30,12 +49,17 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
   const [focused, setFocused] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [msgs, busy]);
+  // instant place results: rows are the matching places, then "ask the assistant" as the last row
+  const places = useMemo(() => placeMatches(text), [text]);
+  const [pick, setPick] = useState(0); // highlighted row
+  const showPlaces = focused && places.length > 0;
+  function openPlace(id: string) { setText(""); setPick(0); onOpenBuilding(id); }
 
   async function send(q: string) {
     const content = q.trim();
     if (!content || busy) return;
     const history: Msg[] = [...msgs, { role: "user", content }];
-    setMsgs(history); setText(""); setOpen(true); setBusy(true);
+    setMsgs(history); setText(""); setPick(0); setOpen(true); setBusy(true);
     try {
       const r = await api<Reply>("/api/chat", { json: { messages: history.map(({ role, content, eventIds }) => ({ role, content, eventIds })), lat: loc.lat, lng: loc.lng } });
       setMsgs((m) => [...m, { role: "assistant", content: r.reply, eventIds: r.eventIds, actions: r.actions }]);
@@ -48,10 +72,25 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
     setBusy(false);
   }
   const byId = (id: string) => events.find((e) => e.id === id);
-  const showThread = open && msgs.length > 0;
+  const showThread = open && msgs.length > 0 && !showPlaces;
 
   return (
-    <div className="chat-dock">
+    <div className="campus-chat">
+      {showPlaces && (
+        <div className="search-results scroll-thin" role="listbox" aria-label="Places and assistant">
+          {places.map((b, i) => (
+            <button key={b.id} type="button" role="option" aria-selected={pick === i} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setPick(i)} onClick={() => openPlace(b.id)} className="search-row">
+              <MapPin size={16} className="shrink-0 text-cardinal" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate">{b.name}</span>
+              {!b.minor && <span className="shrink-0 text-xs text-muted">{b.code}</span>}
+            </button>
+          ))}
+          <button type="button" role="option" aria-selected={pick === places.length} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setPick(places.length)} onClick={() => void send(text)} className="search-row">
+            <MessageCircle size={16} className="shrink-0 text-muted" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">Ask the assistant: &ldquo;{text.trim()}&rdquo;</span>
+          </button>
+        </div>
+      )}
       {showThread && (
         <div className="chat-thread">
           <div className="flex items-center justify-between px-4 pb-1 pt-3">
@@ -93,21 +132,32 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
         </div>
       )}
       {!showThread && focused && !text && msgs.length === 0 && (
-        <div className="mb-2 flex flex-wrap justify-center gap-1.5">
+        <div className="chat-suggestions">
           {SUGGESTIONS.map((s) => (
             <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void send(s)} className="rounded-full bg-white/90 px-3 py-1.5 text-[12.5px] font-medium shadow-[0_0_0_0.5px_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.08)] hover:bg-white">{s}</button>
           ))}
         </div>
       )}
-      <form className="chat-bar" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
-        {msgs.length > 0 && !open && (
-          <button type="button" onClick={() => setOpen(true)} title="Show the conversation" aria-label="Show the conversation" className="rounded-full p-1.5 text-muted hover:bg-surface hover:text-foreground"><ChevronUp size={18} /></button>
-        )}
-        <input value={text} onChange={(e) => setText(e.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-          placeholder="Ask anything, or tell me what to do" aria-label="Ask the campus assistant" className="min-w-0 flex-1 bg-transparent px-3 text-[15px] outline-none placeholder:text-muted" />
-        <button type="submit" disabled={busy || !text.trim()} aria-label="Send" className={cx("grid h-9 w-9 shrink-0 place-items-center rounded-full", text.trim() ? "bg-cardinal text-white" : "bg-surface text-muted")}>
-          <ArrowUp size={18} />
-        </button>
+      <form className="campus-search" role="search"
+        onSubmit={(e) => { e.preventDefault(); if (showPlaces && pick < places.length) openPlace(places[pick].id); else void send(text); }}
+        onKeyDown={(e) => {
+          if (!showPlaces) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setPick((p) => (p + 1) % (places.length + 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setPick((p) => (p + places.length) % (places.length + 1)); }
+          else if (e.key === "Escape") { e.stopPropagation(); setText(""); setPick(0); }
+        }}>
+        <Search size={21} className="search-icon" aria-hidden="true" />
+        <input value={text} onChange={(e) => { setText(e.target.value); setPick(0); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          placeholder="Search or ask anything about campus…" aria-label="Search campus or ask the assistant" autoComplete="off" className="campus-search-input" />
+        <div className="search-actions">
+          {msgs.length > 0 && !open && (
+            <button type="button" onClick={() => setOpen(true)} title="Show the conversation" aria-label="Show the conversation" className="icon-action"><ChevronUp size={18} /></button>
+          )}
+          {text && !busy && <button type="button" onClick={() => { setText(""); setPick(0); }} className="icon-action" aria-label="Clear"><X size={18} /></button>}
+          <button type="submit" disabled={busy || !text.trim()} aria-label={busy ? "The assistant is thinking" : "Send"} className="search-submit">
+            {busy ? <LoaderCircle size={19} className="animate-spin" /> : <ArrowUp size={21} />}
+          </button>
+        </div>
       </form>
     </div>
   );

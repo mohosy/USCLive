@@ -1,6 +1,9 @@
 "use client";
 
 import mapboxgl from "mapbox-gl";
+import type { CampusWeather } from "@/lib/weather";
+import WeatherEffects from "./weather/WeatherEffects";
+import MapControls from "./MapControls";
 import type { Feature, FeatureCollection } from "geojson";
 import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
@@ -189,6 +192,7 @@ export interface Camera { longitude: number; latitude: number; zoom: number; pit
 export interface MapLayers { events: boolean; hotspots: boolean; columns: boolean; places: boolean }
 
 interface Props {
+  weather: CampusWeather;
   events: EventView[];
   hotspots: Hotspot[];
   buildings: Building[];
@@ -319,6 +323,7 @@ export default function MapView(props: Props) {
   const campus = useRef<CampusData | null>(null);
   const area = useRef<FeatureCollection | null>(null);
   const [rotateHint, setRotateHint] = useState(false);
+  const needle = useRef<SVGSVGElement>(null); // the compass needle in the control column
 
   /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
   function tidyBubbles() {
@@ -521,10 +526,18 @@ export default function MapView(props: Props) {
       // required credits, kept small and together: the Mapbox logo (unaltered) next to a compact ⓘ attribution
       logoPosition: "bottom-right",
       attributionControl: false,
+      // right-click drag and Ctrl + drag rotate and tilt; two fingers on a phone twist to rotate and drag to tilt
+      dragRotate: true,
+      touchZoomRotate: true,
+      touchPitch: true,
     });
     map.current = m;
+    m.touchZoomRotate.enableRotation();
     m.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
-    m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
+    // zoom, rotate and compass live in our own control column (MapControls), so Mapbox's own zoom buttons are not added
+    const turnNeedle = () => { if (needle.current) needle.current.style.transform = `rotate(${-m.getBearing()}deg)`; };
+    m.on("rotate", turnNeedle);
+    turnNeedle();
     m.on("style.load", install);
     loadCampus().then(
       (c) => {
@@ -557,8 +570,9 @@ export default function MapView(props: Props) {
     // trackpad two-finger click = right click: rotate the map instead of opening the browser menu
     el.current.addEventListener("contextmenu", (e) => e.preventDefault());
 
-    // Trackpad orbit, like a 3D viewer: two-finger swipe sideways turns the map, ⌥ + swipe up/down tilts it.
-    // (Pinch and plain up/down swipes still zoom.) Runs in the capture phase so Mapbox's scroll-zoom never sees these.
+    // Trackpad orbit, like a 3D viewer: two-finger swipe sideways turns the map; with ⌥ held, swiping left/right turns
+    // it and up/down tilts it. (Pinch and plain up/down swipes still zoom.) Runs in the capture phase so Mapbox's
+    // scroll-zoom never sees these.
     const turned = () => {
       setRotateHint(false);
       try { localStorage.setItem("usclive.rotateHint", "1"); } catch { /* storage blocked */ }
@@ -570,7 +584,7 @@ export default function MapView(props: Props) {
         e.preventDefault(); e.stopPropagation();
         m.setPitch(Math.max(0, Math.min(72, m.getPitch() - e.deltaY * 0.2)));
         turned();
-      } else if (ax > ay * 1.2) {
+      } else if (e.altKey || ax > ay * 1.2) {
         e.preventDefault(); e.stopPropagation();
         m.setBearing(m.getBearing() - e.deltaX * 0.25);
         turned();
@@ -729,6 +743,7 @@ export default function MapView(props: Props) {
   // tick live game clocks every second; flash the bubble when the score changes
   useEffect(() => {
     const t = setInterval(() => {
+      if (document.hidden) return; // nothing to tick while the tab is hidden
       const now = new Date();
       for (const b of bubbles.current.values()) {
         if (!b.c.game) continue;
@@ -806,8 +821,13 @@ export default function MapView(props: Props) {
   return (
     <div className="absolute inset-0">
       <div ref={el} className="h-full w-full" />
+      <WeatherEffects weather={props.weather} />
+      <MapControls needle={needle}
+        onRotate={(by) => { const m = map.current; if (m && !props.walk) m.easeTo({ bearing: m.getBearing() + by, duration: 500 }); }}
+        onZoom={(by) => { const m = map.current; if (m && !props.walk) m.easeTo({ zoom: m.getZoom() + by, duration: 300 }); }}
+        onNorth={() => { const m = map.current; if (m && !props.walk) m.easeTo({ bearing: 0, pitch: 60, duration: 600 }); }} />
       {rotateHint && !props.walk && (
-        <div className="glass fade-in pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
+        <div className="glass fade-in pointer-events-none absolute left-1/2 top-[calc(1.25rem+var(--sat))] z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
           Swipe sideways with two fingers to turn the map · <span className="text-muted">⌥ + swipe to tilt</span>
         </div>
       )}

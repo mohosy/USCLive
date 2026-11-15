@@ -1,12 +1,13 @@
 "use client";
 
-import { Camera, Check, Lock, LogOut, Trash2, UserRound } from "lucide-react";
+import { Camera, Check, Lock, LogOut, Moon, Sun, Sunrise, Sunset, Trash2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { api } from "@/lib/client-types";
 import { INTERESTS } from "@/lib/directory";
+import { loadMapLighting, saveMapLighting, type MapLighting } from "@/lib/mapLighting";
 import { AccountTypePicker, clearSession, updateSavedSession, type AccountType } from "../SignIn";
 import { Avatar, cx, inputCls } from "../ui";
 import { UsernameInput, useUsernameStatus } from "../UsernameField";
@@ -59,6 +60,8 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
   const [interests, setInterests] = useState(initial.interests);
   const [accountType, setAccountType] = useState<AccountType>(initial.accountType);
   const [orgId, setOrgId] = useState(initial.creatorOrgId ?? "");
+  // a preference kept in this browser; it applies straight away, without the Save bar (this form only renders in the browser)
+  const [lighting, setLighting] = useState<MapLighting>(loadMapLighting);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -165,7 +168,7 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
         </div>
       </Card>
 
-      <Card title="USC account" subtitle="These come from USC's directory and can't be changed here.">
+      <Card title="USC account" subtitle={initial.verified ? "These come from USC's directory and can't be changed here." : "Set when you created your account and can't be changed. In the real app these come from your USC sign-in."}>
         <div className="divide-y divide-line rounded-xl border border-line">
           <Locked label="Email" value={initial.email || "—"} />
           <Locked label="School" value={school} />
@@ -181,6 +184,21 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
           </div>
         )}
         <AccountTypePicker type={accountType} orgId={orgId} onType={edit(setAccountType)} onOrg={edit(setOrgId)} />
+      </Card>
+
+      <Card title="Map">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm font-medium" id="map-lighting-label">Map lighting</div>
+          {/* Auto follows the real time at USC; the others hold the map at one time of day */}
+          <div role="group" aria-labelledby="map-lighting-label" className="flex items-center gap-0.5 rounded-full bg-surface p-1 text-xs">
+            {([["auto", null, "Auto"], ["dawn", Sunrise, "Dawn"], ["day", Sun, "Day"], ["dusk", Sunset, "Dusk"], ["night", Moon, "Night"]] as const).map(([k, Icon, label]) => (
+              <button key={k} type="button" onClick={() => { setLighting(k); saveMapLighting(k); }} aria-label={label} aria-pressed={lighting === k} title={k === "auto" ? "Auto: follows the real time at USC" : label}
+                className={cx("grid h-7 place-items-center rounded-full font-medium", Icon ? "w-7" : "px-2.5", lighting === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>
+                {Icon ? <Icon size={14} /> : "Auto"}
+              </button>
+            ))}
+          </div>
+        </div>
       </Card>
 
       <div className="mt-6">
