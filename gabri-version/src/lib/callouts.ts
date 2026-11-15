@@ -21,6 +21,8 @@ export interface Callout {
   game?: { info: GameInfo; start: string };
   /** busy/quiet ring intensity 0..1 */
   intensity?: number;
+  /** webcams: compass direction the camera looks */
+  heading?: number;
   /** events with free food: what's offered (shown as a small badge, whatever the filters are) */
   food?: string;
   /** DPS alerts: how serious (sets the tag color) */
@@ -112,7 +114,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
   }
 
   if (chips.webcams) {
-    for (const w of WEBCAMS) out.push({ id: `cam:${w.id}`, kind: "webcam", lng: w.lng, lat: w.lat, eyebrow: w.source, title: w.name });
+    for (const w of WEBCAMS) out.push({ id: `cam:${w.id}`, kind: "webcam", lng: w.lng, lat: w.lat, eyebrow: w.source, title: w.name, heading: w.heading });
   }
 
   // one bubble per spot: later (more specific) kinds don't stack on top of earlier ones

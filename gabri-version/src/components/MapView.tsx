@@ -9,6 +9,7 @@ import { isLive, type Building, type EventView, type Hotspot, type Loc, type Saf
 import { calloutHTML } from "@/lib/calloutHtml";
 import { declutter } from "@/lib/declutter";
 import { alertStyle } from "@/lib/alertStyle";
+import { WEBCAMS } from "@/lib/webcams";
 import { allIconKeys, iconCanvas, iconKey, ICON_PX, ICON_RATIO } from "@/lib/eventIcons";
 import type { LightPreset } from "@/lib/sun";
 
@@ -16,6 +17,8 @@ import type { LightPreset } from "@/lib/sun";
 const CAM_MODEL = "/models/film-camera.glb";
 /** the red police beacon that stands at every DPS alert */
 const BEACON_MODEL = "/models/dps-beacon.glb";
+/** model lens points east (+X); Mapbox turns models clockwise, so this faces it toward a compass heading */
+const camYaw = (heading: number) => heading - 90;
 
 function alertPoints(alerts: SafetyAlert[]): FC {
   return { type: "FeatureCollection", features: alerts.map((a) => ({ type: "Feature", properties: { id: `al:${a.id}`, title: a.title }, geometry: { type: "Point", coordinates: [a.lng, a.lat] } })) };
@@ -447,7 +450,8 @@ export default function MapView(props: Props) {
       paint: {
         // Snap Map style: oversized, about the same size on screen at every zoom (halves per zoom level)
         "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [58, 58, 58]], 19, ["literal", [4.5, 4.5, 4.5]]],
-        "model-rotation": ["literal", [0, 0, 200]],
+        // each camera faces the way it actually looks (GeoJSON can't carry arrays, so match on the id)
+        "model-rotation": ["match", ["get", "id"], ...WEBCAMS.flatMap((w) => [`cam:${w.id}`, ["literal", [0, 0, camYaw(w.heading)]]]), ["literal", [0, 0, 90]]],
         "model-type": "common-3d",
         "model-cast-shadows": true,
         "model-emissive-strength": 0.6,
