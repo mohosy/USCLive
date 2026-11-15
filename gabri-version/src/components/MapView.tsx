@@ -582,7 +582,7 @@ export default function MapView(props: Props) {
       paint: {
         "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [30, 30, 30]], 19, ["literal", [2.6, 2.6, 2.6]]],
         // floats above the red circle, the same height on screen at every zoom
-        "model-translation": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [0, 0, 110]], 19, ["literal", [0, 0, 8]]],
+        "model-translation": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [0, 0, 32]], 19, ["literal", [0, 0, 2.5]]],
         "model-type": "common-3d",
         "model-cast-shadows": !PHONE,
         "model-emissive-strength": 1,

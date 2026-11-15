@@ -20,6 +20,8 @@ export interface Callout {
   meta?: string;
   /** for live games: score/clock are computed every second by the map */
   game?: { info: GameInfo; start: string };
+  /** busy/quiet marker on a building that also has an event pin: drawn just above the pin, not on top of it */
+  stacked?: boolean;
   /** busy/quiet ring intensity 0..1 */
   intensity?: number;
   /** webcams: compass direction the camera looks */
@@ -71,13 +73,16 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     const fill = (h: (typeof tracked)[number]) => Math.min(99, Math.round((h.count / b(h.buildingId).capacity) * 100));
     const busiest = [...tracked].filter((h) => h.level === "busy" || h.level === "packed").sort((x, y) => fill(y) - fill(x)).slice(0, 3);
     const quietest = [...tracked].filter((h) => h.level === "quiet").sort((x, y) => fill(x) - fill(y)).slice(0, 1);
+    // an event pin at the same building (on now or soon): lift the busy marker above it
+    const t = now.getTime();
+    const hasPin = (id: string) => s.events.some((e) => e.buildingId === id && +new Date(e.end) > t && +new Date(e.start) - t < 6 * 3600_000);
     for (const h of busiest) {
       const bd = b(h.buildingId);
-      out.push({ id: `b:${bd.id}`, kind: "busy", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: h.level === "packed" ? "Packed" : "Busy", meta: `${fill(h)}%`, intensity: Math.min(1, h.ratio / 2) });
+      out.push({ id: `b:${bd.id}`, kind: "busy", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: h.level === "packed" ? "Packed" : "Busy", meta: `${fill(h)}%`, intensity: Math.min(1, h.ratio / 2), stacked: hasPin(bd.id) });
     }
     for (const h of quietest) {
       const bd = b(h.buildingId);
-      out.push({ id: `b:${bd.id}`, kind: "quiet", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: "Quiet", meta: `${fill(h)}%` });
+      out.push({ id: `b:${bd.id}`, kind: "quiet", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: "Quiet", meta: `${fill(h)}%`, stacked: hasPin(bd.id) });
     }
   }
 

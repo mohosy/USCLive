@@ -726,4 +726,6 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .toast-text { min-width: 0; flex: 1; }
 /* the walk button while you play: lit (tap it again to stop) */
 .mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"], .map-app[data-night="true"] .mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"] { background: var(--cardinal) !important; color: #fff; }
+/* a busy marker on a building that also has an event pin sits just above the pin instead of on it */
+.bz-up { position: relative; top: -38px; }
 

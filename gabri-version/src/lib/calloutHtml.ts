@@ -38,7 +38,7 @@ export function calloutHTML(c: Callout, now: Date) {
   if (c.kind === "event" && c.ev) return eventBanner(c);
   if (c.kind === "schedule" && c.sched) return scheduleBanner(c);
   if (c.kind === "busy" || c.kind === "quiet") {
-    return `<div class="bz bz-${c.kind}"><span class="bz-ic">${placeIcon(c.id)}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
+    return `<div class="bz bz-${c.kind}${c.stacked ? " bz-up" : ""}"><span class="bz-ic">${placeIcon(c.id)}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
   }
   const title = esc(c.title);
   const meta = c.meta ? esc(c.meta) : "";
