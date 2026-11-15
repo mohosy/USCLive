@@ -9,10 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
-import { parseNavQuery } from "@/lib/nav";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
 import AlertDetail from "./AlertDetail";
-import AskBar, { type AskRes } from "./AskBar";
+import type { AskRes } from "./AskBar";
+import ChatDock from "./ChatDock";
+import type { ChatAction } from "@/lib/agent";
 import CalendarSync, { syncCalendar } from "./CalendarSync";
 import WebcamViewer from "./WebcamViewer";
 import AddEventModal from "./AddEventModal";
@@ -90,11 +91,9 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [toasts, setToasts] = useState<Notification[]>([]);
-  const [askKey, setAskKey] = useState(0); // bump to clear the search box
   const [google, setGoogle] = useState<{ configured: boolean; connected: boolean; lastSync: string | null } | null>(null);
   const [googlePrefill, setGooglePrefill] = useState<GooglePrefill | null>(null);
   const [askRes, setAskRes] = useState<AskRes | null>(null);
-  const [askBusy, setAskBusy] = useState(false);
   const [tick, setTick] = useState(0);
   const [walk, setWalk] = useState<{ toId: string; key: number } | null>(null);
   const seenNotifs = useRef<Set<string> | null>(null);
@@ -172,7 +171,7 @@ export default function App() {
       refresh();
     }, () => { setSignedIn(false); refresh(); }); }, 0);
     return () => clearTimeout(t);
-  }, [refresh]);
+  }, [refresh, loadGoogle]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenuOpen(false); setAccountOpen(false); setNotifOpen(false); } };
     window.addEventListener("keydown", onKey);
@@ -264,28 +263,11 @@ export default function App() {
     const r = await api<{ event: EventView }>(`/api/events/${id}/invite`, { json: { userIds } });
     setState((s) => (s ? { ...s, events: s.events.map((e) => (e.id === id ? r.event : e)) } : s));
   }
-  async function runAsk(q: string) {
-    if (q.trim().length < 2) return;
-    // "how do I get to THH" -> animated 3D walk instead of a text answer
-    const nav = parseNavQuery(q);
-    if (nav) {
-      const none = { eventIds: [], buildingIds: [], focusBuildingId: "none", ai: false };
-      if (!nav.buildingId) { setAskRes({ ...none, answer: "Which building? Try a name or code, like Taper Hall (THH), Leavey (LVL) or SGM." }); return; }
-      if (nav.buildingId === loc.buildingId) { setAskRes({ ...none, answer: `You're already at ${BUILDING_BY_ID[nav.buildingId].name}.` }); return; }
-      setAskRes(null);
-      setSelEvent(null);
-      setSelBuilding(null);
-      setWalk({ toId: nav.buildingId, key: ++focusSeq.current }); // plays in whichever view is open (Map or 3D)
-      return;
-    }
-    setAskBusy(true);
-    try {
-      const r = await api<AskRes>("/api/ai/ask", { json: { question: q, lat: loc.lat, lng: loc.lng } });
-      setAskRes(r);
-      const b = r.focusBuildingId !== "none" ? BUILDING_BY_ID[r.focusBuildingId] : r.buildingIds[0] ? BUILDING_BY_ID[r.buildingIds[0]] : null;
-      if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 16.6, key: ++focusSeq.current });
-    } catch (e) { setAskRes({ answer: (e as Error).message, eventIds: [], buildingIds: [], focusBuildingId: "none", ai: false }); }
-    setAskBusy(false);
+  /** The assistant asked the map to do something: open an event, walk somewhere, look at a place. */
+  function chatAction(a: ChatAction) {
+    if (a.type === "open_event") openEvent(a.eventId);
+    else if (a.type === "walk") { if (a.buildingId !== loc.buildingId) { setSelEvent(null); setSelBuilding(null); setWalk({ toId: a.buildingId, key: ++focusSeq.current }); } }
+    else { const b = BUILDING_BY_ID[a.buildingId]; if (b) setFocus({ lat: b.lat, lng: b.lng, zoom: 17, key: ++focusSeq.current }); }
   }
   /** Locate button: with a fix, just re-center; otherwise ask the browser once. Off campus or denied keeps the demo spot. */
   function locateMe() {
@@ -301,7 +283,7 @@ export default function App() {
       center(here);
     }, () => { setGps("off"); center(loc); }, { enableHighAccuracy: true, timeout: 8000 });
   }
-  const endWalk = useCallback(() => { setWalk(null); setAskKey((k) => k + 1); }, []);
+  const endWalk = useCallback(() => setWalk(null), []);
   async function markAllRead() {
     await api("/api/notifications", { json: { all: true } });
     setNotifs((n) => n.map((x) => ({ ...x, read: true })));
@@ -314,19 +296,15 @@ export default function App() {
     <div className="relative h-screen w-screen overflow-hidden bg-background">
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
-      <header className="glass absolute left-3 right-3 top-3 z-30 flex h-14 items-center gap-3 rounded-[20px] px-2.5 md:gap-4 md:px-3">
-        <Link href="/" className="hidden w-[292px] shrink-0 pl-2 text-[17px] font-semibold tracking-tight md:block">
-          USC<span className="text-cardinal">Live</span>
-        </Link>
-
-        <AskBar key={askKey} res={askRes} busy={askBusy} events={state?.events ?? []} onAsk={runAsk} onClear={() => setAskRes(null)} onOpenEvent={openEvent} onOpenBuilding={openBuilding} />
-
-        <div className="ml-auto flex items-center gap-1">
-          {isCreator && <Link href="/dashboard" className="rounded-full px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>}
+      {/* No header: the logo sits top-left; the bell and your profile float top-right */}
+      <Link href="/" className="glass absolute left-3 top-3 z-30 flex h-10 items-center rounded-full px-4 text-[16px] font-semibold tracking-tight">
+        USC<span className="text-cardinal">Live</span>
+      </Link>
+      <div className="absolute right-3 top-3 z-30 flex items-center gap-2">
           <div className="relative">
-            <button onClick={() => { setAccountOpen(false); setNotifOpen((o) => !o); }} className="relative rounded-full p-2 hover:bg-surface" aria-label="Notifications" aria-expanded={notifOpen}>
+            <button onClick={() => { setAccountOpen(false); setNotifOpen((o) => !o); }} className="glass relative grid h-10 w-10 place-items-center rounded-full" aria-label="Notifications" aria-expanded={notifOpen}>
               <Bell size={18} />
-              {unread > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-cardinal" />}
+              {unread > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-cardinal" />}
             </button>
             {notifOpen && (
               <div className="menu absolute right-0 top-12 z-40 w-[380px] max-w-[calc(100vw-24px)] overflow-hidden">
@@ -353,8 +331,8 @@ export default function App() {
             )}
           </div>
           {state && (
-            <div className="relative ml-2">
-              <button onClick={() => { setNotifOpen(false); setAccountOpen((o) => !o); }} title={state.me.name} aria-label="Account" aria-expanded={accountOpen} className="rounded-full transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={30} /></button>
+            <div className="relative">
+              <button onClick={() => { setNotifOpen(false); setAccountOpen((o) => !o); }} title={state.me.name} aria-label="Account" aria-expanded={accountOpen} className="rounded-full bg-white shadow-[0_4px_14px_rgba(0,0,0,0.14)] transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={40} /></button>
               {accountOpen && (
                 <div className="menu absolute right-0 top-11 z-40 w-72 p-1.5 text-sm">
                   <div className="flex items-center gap-3 px-2.5 py-2">
@@ -377,7 +355,6 @@ export default function App() {
             </div>
           )}
         </div>
-      </header>
       {findOpen && <FindFriends me={state?.me.username} onClose={() => setFindOpen(false)} onChanged={refresh} />}
 
       <div className="absolute inset-0">
@@ -413,7 +390,7 @@ export default function App() {
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (
               <>
-                <NowPanel compact active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
+                <NowPanel compact active={menuOpen} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
                 <div className="mt-4"><MenuPanel active={menuOpen} deadlines={notifs.filter((n) => n.kind === "deadline")} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
                 <div className="mt-4"><CalendarSync demo={!!state.me.verified} google={google} onSyncGoogle={async () => { await syncGoogle(true); refresh(); pollNotifs(); }}
                   onDisconnectGoogle={async () => { await api("/api/auth/google/disconnect", { method: "POST" }); setGoogle((g) => (g ? { ...g, connected: false, lastSync: null } : g)); refresh(); }}
@@ -490,11 +467,11 @@ export default function App() {
             </div>
           )}
           {view === "3d" && !threeReady && (
-            <div className="glass absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
+            <div className="glass absolute bottom-[88px] left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-xs text-muted">Loading 3D campus…</div>
           )}
 
           {/* Apple-style segmented control */}
-          <div className="absolute right-3 top-[80px] z-10 flex items-center gap-2">
+          <div className="absolute right-3 top-[60px] z-10 flex items-center gap-2">
             <div className="glass flex rounded-full p-1 text-xs">
               {([["map", "Explore", ExploreThumb], ["3d", "Satellite", SatelliteThumb]] as const).map(([k, l, Thumb]) => (
                 <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
@@ -525,7 +502,7 @@ export default function App() {
           )}
 
           {/* One filter row: each chip is a layer on the map (and its legend) */}
-          <div className="chip-row absolute left-3 right-3 top-[128px] md:right-[264px] md:top-[80px] z-10 flex gap-1.5 overflow-x-auto pb-1">
+          <div className="chip-row absolute left-3 right-3 top-[112px] z-10 flex gap-1.5 overflow-x-auto pb-1">
             {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
               <button key={k} aria-pressed={chips[k]}
                 onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
@@ -533,7 +510,12 @@ export default function App() {
             ))}
           </div>
 
-          <div className="pointer-events-none absolute bottom-12 right-14 z-20 flex w-80 flex-col gap-2">
+          {state && (
+            <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction}
+              onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
+              onChanged={() => { refresh(); pollNotifs(); }} />
+          )}
+          <div className="pointer-events-none absolute right-3 top-[112px] z-20 flex w-80 flex-col gap-2">
             {toasts.map((n) => (
               <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setToasts((t) => t.filter((x) => x.id !== n.id)); }}
                 className="glass glass-strong fade-in pointer-events-auto rounded-2xl p-3 text-left">

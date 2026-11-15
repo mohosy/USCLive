@@ -749,7 +749,7 @@ export default function Google3DView(props: Props) {
         <button onClick={resetNorth} className="border-y border-line p-2 text-foreground hover:bg-surface" title="Reset view"><Compass size={16} /></button>
         <button onClick={() => rotate(45)} className="p-2 text-foreground hover:bg-surface" title="Rotate right"><RotateCw size={16} /></button>
       </div>
-      <div className="glass pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-muted max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
+      <div className="glass pointer-events-none absolute bottom-[84px] left-1/2 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] text-muted max-md:hidden">Drag to move · two-finger click and drag to rotate · scroll to zoom</div>
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}

@@ -209,7 +209,7 @@ html, body {
 /* ---------- Side panel ---------- */
 /* Desktop: a glass card under the header. Folded, only its icon bar shows; opening reveals it downward.
    The reveal animates clip-path (no layout, no map resize), and the clipped part takes no clicks. */
-.side { position: absolute; left: 12px; top: 80px; bottom: 12px; z-index: 25; width: 360px; border-radius: 26px;
+.side { position: absolute; left: 12px; top: 60px; bottom: 12px; z-index: 25; width: 360px; border-radius: 26px;
   clip-path: inset(0 0 calc(100% - 52px) 0 round 26px); transition: clip-path 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .side-open { clip-path: inset(0 0 0 0 round 26px); }
 .side-bar { flex-shrink: 0; height: 52px; border-bottom: 0.5px solid rgba(0, 0, 0, 0.08); }
@@ -220,7 +220,7 @@ html, body {
 .chip-row { scrollbar-width: none; }
 .chip-row::-webkit-scrollbar { display: none; }
 /* the filter chips sit to the right of the panel */
-@media (min-width: 901px) { main .chip-row { left: 384px; } }
+@media (min-width: 901px) { main .chip-row { left: 132px; right: 116px; top: 15px; } }
 /* Phones: a bottom sheet whose icon bar peeks up; tap or drag the handle to pull it up. */
 @media (max-width: 900px) {
   .side { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 40; width: auto; height: 62dvh; border-radius: 26px 26px 0 0; clip-path: none;
@@ -252,3 +252,21 @@ button:active:not(:disabled) { transform: scale(0.97); }
   border-radius: 14px !important; border: 0.5px solid rgba(255, 255, 255, 0.75); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.06) !important; overflow: hidden; }
 .mapboxgl-ctrl-group button + button { border-top: 0.5px solid rgba(0, 0, 0, 0.08) !important; }
 .co-card { border-radius: 14px; font-family: var(--font-apple); }
+
+/* ---------- Chat dock (bottom center) ---------- */
+.chat-dock { position: absolute; bottom: 18px; left: 50%; z-index: 26; width: min(680px, calc(100% - 32px)); transform: translateX(-50%); transition: left 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (min-width: 901px) { .side-on .chat-dock { left: calc(50% + 186px); width: min(640px, calc(100% - 420px)); } }
+.chat-bar {
+  display: flex; align-items: center; gap: 4px; height: 54px; padding: 0 8px 0 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  border: 0.5px solid rgba(0, 0, 0, 0.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.chat-bar:focus-within { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16), 0 0 0 3px rgba(153, 0, 0, 0.12); }
+.chat-thread {
+  margin-bottom: 10px; border-radius: 22px; overflow: hidden;
+  background: rgba(252, 252, 253, 0.96); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  border: 0.5px solid rgba(0, 0, 0, 0.08); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
+  animation: menu-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: bottom center;
+}
+/* phones: the chat sits above the side panel's peeking bar */
+@media (max-width: 900px) { .chat-dock { bottom: 88px; } }

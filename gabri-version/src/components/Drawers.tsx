@@ -80,18 +80,21 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
         </div>
       )}
 
-      <div className="mt-5 flex gap-2">
+      {/* the main action gets its own row; directions and sharing sit underneath, so no label ever wraps */}
+      <div className="mt-5 space-y-2">
         {action.kind === "link" ? (
-          <a href={action.url} target="_blank" rel="noopener noreferrer" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-white hover:opacity-90">
+          <a href={action.url} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-white hover:opacity-90">
             {action.label} <ArrowUpRight size={15} />
           </a>
         ) : (
-          <Button className="flex-1 !rounded-full" variant={action.kind === "leave" ? "secondary" : "primary"} disabled={busy || action.kind === "full"} onClick={toggle}>
+          <Button className="w-full whitespace-nowrap !rounded-full" variant={action.kind === "leave" ? "secondary" : "primary"} disabled={busy || action.kind === "full"} onClick={toggle}>
             {action.kind === "leave" ? "Going · Leave" : action.label}
           </Button>
         )}
-        <Button variant="secondary" className="!rounded-full" onClick={() => onDirections(ev.buildingId)} aria-label="Directions"><Navigation size={14} /> Directions</Button>
-        {canSend && <Button variant="secondary" className={cx("!rounded-full", picking && "!bg-surface")} onClick={() => setPicking((p) => !p)} title="Send to friends or share a link"><Send size={14} /> Send</Button>}
+        <div className="flex gap-2">
+          <Button variant="secondary" className="flex-1 whitespace-nowrap !rounded-full" onClick={() => onDirections(ev.buildingId)}><Navigation size={14} /> Directions</Button>
+          {canSend && <Button variant="secondary" className={cx("flex-1 whitespace-nowrap !rounded-full", picking && "!bg-surface")} onClick={() => setPicking((p) => !p)} title="Send to friends or share a link"><Send size={14} /> Send</Button>}
+        </div>
       </div>
       {action.kind === "link" && ev.category !== "sports_watch" && (
         <button onClick={toggle} disabled={busy} className="mt-2 text-xs text-muted hover:text-foreground">{ev.going ? "Saved to your schedule · remove" : "Also save to my schedule"}</button>
