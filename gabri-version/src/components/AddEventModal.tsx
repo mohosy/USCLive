@@ -25,7 +25,7 @@ function blank(): Form {
 const SAMPLES = [
   "Pickup soccer tonight 7pm at Cromwell Field, need 6 more, all levels, bring water",
   "FBE 403 study session tomorrow 4-6pm in JFF 102, going over the practice midterm. I'll bring Insomnia cookies",
-  "Viterbi Startup Garage: Founders fireside chat Thursday 6:30pm, RTH 526. Free Raising Cane's for the first 80 people",
+  "tiehub: Founders fireside chat Thursday 6:30pm, RTH 526. Free Raising Cane's for the first 80 people",
 ];
 
 async function fileToJpegBase64(file: File): Promise<{ data: string; mediaType: "image/jpeg"; preview: string }> {

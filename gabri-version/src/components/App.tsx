@@ -502,6 +502,8 @@ export default function App() {
               me={loc}
               layers={mapLayers}
               people={showPeople}
+              onLocate={locateMe}
+              gps={gps}
               leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 384 : 0}
               mapStyle="map"
               light={light}
@@ -561,11 +563,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Maps-style locate button above the zoom column: centers on you, asks for location the first time */}
-          <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
-            className={cx("map-locate", gps === "on" && "map-locate-on")}>
-            {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={16} className={cx(gps === "on" && "fill-current")} />}
-          </button>
 
           {/* Bottom dock: locate + one filter row (each chip is a layer on the map and its legend), then search and assistant in one bar */}
           <div className="map-dock">

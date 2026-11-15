@@ -211,5 +211,10 @@ export interface Org {
   name: string;
   school: SchoolId;
   kind: "club" | "usg" | "department";
+  /** 0 when no source states it (the page then leaves it out) */
   members: number;
+  /** real, sourced details (EngageSC directory / the org's own site) */
+  description?: string;
+  website?: string;
+  logo?: string;
 }

@@ -131,6 +131,10 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
   scale = 1;
   /** draw over buildings instead of behind them */
   alwaysOnTop = false;
+  /** meters above the ground (picked up and carried by the recall animation) */
+  lift = 0;
+  /** each light and its daytime strength, so dusk and night can dim the character to match the map */
+  private lit: [THREE.Light, number][] = [];
   private camera = new THREE.Camera();
   private scene = new THREE.Scene();
   private lights = new THREE.Group();
@@ -185,9 +189,16 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
     const fill = new THREE.DirectionalLight("#fff1e2", 1.1);
     fill.position.set(0, modelH * 1.5, modelH * 3);
     this.scene.add(fill);
+    this.scene.traverse((o) => { const l = o as THREE.Light; if (l.isLight) this.lit.push([l, l.intensity]); });
 
     this.mixer = new THREE.AnimationMixer(root);
     for (const clip of gltf.animations) this.actions[clip.name] = this.mixer.clipAction(clip);
+  }
+
+  /** match the map's lighting: a daylit character on a night map looks pasted on */
+  setLight(preset: string | undefined) {
+    const f = preset === "night" ? 0.38 : preset === "dusk" || preset === "dawn" ? 0.7 : 1;
+    for (const [l, base] of this.lit) l.intensity = base * f;
   }
 
   play(name: string, once = false) {
@@ -237,7 +248,7 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
 
     const rotYAngle = Math.PI - toRad(this.heading);
     this.lights.rotation.y = -rotYAngle;
-    const mc = mapboxgl.MercatorCoordinate.fromLngLat([this.pos.lng, this.pos.lat], 0);
+    const mc = mapboxgl.MercatorCoordinate.fromLngLat([this.pos.lng, this.pos.lat], this.lift);
     const s = (mc.meterInMercatorCoordinateUnits() / this.unitsPerMeter) * this.scale;
     const rotX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
     const rotY = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), rotYAngle);

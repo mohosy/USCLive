@@ -241,6 +241,9 @@ interface Props {
   layers: MapLayers;
   /** "Show people on the map" (Settings): crowd avatars at busy spots */
   people?: boolean;
+  /** the locate button at the top of the right-hand column: centers on you */
+  onLocate?: () => void;
+  gps?: "off" | "asking" | "on";
   mapStyle: MapStyle;
   selectedEventId: string | null;
   highlightIds: string[] | null; // when set, everything else is dimmed
@@ -370,8 +373,10 @@ export default function MapView(props: Props) {
   const crowd = useRef<CrowdLayer | null>(null);
   const walkers = useRef<CampusCrowd | null>(null); // people walking the campus paths to events
   const play = useRef<PlayMode | null>(null); // "play as your Trojan"
+  const locateEl = useRef<HTMLDivElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const togglePlay = useRef<() => void>(() => {});
+  const recallPlay = useRef<() => void>(() => {});
   const onArrive = useRef<(eventId: string) => void>(() => {}); // set below, once popArrival exists
 
   /** Zoomed into a busy area: let little Trojans hang out at the crowded spots on screen. */
@@ -624,13 +629,30 @@ export default function MapView(props: Props) {
         const box = document.createElement("div");
         box.className = "mapboxgl-ctrl mapboxgl-ctrl-group play-ctrl";
         box.innerHTML = `<button type="button" aria-label="Walk around as your Trojan" title="Walk around as your Trojan"><span class="play-ic"><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5C3 6 7 2 12.5 1.6c4-.3 7 1.2 8.5 3.6-3.2-.4-6 .1-8 1.4-3.5 0-6.7 2-9 5.9z" fill="#FFC72C"/><path d="M5.6 13c0-4.4 3-7 6.9-7 4 0 7 2.8 7 6.5V14h-4.4v2.4l3.4 1-1 3.6h-4.4c-1-2-2.1-3-4.1-3H6.6c-.7-1.5-1-3-1-5z" fill="#fff"/></svg></span><span class="play-tip">Play as your Trojan</span></button>`;
-        box.querySelector("button")!.addEventListener("click", () => togglePlay.current());
+        // one tap: go to your Trojan (or park it); two taps: pick it up and fly it back to you
+        let pending: ReturnType<typeof setTimeout> | undefined;
+        const btn = box.querySelector("button")!;
+        btn.addEventListener("click", () => { clearTimeout(pending); pending = setTimeout(() => togglePlay.current(), 230); });
+        btn.addEventListener("dblclick", () => { clearTimeout(pending); recallPlay.current(); });
         return box;
       },
       onRemove: () => {},
     };
     m.addControl(playBtn, "bottom-right");
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
+    // locate: its own glass circle at the top of the column (one stack: locate, zoom, play), so it can never drift or overlap
+    const locateBtn: mapboxgl.IControl = {
+      onAdd: () => {
+        const box = document.createElement("div");
+        box.className = "mapboxgl-ctrl mapboxgl-ctrl-group locate-ctrl" + (cb.current.gps === "on" ? " locate-on" : "");
+        box.innerHTML = `<button type="button" aria-label="Show my location" title="Center on my location"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button>`;
+        box.querySelector("button")!.addEventListener("click", () => cb.current.onLocate?.());
+        locateEl.current = box;
+        return box;
+      },
+      onRemove: () => { locateEl.current = null; },
+    };
+    m.addControl(locateBtn, "bottom-right");
     const turnNeedle = () => { if (needle.current) needle.current.style.transform = `rotate(${-m.getBearing()}deg)`; };
     m.on("rotate", turnNeedle);
     turnNeedle();
@@ -850,26 +872,50 @@ export default function MapView(props: Props) {
   const lastMoment = useRef(0);
 
   // play mode: your Trojan appears where you are; the camera follows it
+  /** stop playing: the Trojan stays standing where you left it */
   function stopPlay() {
-    play.current?.destroy();
-    play.current = null;
+    play.current?.park();
     setPlaying(false);
   }
   useEffect(() => {
     togglePlay.current = () => {
       const m = map.current;
       if (!m) return;
-      if (play.current) return stopPlay();
+      if (play.current?.isActive) return stopPlay();
       if (cb.current.walk) cb.current.onWalkEnd();
       setPlaying(true);
+      if (play.current) { play.current.resume(); return; } // parked: fly back to it
       // the 3D character engine loads on demand (same as tours), so the page stays light until you play
       void import("./walk/PlayMode").then(({ PlayMode }) => {
         if (map.current !== m || play.current) return;
         play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay);
+        play.current.setLight(cb.current.light);
+        // while playing, tap anywhere on the map (not on a pin or a bubble) to jump your Trojan there
+        const jump = (e: mapboxgl.MapMouseEvent) => {
+          if (!play.current) { m.off("click", jump); return; }
+          if (!play.current.isActive) return; // parked: taps on the map are just taps
+          const hit = m.queryRenderedFeatures(e.point, { layers: ["ev-pins", "cams-3d", "alerts-3d", "building-names", "building-names-minor"].filter((id) => m.getLayer(id)) });
+          if (!hit.length) play.current.moveTo({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+        };
+        m.on("click", jump);
       });
     };
   });
+  useEffect(() => {
+    // double tap on the helmet: your Trojan is picked up and flown back to where you are
+    recallPlay.current = () => {
+      if (play.current) play.current.recall(cb.current.me);
+      else togglePlay.current();
+    };
+  });
   useEffect(() => () => { play.current?.destroy(); }, []);
+  useEffect(() => { play.current?.setLight(props.light); }, [props.light]);
+  useEffect(() => {
+    const el = locateEl.current;
+    if (!el) return;
+    el.classList.toggle("locate-on", props.gps === "on");
+    el.classList.toggle("locate-asking", props.gps === "asking");
+  }, [props.gps]);
   useEffect(() => { onArrive.current = popArrival; });
 
   // data -> sources (only touch the GPU when something actually changed)
@@ -1031,7 +1077,7 @@ export default function MapView(props: Props) {
       )}
       {playing && (
         <div className="play-hud">
-          <span>{PHONE ? "Push up to walk, sideways to turn" : "↑ walk · ← → turn · Shift to run · Esc to stop"}</span>
+          <span>{PHONE ? "Push up to walk · tap the map to jump" : "↑ walk · ← → turn · Shift to run · click the map to jump · Esc to stop"}</span>
           <button type="button" onClick={stopPlay}>Done</button>
         </div>
       )}

@@ -454,10 +454,23 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { position: absolute; top: calc(70px + var(--sat)); right: 24px; z-index: 10; display: grid; grid-template-columns: auto auto; column-gap: 6px; justify-items: end; align-items: center; padding: 8px 12px; border-radius: 14px;
-  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; text-align: right; transition: background-color 180ms ease; }
-.weather-pill .weather-condition, .weather-pill .weather-range { grid-column: 1 / -1; }
+.weather-pill { position: absolute; top: calc(70px + var(--sat)); right: 24px; z-index: 34; min-width: 112px; border-radius: 14px; color: #1d1d1f;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
+.weather-now { display: grid; grid-template-columns: auto auto; column-gap: 6px; justify-items: end; align-items: center; padding: 8px 12px; white-space: nowrap; text-align: right; color: inherit; cursor: pointer; }
+.weather-now .weather-condition, .weather-now .weather-range { grid-column: 1 / -1; }
+/* tap the card: the next hours unfold straight down, same width, same glass */
+.weather-drop { display: grid; grid-template-rows: 0fr; width: 0; min-width: 100%; opacity: 0; transition: grid-template-rows 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease; }
+.weather-open .weather-drop { grid-template-rows: 1fr; opacity: 1; }
+.weather-drop > div { min-height: 0; overflow: hidden; }
+.weather-hours { margin: 0 12px; padding: 4px 0 8px; border-top: 0.5px solid rgba(0,0,0,0.12); }
+.weather-hour { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 4px; height: 26px; font-size: 12px; }
+.weather-hour-time { opacity: 0.75; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.weather-hour-sky { display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+.weather-hour-sky i { font-style: normal; font-size: 10px; font-weight: 600; color: #0a84ff; }
+.weather-hour-temp { font-weight: 600; font-variant-numeric: tabular-nums; }
+.weather-hours-note { padding: 6px 0; font-size: 11.5px; opacity: 0.75; text-align: right; }
+.map-app[data-night="true"] .weather-hours { border-top-color: rgba(255,255,255,0.2); }
+.map-app[data-night="true"] .weather-hour-sky i { color: #7cc4ff; }
 .weather-sun { color: #e8a200; }
 .weather-temperature { font-size: 16px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
@@ -653,3 +666,11 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .play-ctrl button:hover .play-ic svg { transform: scale(1.1) rotate(-4deg); }
 /* the play button shares the column's right edge (locate, zoom, play stack on one line) */
 .mapboxgl-ctrl-group.play-ctrl { margin-right: 0 !important; }
+/* locate: a glass circle at the top of the right-hand column (same width and glass as the zoom buttons) */
+.mapboxgl-ctrl-group.locate-ctrl { border-radius: 999px !important; }
+.locate-ctrl button { height: 40px !important; color: #1d1d1f; display: grid !important; place-items: center; }
+.locate-ctrl.locate-on svg { fill: currentColor; }
+.locate-ctrl.locate-asking svg { animation: locate-pulse 1s ease-in-out infinite; }
+@keyframes locate-pulse { 50% { opacity: 0.35; } }
+.map-app[data-night="true"] .locate-ctrl button { color: #fff; }
+

@@ -39,6 +39,17 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export type HostRef = EventView["host"];
 
+/** An org's real logo (from its EngageSC page or site); its initial when it has none. */
+export function OrgLogo({ name, logo, size }: { name: string; logo?: string; size: number }) {
+  const [broken, setBroken] = useState(false);
+  if (logo && !broken) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={logo} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setBroken(true)}
+      className="shrink-0 rounded-xl border border-line bg-white object-contain" style={{ width: size, height: size }} />;
+  }
+  return <span className="grid shrink-0 place-items-center rounded-xl bg-surface font-semibold text-muted" style={{ width: size, height: size, fontSize: size * 0.42 }}>{name.slice(0, 1)}</span>;
+}
+
 /** A club, org, department or other host: who they are and everything they have on (opened from an event's Host line). */
 export function OrgDetail({ host, state, loc, onClose, onOpenEvent }: { host: HostRef; state: AppState; loc: Loc; onClose: () => void; onOpenEvent: (id: string) => void }) {
   const now = new Date(state.now);
@@ -48,15 +59,26 @@ export function OrgDetail({ host, state, loc, onClose, onOpenEvent }: { host: Ho
   const upcoming = all.filter((e) => +new Date(e.end) > +now);
   const past = all.filter((e) => +new Date(e.end) <= +now).reverse();
   const school = org && org.school !== "all" ? SCHOOLS.find((x) => x.id === org.school)?.name : null;
-  const kind = org ? (org.kind === "club" ? "Student org" : org.kind === "usg" ? "Student government" : "Department") : HOST_LABEL[host.kind];
+  const kind = org ? (org.kind === "club" ? "Student org" : org.kind === "usg" ? "Student government" : "USC office") : HOST_LABEL[host.kind];
   const going = upcoming.reduce((n, e) => n + e.attendeeCount, 0);
   return (
     <div>
       <Back onClose={onClose} />
-      <div className="text-xs font-medium text-muted">{kind}</div>
-      <h2 className="mt-1 text-xl font-semibold leading-tight">{host.name}</h2>
-      <p className="mt-1 text-sm text-muted">
-        {[org ? `${org.members.toLocaleString()} members` : null, school, upcoming.length ? `${upcoming.length} upcoming ${upcoming.length === 1 ? "event" : "events"}` : null, going ? `${going} going` : null].filter(Boolean).join(" · ")}
+      <div className="flex items-center gap-3">
+        <OrgLogo name={host.name} logo={org?.logo} size={48} />
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-muted">{kind}</div>
+          <h2 className="mt-0.5 text-xl font-semibold leading-tight">{host.name}</h2>
+        </div>
+      </div>
+      {org?.description && <p className="mt-3 text-sm leading-relaxed">{org.description}</p>}
+      {org?.website && (
+        <a href={org.website} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-cardinal hover:underline">
+          {org.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}<ArrowUpRight size={13} aria-hidden="true" />
+        </a>
+      )}
+      <p className="mt-2 text-sm text-muted">
+        {[org?.members ? `${org.members.toLocaleString()} members` : null, school, upcoming.length ? `${upcoming.length} upcoming ${upcoming.length === 1 ? "event" : "events"}` : null, going ? `${going} going` : null].filter(Boolean).join(" · ")}
       </p>
 
       <h3 className="mt-6 text-sm font-semibold">Coming up</h3>
@@ -109,7 +131,10 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
         <Row label="Where"><button className="text-left hover:underline" onClick={() => onOpenBuilding(ev.buildingId)}>{ev.buildingName}{ev.room ? `, ${ev.room}` : ""}</button>{walk != null && <span className="text-muted"> · {walk} min walk</span>}</Row>
         <Row label="Host">
           {onOpenHost && ev.host.kind !== "user"
-            ? <button className="inline-flex items-center gap-0.5 text-left font-medium hover:underline" onClick={() => onOpenHost(ev.host)}>{ev.host.name}<ArrowUpRight size={13} className="text-muted" aria-hidden="true" /></button>
+            ? <button className="inline-flex items-center gap-1.5 text-left font-medium hover:underline" onClick={() => onOpenHost(ev.host)}>
+                {(() => { const o = state.orgs.find((x) => x.id === ev.host.id); return o?.logo ? <OrgLogo name={o.name} logo={o.logo} size={18} /> : null; })()}
+                {ev.host.name}<ArrowUpRight size={13} className="text-muted" aria-hidden="true" />
+              </button>
             : ev.host.name}
           <span className="text-muted"> · {HOST_LABEL[ev.host.kind]}</span>
         </Row>
