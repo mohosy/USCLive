@@ -11,6 +11,12 @@ import { DINING_HALLS } from "./dining";
 
 export type CalloutKind = "game" | "busy" | "quiet" | "dining" | "event" | "schedule" | "alert" | "alertmini" | "webcam";
 
+/**
+ * Which bubble wins, both at the same spot (below) and when two overlap on screen (declutter):
+ * live game > DPS > events > busy > quiet > dining halls > schedule > the small tags.
+ */
+export const CALLOUT_RANK: Record<CalloutKind, number> = { game: 8, alert: 7, event: 6, busy: 5, quiet: 4, dining: 3, schedule: 2, alertmini: 1, webcam: 0 };
+
 export interface Callout {
   id: string; // "ev:<id>" | "b:<buildingId>" | "al:<id>" | "cam:<id>"
   kind: CalloutKind;
@@ -25,6 +31,9 @@ export interface Callout {
   stacked?: boolean;
   /** dining halls: how busy it is right now (absent when hidden or unknown) */
   level?: "quiet" | "normal" | "busy" | "packed";
+  /** how busy the place is, as a short tag ("TCC · Busy 78%"). On a busy or dining marker it is what the marker says;
+   *  on an event it is the marker that gave way to it, so the busyness is still on the map. */
+  crowd?: { text: string; level: "quiet" | "normal" | "busy" | "packed" };
   /** busy/quiet ring intensity 0..1 */
   intensity?: number;
   /** webcams: compass direction the camera looks */
@@ -86,7 +95,7 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     const known = h && !h.suppressed && b(d.buildingId);
     out.push({
       id: `b:${d.buildingId}`, kind: "dining", lng: d.lng, lat: d.lat, eyebrow: d.name, title: d.short, stacked: hasPin(d.buildingId),
-      ...(known ? { level: h.level, meta: `${LEVEL_WORD[h.level]} · ${fill(h)}%` } : {}),
+      ...(known ? { level: h.level, meta: `${LEVEL_WORD[h.level]} · ${fill(h)}%`, crowd: { text: `${d.short} · ${LEVEL_WORD[h.level]} ${fill(h)}%`, level: h.level } } : {}),
     });
   }
 
@@ -96,11 +105,11 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     const quietest = [...tracked].filter((h) => h.level === "quiet").sort((x, y) => fill(x) - fill(y)).slice(0, 1);
     for (const h of busiest) {
       const bd = b(h.buildingId);
-      out.push({ id: `b:${bd.id}`, kind: "busy", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: h.level === "packed" ? "Packed" : "Busy", meta: `${fill(h)}%`, intensity: Math.min(1, h.ratio / 2), stacked: hasPin(bd.id) });
+      out.push({ id: `b:${bd.id}`, kind: "busy", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: h.level === "packed" ? "Packed" : "Busy", meta: `${fill(h)}%`, intensity: Math.min(1, h.ratio / 2), stacked: hasPin(bd.id), crowd: { text: `${bd.code} · ${LEVEL_WORD[h.level]} ${fill(h)}%`, level: h.level } });
     }
     for (const h of quietest) {
       const bd = b(h.buildingId);
-      out.push({ id: `b:${bd.id}`, kind: "quiet", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: "Quiet", meta: `${fill(h)}%`, stacked: hasPin(bd.id) });
+      out.push({ id: `b:${bd.id}`, kind: "quiet", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: "Quiet", meta: `${fill(h)}%`, stacked: hasPin(bd.id), crowd: { text: `${bd.code} · Quiet ${fill(h)}%`, level: h.level } });
     }
   }
 
@@ -173,12 +182,19 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     for (const w of WEBCAMS) out.push({ id: `cam:${w.id}`, kind: "webcam", lng: w.lng, lat: w.lat, eyebrow: w.source, title: w.name, heading: w.heading, image: w.image });
   }
 
-  // one bubble per spot: later (more specific) kinds don't stack on top of earlier ones
-  const seen = new Set<string>();
-  return out.filter((c) => {
-    const k = `${c.lng.toFixed(4)},${c.lat.toFixed(4)}`;
-    if (seen.has(k) && c.kind !== "alert") return false;
-    seen.add(k);
-    return true;
-  });
+  // One bubble per spot, and the most important one wins (CALLOUT_RANK): a live game beats an event, an event beats
+  // the building's busy, quiet or dining marker. Of two of the same kind the first stays. DPS alerts always show.
+  const spot = (c: Callout) => `${c.lng.toFixed(4)},${c.lat.toFixed(4)}`;
+  const winner = new Map<string, Callout>();
+  for (const c of out) {
+    if (c.kind === "alert") continue;
+    const cur = winner.get(spot(c));
+    if (!cur || CALLOUT_RANK[c.kind] > CALLOUT_RANK[cur.kind]) winner.set(spot(c), c);
+  }
+  // a busy or dining marker that gave way to an event leaves its busyness on the event as a small tag
+  for (const c of out) {
+    const w = winner.get(spot(c));
+    if (c.crowd && w && w !== c && w.kind === "event" && !w.crowd) w.crowd = c.crowd;
+  }
+  return out.filter((c) => c.kind === "alert" || winner.get(spot(c)) === c);
 }

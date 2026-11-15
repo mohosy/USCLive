@@ -730,6 +730,16 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* a busy marker on a building that also has an event pin sits just above the pin instead of on it */
 .bz-up { position: relative; top: -38px; }
 
+/* an event at a busy building: the event ticket shows, with the building's busyness as a small tag on its corner */
+.evt-crowd, .evb-crowd { --lv: #6e6e73; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font: 600 9.5px var(--font-apple); color: #3a3a3c; }
+.evt-crowd i, .evb-crowd i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--lv); }
+.evt-crowd { position: absolute; right: 6px; top: -9px; z-index: 2; padding: 2px 7px; border-radius: 99px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
+.evb-crowd { margin-top: 5px; font-size: 11.5px; }
+.lv-quiet { --lv: #16a34a; }
+.lv-normal { --lv: #ca8a04; }
+.lv-busy { --lv: #ea580c; }
+.lv-packed { --lv: #dc2626; }
+
 /* dining halls: same marker, cardinal fork and knife, name always shown; the busy word takes the level colour. */
 .bz-dining { --c: var(--cardinal); --lv: #6e6e73; padding-right: 10px; }
 .bz-dining.bz-quiet { --c: var(--cardinal); --lv: #16a34a; }

@@ -135,7 +135,7 @@ export function seedEvents(now: Date): CampusEvent[] {
       visibility: "open", capacity: 40, freeFood: false, attendees: ["u_hannah", ...crowd(25, "ac")], tags: ["music"], expectedTurnout: 30 }),
     e({ registrationType: "native", title: "Boba study break", description: "Free boba (first 150) + lo-fi + coloring. Come destress before midterms!", category: "student", buildingId: "tcc", room: "TCC 2nd floor lounge",
       start: inMin(now, 15).toISOString(), end: inMin(now, 75).toISOString(), host: { kind: "org", name: "Spoon University USC", id: "org_boba" },
-      visibility: "public", capacity: 150, freeFood: true, foodDetail: "Free boba (first 150)", attendees: ["u_maya", "u_ava", "u_hannah", ...crowd(56)], tags: ["destress"], expectedTurnout: 150 }),
+      visibility: "public", capacity: 150, freeFood: true, foodDetail: "Free boba (first 150)", attendees: ["u_maya", "u_priya", "u_ava", "u_hannah", ...crowd(55)], tags: ["destress"], expectedTurnout: 150 }),
     e({ registrationType: "handshake", registrationUrl: "https://usc.joinhandshake.com/", title: "Resume reviews: Tech & Finance", description: "Drop-in 10-minute resume reviews with recruiters and Career Center advisors. Coffee + bagels.", category: "career", buildingId: "tcc", room: "TCC 450",
       start: inMin(now, 45).toISOString(), end: inMin(now, 165).toISOString(), host: { kind: "usc", name: "USC Career Center", id: "org_career" }, link: { url: "https://usc.joinhandshake.com/", label: "Register on Handshake" },
       visibility: "public", capacity: 100, freeFood: true, foodDetail: "Coffee + bagels", attendees: crowd(41), tags: ["resume", "internships"], expectedTurnout: 70 }),

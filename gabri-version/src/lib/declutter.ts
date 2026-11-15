@@ -1,8 +1,5 @@
 /** Keeps map bubbles from overlapping: when two collide, the more important one stays and the other is hidden. */
-import type { CalloutKind } from "./callouts";
-
-/** Live game > DPS > busy > events > dining halls > schedule > the small tags. */
-const RANK: Record<CalloutKind, number> = { game: 8, alert: 7, busy: 6, quiet: 5, event: 4, dining: 3, schedule: 2, alertmini: 1, webcam: 0 };
+import { CALLOUT_RANK as RANK, type CalloutKind } from "./callouts";
 
 export interface PlacedBubble { el: HTMLElement; kind: CalloutKind; /** screen position of the bubble's tail tip */ x: number; y: number }
 
