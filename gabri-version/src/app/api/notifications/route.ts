@@ -1,12 +1,17 @@
 import { z } from "zod";
 import { body } from "@/lib/http";
-import { remindSignups, tickLive } from "@/lib/live";
+import { remindSignups, remindStarting, tickLive } from "@/lib/live";
 import { markRead, myNotifications } from "@/lib/store";
 import { withState } from "@/lib/state";
 
+const Here = z.object({ lat: z.coerce.number().min(-90).max(90).optional(), lng: z.coerce.number().min(-180).max(180).optional() });
 
 async function GET_(req: Request) {
   if (new URL(req.url).searchParams.get("live") !== "0") { tickLive(); remindSignups(); }
+  // where the student is (optional, sent by the app): only used to say how long the walk to a registered event is
+  const sp = new URL(req.url).searchParams;
+  const here = Here.safeParse({ lat: sp.get("lat") ?? undefined, lng: sp.get("lng") ?? undefined });
+  remindStarting(here.success && here.data.lat != null && here.data.lng != null ? { lat: here.data.lat, lng: here.data.lng } : undefined);
   // `since`: only what's newer than the client's latest, so the 8s poll is usually empty
   const since = new URL(req.url).searchParams.get("since");
   const n = myNotifications();

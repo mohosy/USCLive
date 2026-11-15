@@ -3,7 +3,8 @@
 import { CATEGORY_META, EVENT_TYPES, SCHOOLS, walkMinutes } from "@/lib/campus";
 import { fmtWhen, isLive, type Category, type EventView, type Filters, type Loc } from "@/lib/client-types";
 import type { SchoolId } from "@/lib/types";
-import { Chip, Tag, cx, inputCls } from "./ui";
+import { Users } from "lucide-react";
+import { Avatar, Chip, Tag, cx, inputCls } from "./ui";
 
 const CATS: Category[] = [...EVENT_TYPES];
 
@@ -11,6 +12,8 @@ export function EventRow({ e, loc, onOpen, now }: { e: EventView; loc: Loc; onOp
   const color = (CATEGORY_META[e.category] ?? CATEGORY_META.student).color;
   const live = isLive(e, now);
   const walk = e.lat != null && e.lng != null ? walkMinutes(loc, { lat: e.lat, lng: e.lng }) : null;
+  // room left, for events with a limit you sign up for here (not ticketed games or outside links)
+  const spotsLeft = e.registration ? e.registration.spotsLeft : e.capacity != null && !e.link && !e.game ? Math.max(0, e.capacity - e.attendeeCount) : null;
   return (
     <button onClick={onOpen} className="flex w-full gap-3 rounded-md px-2 py-2.5 text-left hover:bg-surface">
       <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
@@ -26,11 +29,21 @@ export function EventRow({ e, loc, onOpen, now }: { e: EventView; loc: Loc; onOp
           {e.visibility === "open" && <Tag tone="open">Open invite</Tag>}
           {e.visibility === "invite" && <Tag tone="private">{e.invited ? "Invited" : "Private"}</Tag>}
           {e.isClassmate && <Tag tone="class">{e.course}</Tag>}
-          {e.going && <Tag>Going</Tag>}
-          {e.friendsGoing.length > 0 && <span className="text-[11px] text-muted">{e.friendsGoing.map((f) => f.name.split(" ")[0]).join(", ")} going</span>}
+          {e.registration?.status === "registered" ? <Tag tone="open">Registered ✓</Tag> : e.registration?.status === "waitlisted" ? <Tag>Waitlisted</Tag> : e.going && <Tag>Going</Tag>}
+          {e.registration?.closesSoon && !e.registration.status && <Tag tone="closing">Closes soon</Tag>}
+        </div>
+        {/* who is going: the count, friends' initials, and the room left when the event has a limit */}
+        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
+          <Users size={12} aria-hidden="true" />
+          <span className="tabular-nums">{e.attendeeCount} going</span>
+          {e.friendsGoing.length > 0 && (
+            <span className="flex -space-x-1" title={`${e.friendsGoing.map((f) => f.name.split(" ")[0]).join(", ")} ${e.friendsGoing.length === 1 ? "is" : "are"} going`}>
+              {e.friendsGoing.slice(0, 3).map((f) => <Avatar key={f.id} initials={f.avatar} size={16} />)}
+            </span>
+          )}
+          {spotsLeft != null && <span className={cx("tabular-nums", spotsLeft === 0 && "font-medium text-foreground")}>· {spotsLeft === 0 ? (e.registration?.type === "native" ? "Full · waitlist open" : "Full") : `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`}</span>}
         </div>
       </div>
-      <div className="shrink-0 text-right text-xs tabular-nums text-muted">{e.attendeeCount}</div>
     </button>
   );
 }
