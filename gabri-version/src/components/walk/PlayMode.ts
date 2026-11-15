@@ -10,14 +10,11 @@ import { CharacterLayer } from "./WalkGuide";
 import { buildTrojan } from "./trojanModel";
 
 type LL = { lng: number; lat: number };
-type Ring = { pts: [number, number][]; minX: number; minZ: number; maxX: number; maxZ: number };
+type Ring = { pts: [number, number][]; minX: number; minZ: number; maxX: number; maxZ: number; h: number };
 
 /** how close you can zoom while playing, and the map's normal limit */
 const PLAY_MAX_ZOOM = 21.5;
 const MAP_MAX_ZOOM = 19.5;
-/** our 3D building layers (campus and the neighborhood), faded when one hides the character */
-const XRAY_LAYERS = ["usc-buildings", "area-buildings"];
-const XRAY_BASE: Record<string, number> = { "usc-buildings": 0.97, "area-buildings": 0.92 }; // their normal opacity (MapView)
 const WALK_MPS = 9; // quick, so getting across campus doesn't drag
 const RUN_MPS = 20; // hold Shift
 const BODY_M = 1.8; // keeps the (drawn larger) character off the walls
@@ -40,7 +37,8 @@ class Walls {
       for (const r of rings) {
         const pts = r.map(([lng, lat]) => this.toXZ(lng, lat));
         const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
-        const ring: Ring = { pts, minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) };
+        const h = Number((f.properties as { h?: number } | null)?.h) || 12; // building height in meters
+        const ring: Ring = { pts, minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs), h };
         if (ring.maxX - ring.minX > 2000) continue; // not a building
         for (let cx = Math.floor(ring.minX / CELL); cx <= Math.floor(ring.maxX / CELL); cx++)
           for (let cz = Math.floor(ring.minZ / CELL); cz <= Math.floor(ring.maxZ / CELL); cz++) {
@@ -49,6 +47,20 @@ class Walls {
           }
       }
     }
+  }
+  /** height of the building standing at (x, z), 0 for open ground */
+  heightAt(x: number, z: number) {
+    let top = 0;
+    for (const r of this.grid.get(`${Math.floor(x / CELL)},${Math.floor(z / CELL)}`) ?? []) {
+      if (r.h <= top || x < r.minX || x > r.maxX || z < r.minZ || z > r.maxZ) continue;
+      let c = false;
+      for (let i = 0, j = r.pts.length - 1; i < r.pts.length; j = i++) {
+        const [xi, zi] = r.pts[i], [xj, zj] = r.pts[j];
+        if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c;
+      }
+      if (c) top = r.h;
+    }
+    return top;
   }
   private inside(x: number, z: number) {
     for (const r of this.grid.get(`${Math.floor(x / CELL)},${Math.floor(z / CELL)}`) ?? []) {
@@ -150,7 +162,6 @@ export class PlayMode {
   park() {
     if (!this.active || this.gone) return;
     this.active = false;
-    this.setXray(false);
     this.closeZoom(false);
     this.setFollow(false);
     cancelAnimationFrame(this.raf);
@@ -285,7 +296,7 @@ export class PlayMode {
       const bearing = Math.abs(diff) < 0.05 ? this.hdg : b + diff * Math.min(1, dt * 6);
       this.map.jumpTo({ center: [p.lng, p.lat], bearing });
     } else this.map.triggerRepaint();
-    this.checkXray(now);
+    this.checkSight(now);
     this.raf = requestAnimationFrame(this.tick);
   };
 
@@ -295,35 +306,36 @@ export class PlayMode {
   }
 
   /**
-   * See-through buildings: when a building is drawn over the character (between you and it), the
-   * building layers fade so the Trojan stays visible; they come back once the view is clear.
-   * Checked a few times a second against what is actually on screen.
+   * Line of sight: trace from the camera to the character's head over the real building heights.
+   * If a building actually blocks it, the camera eases a little closer and looks a little more from
+   * above until the Trojan is in view (nothing turns transparent). Checked a few times a second.
    */
-  private xrayAt = 0;
-  private xray = false;
-  private checkXray(now: number) {
-    if (now < this.xrayAt) return;
-    this.xrayAt = now + 180;
-    const layers = XRAY_LAYERS.filter((id) => this.map.getLayer(id));
-    if (!layers.length) return;
-    const p = this.position();
-    const s = this.map.project([p.lng, p.lat]);
-    const mpp = (78_271.517 * Math.cos((p.lat * Math.PI) / 180)) / 2 ** this.map.getZoom();
-    const tall = Math.max(24, (2 * DRAW_SCALE) / mpp);
-    // the character's chest and head: if a building is drawn there, it is in front of it
-    const hidden = [0.45, 0.8].some((f) => this.map.queryRenderedFeatures([s.x, s.y - tall * f], { layers }).length > 0);
-    this.setXray(hidden);
-  }
-  private setXray(on: boolean) {
-    if (on === this.xray) return;
-    this.xray = on;
-    for (const id of XRAY_LAYERS) {
-      if (!this.map.getLayer(id)) continue;
-      try {
-        this.map.setPaintProperty(id, "fill-extrusion-opacity-transition", { duration: 280, delay: 0 });
-        this.map.setPaintProperty(id, "fill-extrusion-opacity", on ? 0.28 : XRAY_BASE[id] ?? 1);
-      } catch { /* style reloading */ }
+  private sightAt = 0;
+  private checkSight(now: number) {
+    if (now < this.sightAt || this.map.isEasing() || this.flying) return;
+    this.sightAt = now + 350;
+    const cam = this.map.getFreeCameraOptions().position;
+    if (!cam) return;
+    const camLL = cam.toLngLat(), camAlt = cam.toAltitude();
+    const [cx, cz] = this.walls.toXZ(camLL.lng, camLL.lat);
+    const head = 2 * DRAW_SCALE * 0.75; // meters: the drawn Trojan's chest/head
+    const dist = Math.hypot(this.x - cx, this.z - cz);
+    if (dist < 4) return;
+    const steps = Math.min(120, Math.ceil(dist / 2.5));
+    let blocked = false;
+    for (let i = 1; i < steps - 1 && !blocked; i++) {
+      const t = i / steps;
+      const x = cx + (this.x - cx) * t, z = cz + (this.z - cz) * t;
+      const sight = camAlt + (head - camAlt) * t; // height of the line of sight here
+      const h = this.walls.heightAt(x, z);
+      if (h > sight + 0.5) blocked = true;
     }
+    if (!blocked) return;
+    const zoom = this.map.getZoom(), pitch = this.map.getPitch();
+    if (zoom >= PLAY_MAX_ZOOM - 0.3 && pitch <= 40) return; // already as close and as high as it goes
+    const me = this.position(); // zoom toward the Trojan itself, followed or not
+    this.map.easeTo({ zoom: Math.min(PLAY_MAX_ZOOM - 0.3, zoom + 0.45), pitch: Math.max(40, pitch - 7), around: [me.lng, me.lat], duration: 420, essential: true });
+    this.sightAt = now + 520;
   }
 
   /** lock the camera behind the character, or let the map go free */
@@ -372,7 +384,6 @@ export class PlayMode {
   position(): LL { return this.walls.toLL(this.x, this.z); }
 
   destroy() {
-    this.setXray(false);
     this.closeZoom(false);
     this.gone = true;
     cancelAnimationFrame(this.raf);
