@@ -30,6 +30,8 @@ export interface DB {
   lastReminder: number;
   /** Google sign-in tokens, per person (server-side only) */
   google: Record<string, GoogleSession>;
+  /** model calls today (see aiLimit): resets each day in Los Angeles */
+  aiUsage?: { day: string; total: number; byUser: Record<string, number> };
 }
 
 /** The current request: its copy of the state and who is signed in. */
@@ -201,8 +203,11 @@ export function canSee(e: CampusEvent, viewer: User) {
 export function publicEvent(e: CampusEvent, viewer: User) {
   const friendsGoing = e.attendees.filter((a) => viewer.friends.includes(a));
   const b = BUILDING_BY_ID[e.buildingId];
+  const org = e.host.id ? ORGS.find((o) => o.id === e.host.id) : undefined;
   return {
     ...e,
+    // a known org's name always comes from the org list (saved demo data may carry an older name)
+    host: org ? { ...e.host, name: org.name } : e.host,
     attendees: undefined,
     invitees: e.host.id === viewer.id ? e.invitees : undefined,
     attendeeCount: e.attendees.length,

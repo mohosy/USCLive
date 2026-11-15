@@ -13,6 +13,7 @@
  *  - building ids are constrained to a known enum, so the model can't invent locations.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { takeAiCall } from "./aiLimit";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
@@ -62,6 +63,7 @@ type Effort = "low" | "medium" | "high";
 type Prompt = string | { text: string; image?: { data: string; mediaType: string } };
 
 async function structured<S extends z.ZodType>(schema: S, system: string, prompt: Prompt, effort: Effort = "low"): Promise<z.infer<S>> {
+  takeAiCall(); // spending guard: over the limit, the caller's rule-based fallback is used
   const p = typeof prompt === "string" ? { text: prompt } : prompt;
   let raw: unknown;
 
