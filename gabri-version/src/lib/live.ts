@@ -2,7 +2,7 @@
  * Demo"live campus" simulator: every ~35s something happens (a friend posts a pickup game,
  * a hotspot surges, free food appears). Drives the live notification feed during the demo.
  */
-import { BUILDING_BY_ID, INTERSECTIONS } from "./campus";
+import { BUILDING_BY_ID, INTERSECTIONS, walkMinutes } from "./campus";
 import { computeHotspots } from "./hotspots";
 import { addNotification, canSee, db, getMe, newId } from "./store";
 import type { CampusEvent } from "./types";
@@ -116,4 +116,25 @@ export function remindSignups(now = Date.now()) {
     body: `${left != null && !e.link ? `${left} spots left · ` : ""}${when} · ${where}`,
     eventId: e.id, source: "live",
   });
+}
+
+/**
+ * "Starts in 20 min · 6 min walk": once per event, for events you registered for (here, or self-reported),
+ * in the 20 minutes before they start. `from` is where you are now; without it the walk is left out.
+ */
+export function remindStarting(from?: { lat: number; lng: number }, now = Date.now()) {
+  const d = db();
+  const me = getMe();
+  const mine = new Set(d.registrations.filter((r) => r.userId === me.id && (r.status === "registered" || r.status === "self-reported")).map((r) => r.eventId));
+  for (const e of d.events) {
+    if (!mine.has(e.id)) continue;
+    const mins = Math.ceil((+new Date(e.start) - now) / MIN);
+    if (mins <= 0 || mins > 20) continue;
+    const key = `start:${me.id}:${e.id}`;
+    if (d.reminded.includes(key)) continue;
+    d.reminded.push(key);
+    const b = BUILDING_BY_ID[e.buildingId];
+    const walk = from && b ? walkMinutes(from, b) : null;
+    addNotification({ userId: me.id, kind: "event", title: e.title, body: `Starts in ${mins} min${walk != null ? ` · ${walk} min walk` : ""}${b ? ` · ${b.name}` : ""}`, eventId: e.id, buildingId: e.buildingId, source: "live" });
+  }
 }

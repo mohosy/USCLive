@@ -69,6 +69,8 @@ export default function App() {
   const accountButton = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loc, setLoc] = useState<Loc>(START_LOC);
+  const locRef = useRef(loc);
+  useEffect(() => { locRef.current = loc; }, [loc]);
   const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
@@ -173,7 +175,9 @@ export default function App() {
   const pollNotifs = useCallback(async () => {
     try {
       const since = lastNotif.current;
-      const r = await api<{ notifications: Notification[]; unread: number }>(since ? `/api/notifications?since=${encodeURIComponent(since)}` : "/api/notifications");
+      // where you are goes along, so "starts in 20 min" reminders can say how long the walk is
+      const here = `lat=${locRef.current.lat.toFixed(5)}&lng=${locRef.current.lng.toFixed(5)}`;
+      const r = await api<{ notifications: Notification[]; unread: number }>(since ? `/api/notifications?since=${encodeURIComponent(since)}&${here}` : `/api/notifications?${here}`);
       if (!r.notifications.length) return; // nothing new: no re-render
       lastNotif.current = r.notifications.reduce((m, n) => (n.createdAt > m ? n.createdAt : m), since ?? "");
       if (!seenNotifs.current) { seenNotifs.current = new Set(r.notifications.map((n) => n.id)); setNotifs(r.notifications); }
@@ -476,7 +480,7 @@ export default function App() {
               <OrgDetail host={selHost.host} state={state} loc={loc} onOpenEvent={openEvent}
                 onClose={() => { const from = selHost.from; setSelHost(null); if (from) openEvent(from); }} />
             ) : event ? (
-              <EventDetail ev={event} state={state} loc={loc} onOpenHost={openHost} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
+              <EventDetail ev={event} state={state} loc={loc} onOpenHost={openHost} onClose={closeDetail} onRsvp={rsvp} onUpdated={(e) => setState((s) => (s ? { ...s, events: s.events.map((x) => (x.id === e.id ? e : x)) } : s))} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} />
             ) : tab === "menu" ? (

@@ -8,6 +8,7 @@ import { api, fmtTime, fmtWhen, isLive, type AppState, type EventView, type Hots
 import type { Building } from "@/lib/types";
 import { EventRow } from "./EventsPanel";
 import SendSheet from "./SendSheet";
+import RegisterBox from "./RegisterBox";
 import { Avatar, Button, CatLabel, LevelDot, Tag, cx } from "./ui";
 
 const VIS_LABEL = { public: "Public", school: "School only", open: "Open invite, anyone can join", invite: "Invite only" } as const;
@@ -98,8 +99,10 @@ export function OrgDetail({ host, state, loc, onClose, onOpenEvent }: { host: Ho
   );
 }
 
-export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindFriends, onOpenBuilding, onDirections, onOpenHost }: {
-  ev: EventView; state: AppState; loc: Loc; onClose: () => void; onRsvp: (id: string) => Promise<void>; onInvite: (id: string, userIds: string[]) => Promise<void>; onFindFriends: () => void; onOpenBuilding: (id: string) => void;
+export function EventDetail({ ev, state, loc, onClose, onRsvp, onUpdated, onInvite, onFindFriends, onOpenBuilding, onDirections, onOpenHost }: {
+  ev: EventView; state: AppState; loc: Loc; onClose: () => void; onRsvp: (id: string) => Promise<void>;
+  /** the event changed on the server (registered, cancelled, …): here is its new state */
+  onUpdated: (e: EventView) => void; onInvite: (id: string, userIds: string[]) => Promise<void>; onFindFriends: () => void; onOpenBuilding: (id: string) => void;
   onDirections: (buildingId: string) => void;
   /** open the host's page (their other events) */
   onOpenHost?: (host: HostRef) => void;
@@ -140,7 +143,7 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
         </Row>
         <Row label="Who">{VIS_LABEL[ev.visibility]}{ev.course ? ` · ${ev.course}` : ""}{schools.length ? ` · ${schools.join(", ")}` : ""}</Row>
         {ev.freeFood && <Row label="Food">{ev.foodDetail ?? "Free food"}</Row>}
-        <Row label="Going">{ev.attendeeCount}{ev.capacity ? ` of ${ev.capacity}` : ""}</Row>
+        <Row label="Going">{ev.attendeeCount}{ev.capacity ? ` of ${ev.capacity}` : ""}{ev.registration?.spotsLeft != null && ev.registration.spotsLeft > 0 && <span className="text-muted"> · {ev.registration.spotsLeft} spot{ev.registration.spotsLeft === 1 ? "" : "s"} left</span>}{!!ev.registration?.waitlisted && <span className="text-muted"> · {ev.registration.waitlisted} on the waitlist</span>}</Row>
         {h && <Row label="Crowd"><span className="inline-flex items-center gap-1.5 capitalize"><LevelDot level={h.level} />{h.level}</span></Row>}
       </div>
 
@@ -153,7 +156,9 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
 
       {/* the main action gets its own row; directions and sharing sit underneath, so no label ever wraps */}
       <div className="mt-5 space-y-2">
-        {action.kind === "link" ? (
+        {ev.registration ? (
+          <RegisterBox key={ev.id} ev={ev} onUpdated={onUpdated} />
+        ) : action.kind === "link" ? (
           <a href={action.url} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-white hover:opacity-90">
             {action.label} <ArrowUpRight size={15} />
           </a>
@@ -167,7 +172,7 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
           {canSend && <Button variant="secondary" className={cx("flex-1 whitespace-nowrap !rounded-full", picking && "!bg-surface")} onClick={() => setPicking((p) => !p)} title="Send to friends or share a link"><Send size={14} /> Send</Button>}
         </div>
       </div>
-      {action.kind === "link" && ev.category !== "sports_watch" && (
+      {!ev.registration && action.kind === "link" && ev.category !== "sports_watch" && (
         <button onClick={toggle} disabled={busy} className="mt-2 text-xs text-muted hover:text-foreground">{ev.going ? "Saved to your schedule · remove" : "Also save to my schedule"}</button>
       )}
       {picking && <SendSheet key={ev.id} ev={ev} friends={state.me.friends} onSend={(ids) => onInvite(ev.id, ids)} onFindFriends={onFindFriends} onClose={() => setPicking(false)} />}

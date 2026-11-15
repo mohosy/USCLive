@@ -10,6 +10,7 @@ import { takeAiCall } from "./aiLimit";
 import { parseNavQuery } from "./nav";
 import { candidateEvents, hotspotLabel, studySpots, todaysClasses } from "./planner";
 import { activeAlerts, addNotification, canSee, db, getMe, getUser, myNotifications } from "./store";
+import { registrationSite } from "./registration";
 import type { CampusEvent, User } from "./types";
 
 export type ChatAction =
@@ -124,6 +125,11 @@ const TOOLS: Record<string, { description: string; parameters: Record<string, un
       const ev = db().events.find((e) => e.id === a.event_id);
       if (!ev || !canSee(ev, me)) return { error: "No such event." };
       if (ev.link && a.going) { t.act({ type: "open_event", eventId: ev.id }); return { needs_link: ev.link }; }
+      if (ev.registrationType) {
+        // registration events: the assistant only opens the event; registering stays a tap the student makes themselves
+        t.act({ type: "open_event", eventId: ev.id });
+        return ev.registrationType === "native" ? { needs_tap: "Open the event and tap Register (or Cancel)." } : { needs_official_page: registrationSite(ev.registrationType) };
+      }
       const i = ev.attendees.indexOf(me.id);
       if (a.going && i < 0) {
         if (ev.capacity && ev.attendees.length >= ev.capacity) return { error: "It's full." };
@@ -276,7 +282,9 @@ async function runRules(text: string, me: User, loc: Loc, t: Turn): Promise<stri
   if (join) {
     const ev = findEvent(me, join[1]);
     if (!ev) return `I couldn't find an event matching "${join[1]}".`;
-    const r = TOOLS.rsvp.run({ event_id: ev.id, going: true }, me, loc, t) as { ok?: boolean; error?: string; needs_link?: { label: string } };
+    const r = TOOLS.rsvp.run({ event_id: ev.id, going: true }, me, loc, t) as { ok?: boolean; error?: string; needs_link?: { label: string }; needs_tap?: string; needs_official_page?: string };
+    if (r.needs_tap) return `${ev.title} takes registrations: I opened it, tap Register to sign up.`;
+    if (r.needs_official_page) return `${ev.title} registers on ${r.needs_official_page}: I opened it so you can go to the official page.`;
     return r.error ?? (r.needs_link ? `${ev.title} needs ${r.needs_link.label.toLowerCase()}: I opened it for you.` : `You're going to ${ev.title} (${fmt(ev.start)}).`);
   }
   if (/\b(busy|crowd|packed|gym)\b/i.test(q)) {

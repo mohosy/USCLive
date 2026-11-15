@@ -7,6 +7,7 @@
  * saves if anything changed, and sets the cookie when someone signs in or out.
  */
 import { DEMO_ID, fresh, memoryDb, requestCtx, type DB, type ReqCtx } from "./store";
+import { reapply } from "./registration";
 
 const URL_ = process.env.SUPABASE_URL ?? "";
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -64,6 +65,8 @@ function refreshDemo(d: DB) {
   d.liveScriptIndex = 0;
   d.lastLiveTick = Date.now();
   d.reminded = [];
+  d.registrations = (d.registrations ?? []).filter((r) => d.events.some((e) => e.id === r.eventId));
+  reapply(d.events, d.registrations); // the regenerated demo events forget who registered: put them back
   d.seededAt = Date.now();
 }
 
