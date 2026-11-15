@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "USCLive — what's happening on campus, live",
   description: "A live 3D map of everything happening at USC, with an AI assistant that tells you what to do now.",
+  // installed on an iPhone home screen: full-screen, its own name, the map runs under the status bar
+  appleWebApp: { capable: true, title: "USCLive", statusBarStyle: "black-translucent" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1, // the map handles pinch-zoom; the page itself shouldn't zoom
+  viewportFit: "cover", // use the whole screen; content is kept clear of the notch with safe-area insets
+  themeColor: "#990000",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -308,10 +308,10 @@ export default function App() {
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
       {/* No header: the logo sits top-left; the bell and your profile float top-right */}
-      <Link href="/" className="glass absolute left-3 top-3 z-30 flex h-10 items-center rounded-full px-4 text-[16px] font-semibold tracking-tight">
+      <Link href="/" className="glass absolute left-3 top-[calc(0.75rem+var(--sat))] z-30 flex h-10 items-center rounded-full px-4 text-[16px] font-semibold tracking-tight">
         USC<span className="text-cardinal">Live</span>
       </Link>
-      <div className="absolute right-3 top-3 z-30 flex items-center gap-2">
+      <div className="absolute right-3 top-[calc(0.75rem+var(--sat))] z-30 flex items-center gap-2">
           <div className="relative">
             <button onClick={() => { setAccountOpen(false); setNotifOpen((o) => !o); }} className="glass relative grid h-10 w-10 place-items-center rounded-full" aria-label="Notifications" aria-expanded={notifOpen}>
               <Bell size={18} />
@@ -482,7 +482,7 @@ export default function App() {
           )}
 
           {/* Apple-style segmented control */}
-          <div className="absolute right-3 top-[60px] z-10 flex items-center gap-2">
+          <div className="absolute right-3 top-[calc(60px+var(--sat))] z-10 flex items-center gap-2">
             <div className="glass flex rounded-full p-1 text-xs">
               {([["map", "Explore", ExploreThumb], ["3d", "Satellite", SatelliteThumb]] as const).map(([k, l, Thumb]) => (
                 <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
@@ -513,7 +513,7 @@ export default function App() {
           )}
 
           {/* One filter row: each chip is a layer on the map (and its legend) */}
-          <div className="chip-row absolute left-3 right-3 top-[112px] z-10 flex gap-1.5 overflow-x-auto pb-1">
+          <div className="chip-row absolute left-3 right-3 top-[calc(112px+var(--sat))] z-10 flex gap-1.5 overflow-x-auto pb-1">
             {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
               <button key={k} aria-pressed={chips[k]}
                 onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}
@@ -526,7 +526,7 @@ export default function App() {
               onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
               onChanged={() => { refresh(); pollNotifs(); }} />
           )}
-          <div className="pointer-events-none absolute right-3 top-[112px] z-20 flex w-80 flex-col gap-2">
+          <div className="pointer-events-none absolute right-3 top-[calc(112px+var(--sat))] z-20 flex w-80 flex-col gap-2">
             {toasts.map((n) => (
               <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setToasts((t) => t.filter((x) => x.id !== n.id)); }}
                 className="glass glass-strong fade-in pointer-events-auto rounded-2xl p-3 text-left">
