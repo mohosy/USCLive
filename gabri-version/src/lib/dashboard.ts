@@ -1,6 +1,7 @@
 import { BUILDING_BY_ID } from "./campus";
 import { countAt } from "./hotspots";
-import { db, orgs } from "./store";
+import { backfill, canManage, counts } from "./registration";
+import { db, getMe, newId, orgs } from "./store";
 import type { CampusEvent } from "./types";
 
 /**
@@ -31,6 +32,8 @@ export function orgStats(orgId: string, now = new Date()) {
         showRate: measured != null && e.attendees.length ? Math.round((measured / e.attendees.length) * 100) : null,
         freeFood: e.freeFood, category: e.category, status: +new Date(e.end) < +now ? "past" : +new Date(e.start) <= +now ? "live" : "upcoming",
         source: e.source,
+        // registration: counts for everyone; the list itself is only for the event's organizer (see /api/events/:id/registrations)
+        registration: e.registrationType ? (backfill(e, db().registrations, () => newId("reg")), { type: e.registrationType, ...counts(e, db().registrations), deadline: e.registrationDeadline ?? null, canManage: canManage(e, getMe()) }) : null,
       };
     })
     .sort((a, b) => +new Date(a.start) - +new Date(b.start));

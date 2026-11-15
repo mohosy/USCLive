@@ -13,13 +13,16 @@ type Form = {
   title: string; description: string; category: string; buildingId: string; room: string; start: string; end: string;
   visibility: "public" | "school" | "open" | "invite"; schools: string[]; course: string; invitees: string[]; capacity: string;
   freeFood: boolean; foodDetail: string;
+  /** "" = no registration (plain RSVP) */
+  registrationType: "" | "native" | "handshake" | "engage" | "external"; registrationDeadline: string; registrationUrl: string;
 };
+interface Imported { ok: boolean; source: "handshake" | "engage"; url: string; reason?: string; prefill?: { title: string; description: string; start: string | null; end: string | null; location: string; buildingId: string | null } }
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const local = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 function blank(): Form {
   const s = new Date(Date.now() + 60 * 60_000); s.setMinutes(0, 0, 0);
-  return { title: "", description: "", category: "student", buildingId: "tcc", room: "", start: local(s), end: local(new Date(+s + 90 * 60_000)), visibility: "public", schools: ["all"], course: "", invitees: [], capacity: "", freeFood: false, foodDetail: "" };
+  return { title: "", description: "", category: "student", buildingId: "tcc", room: "", start: local(s), end: local(new Date(+s + 90 * 60_000)), visibility: "public", schools: ["all"], course: "", invitees: [], capacity: "", freeFood: false, foodDetail: "", registrationType: "", registrationDeadline: "", registrationUrl: "" };
 }
 
 const SAMPLES = [
@@ -46,7 +49,9 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
   open: boolean; onClose: () => void; state: AppState; onCreated: (e: EventView) => void; asOrg?: { id: string; name: string };
 }) {
   const [step, setStep] = useState<Step>("source");
-  const [mode, setMode] = useState<"text" | "flyer">("text");
+  const [mode, setMode] = useState<"text" | "flyer" | "link">("text");
+  const [link, setLink] = useState("");
+  const [imported, setImported] = useState<string | null>(null); // what happened with the pasted link
   const [text, setText] = useState("");
   const [img, setImg] = useState<{ data: string; mediaType: "image/jpeg"; preview: string } | null>(null);
   const [form, setForm] = useState<Form>(blank);
@@ -57,7 +62,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
   const [fromFlyer, setFromFlyer] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const reset = () => { setStep("source"); setText(""); setImg(null); setForm(blank()); setErr(null); setResult(null); setPrecheck(null); setFromFlyer(false); };
+  const reset = () => { setStep("source"); setText(""); setImg(null); setForm(blank()); setErr(null); setResult(null); setPrecheck(null); setFromFlyer(false); setLink(""); setImported(null); };
   const close = () => { reset(); onClose(); };
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -71,8 +76,33 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
         title: d.title, description: d.description, category: d.category, buildingId: d.buildingId === "unknown" ? "tcc" : d.buildingId, room: d.room ?? "",
         start: d.start.slice(0, 16), end: d.end.slice(0, 16), visibility: d.course ? "open" : "public", schools: d.schools.length ? d.schools : ["all"],
         course: d.course ?? "", invitees: [], capacity: "", freeFood: d.freeFood, foodDetail: d.foodDetail ?? "",
+        registrationType: "", registrationDeadline: "", registrationUrl: "",
       });
       setPrecheck(r.precheck); setFromFlyer(true);
+      setStep("form");
+    } catch (e) { setErr((e as Error).message); }
+    setBusy(false);
+  }
+
+  /** "Import from Engage or Handshake": read the public page to pre-fill the form; if it can't be read, fill in by hand. */
+  async function importLink() {
+    setBusy(true); setErr(null);
+    try {
+      const r = await api<Imported>("/api/events/import-link", { json: { url: link.trim() } });
+      const site = r.source === "handshake" ? "Handshake" : "Engage";
+      const p = r.prefill;
+      const base = blank();
+      const start = p?.start ? new Date(p.start) : null;
+      setForm({
+        ...base,
+        title: p?.title ?? "", description: p?.description ?? "", category: r.source === "handshake" ? "career" : "student",
+        buildingId: p?.buildingId ?? base.buildingId, room: p?.location ?? "",
+        start: start ? local(start) : base.start, end: p?.end ? local(new Date(p.end)) : start ? local(new Date(+start + 60 * 60_000)) : base.end,
+        // students register here with one tap; the pasted link stays on the event as its official page
+        registrationType: "native", registrationUrl: r.url,
+      });
+      setImported(r.ok ? `Filled in from ${site}. Check the details${p?.start ? "" : " and set the date and time"}${p?.buildingId ? "" : ", and pick the building"}.` : r.reason ?? "USCLive couldn't read that page. Fill in the details by hand.");
+      setFromFlyer(false); setPrecheck(null);
       setStep("form");
     } catch (e) { setErr((e as Error).message); }
     setBusy(false);
@@ -87,6 +117,8 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
           start: form.start, end: form.end, visibility: form.visibility, schools: form.schools, course: form.course || null,
           invitees: form.invitees, capacity: form.capacity ? Number(form.capacity) : null, freeFood: form.freeFood || undefined, foodDetail: form.foodDetail || null,
           hostAs: asOrg ? "org" : "me", orgId: asOrg?.id ?? null, source: fromFlyer ? "flyer" : "user",
+          registrationType: form.registrationType || null, registrationDeadline: form.registrationType && form.registrationDeadline ? form.registrationDeadline : null,
+          registrationUrl: form.registrationType && form.registrationUrl.trim() ? form.registrationUrl.trim() : null,
         },
       });
       setResult(r); setStep("result");
@@ -102,13 +134,16 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
       {step === "source" && (
         <div className="space-y-4">
           <div className="flex rounded-lg border border-line p-0.5 text-sm">
-            {(["text", "flyer"] as const).map((m) => (
-              <button key={m} onClick={() => setMode(m)} className={cx("flex-1 rounded-md py-1.5 font-medium", mode === m ? "bg-surface" : "text-muted")}>
-                {m === "text" ? "Paste text" : "Upload flyer"}
+            {(["text", "flyer", "link"] as const).map((m) => (
+              <button key={m} onClick={() => { setMode(m); setErr(null); }} className={cx("flex-1 rounded-md py-1.5 font-medium", mode === m ? "bg-surface" : "text-muted")}>
+                {m === "text" ? "Paste text" : m === "flyer" ? "Upload flyer" : "Engage or Handshake link"}
               </button>
             ))}
           </div>
-          <p className="text-sm text-muted">{mode === "text" ? "Paste an Instagram caption, group chat message or email. We'll fill in the details." : "Upload a photo or screenshot of a flyer. We'll read it and fill in the details."}</p>
+          <p className="text-sm text-muted">{mode === "text" ? "Paste an Instagram caption, group chat message or email. We'll fill in the details." : mode === "flyer" ? "Upload a photo or screenshot of a flyer. We'll read it and fill in the details." : "Import from Engage or Handshake: paste the event's link. USCLive reads the public page's title, date, time and location to fill in the form. Students then register here with one tap, and the link is kept as the official page."}</p>
+          {mode === "link" && (
+            <input className={inputCls} type="url" inputMode="url" placeholder="https://engage.usc.edu/…  or  https://usc.joinhandshake.com/…" value={link} onChange={(e) => setLink(e.target.value)} />
+          )}
           {mode === "flyer" && (
             <div onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setImg(await fileToJpegBase64(f)); }}
               className="flex min-h-40 cursor-pointer items-center justify-center rounded-lg border border-dashed border-line bg-surface p-4 hover:border-foreground/30">
@@ -116,7 +151,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setImg(await fileToJpegBase64(f)); }} />
             </div>
           )}
-          <textarea className={cx(inputCls, "min-h-28")} placeholder={mode === "flyer" ? "Optional extra context" : "Event text"} value={text} onChange={(e) => setText(e.target.value)} />
+          {mode !== "link" && <textarea className={cx(inputCls, "min-h-28")} placeholder={mode === "flyer" ? "Optional extra context" : "Event text"} value={text} onChange={(e) => setText(e.target.value)} />}
           {mode === "text" && (
             <div className="space-y-1">
               <div className="text-xs text-muted">Examples</div>
@@ -126,7 +161,9 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
           {err && <p className="text-sm text-red-700">{err}</p>}
           <div className="flex justify-between pt-1">
             <Button variant="ghost" onClick={() => { setFromFlyer(false); setStep("form"); }}>Fill in manually</Button>
-            <Button disabled={busy || (mode === "text" ? text.trim().length < 5 : !img)} onClick={extract}>{busy ? "Reading..." : "Continue"}</Button>
+            {mode === "link"
+              ? <Button disabled={busy || link.trim().length < 8} onClick={importLink}>{busy ? "Reading the page..." : "Import"}</Button>
+              : <Button disabled={busy || (mode === "text" ? text.trim().length < 5 : !img)} onClick={extract}>{busy ? "Reading..." : "Continue"}</Button>}
           </div>
         </div>
       )}
@@ -134,6 +171,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
       {step === "form" && (
         <div className="space-y-4">
           {precheck && precheck.status !== "approved" && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">This may not pass review: {precheck.reasons[0]}</p>}
+          {imported && <p className="rounded-lg bg-surface px-3 py-2 text-sm">{imported}</p>}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Field label="Title"><input className={inputCls} value={form.title} onChange={(e) => set("title", e.target.value)} /></Field></div>
             <div className="col-span-2"><Field label="Description"><textarea className={cx(inputCls, "min-h-20")} value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
@@ -188,11 +226,35 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
                 <input className={inputCls} disabled={!form.freeFood} value={form.foodDetail} placeholder="What food?" onChange={(e) => set("foodDetail", e.target.value)} />
               </div>
             </Field>
+            <div className="col-span-2">
+              <Field label="Registration">
+                <select className={inputCls} value={form.registrationType} onChange={(e) => set("registrationType", e.target.value as Form["registrationType"])}>
+                  <option value="">No registration (people just RSVP)</option>
+                  <option value="native">One tap in USCLive (capacity, waitlist and deadline handled here)</option>
+                  <option value="handshake">On Handshake (USCLive opens the official page)</option>
+                  <option value="engage">On Engage (USCLive opens the official page)</option>
+                  <option value="external">On another website (USCLive opens it)</option>
+                </select>
+              </Field>
+            </div>
+            {form.registrationType && (
+              <>
+                <Field label="Registration closes"><input type="datetime-local" className={inputCls} value={form.registrationDeadline} onChange={(e) => set("registrationDeadline", e.target.value)} /></Field>
+                <Field label={form.registrationType === "native" ? "Official page (optional)" : "Official registration page"}>
+                  <input className={inputCls} type="url" inputMode="url" placeholder="https://" value={form.registrationUrl} onChange={(e) => set("registrationUrl", e.target.value)} />
+                </Field>
+                <p className="col-span-2 -mt-1 text-xs text-muted">
+                  {form.registrationType === "native"
+                    ? "Students register with one tap. When the capacity is reached, new sign-ups join a waitlist and move up as people cancel."
+                    : "USCLive only opens this page in a new tab. It never registers anyone there; students can tell USCLive afterwards that they signed up."}
+                </p>
+              </>
+            )}
           </div>
           {err && <p className="text-sm text-red-700">{err}</p>}
           <div className="flex justify-between pt-1">
             <Button variant="ghost" onClick={() => setStep("source")}>Back</Button>
-            <Button disabled={busy || form.title.length < 3} onClick={submit}>{busy ? "Checking..." : "Publish"}</Button>
+            <Button disabled={busy || form.title.length < 3 || (!!form.registrationType && form.registrationType !== "native" && !form.registrationUrl.trim())} onClick={submit}>{busy ? "Checking..." : "Publish"}</Button>
           </div>
         </div>
       )}
