@@ -14,7 +14,8 @@ export const persisted = () => !!(URL_ && KEY);
 const COOKIE = "ul_uid";
 const DEMO_REFRESH_MS = 4 * 3600_000; // demo events are relative to "now": regenerate them every few hours
 
-const headers = () => ({ apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" });
+// legacy service_role keys are JWTs (eyJ…) and also go in Authorization; new sb_secret_ keys go only in apikey
+const headers = (): Record<string, string> => ({ apikey: KEY, ...(KEY.startsWith("eyJ") ? { Authorization: `Bearer ${KEY}` } : {}), "Content-Type": "application/json" });
 let cache: { json: string; version: number; at: number } | null = null;
 
 async function load(): Promise<{ data: DB; version: number }> {
