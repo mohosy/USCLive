@@ -122,6 +122,7 @@ function tagCampus(c: CampusData) {
     const f = (c.buildings.features as Feature[]).find((x) => outerRings(x).some((r) => inRing(b.lng, b.lat, r)));
     if (!f) continue;
     labelHeights[b.id] = Number((f.properties as { h?: number }).h) || 0;
+    (f.properties as Record<string, unknown>).bid ??= b.id; // a click on the 3D building opens it
     if (SPECIAL[b.id]) (f.properties as Record<string, unknown>).k = SPECIAL[b.id];
   }
   return c;
@@ -861,6 +862,15 @@ export default function MapView(props: Props) {
         if (id) { popup.remove(); cb.current.onSelectBuilding(id); }
       });
     }
+    // the 3D building itself (not just its label): open it, even with an event open in the side panel
+    m.on("click", "usc-buildings", (e) => {
+      if (play.current?.isActive) return; // playing: a tap moves your Trojan instead
+      if (m.queryRenderedFeatures(e.point, { layers: ["ev-pins", "hot-hit", "building-names", "building-names-minor"].filter((l) => m.getLayer(l)) }).length) return;
+      const id = (e.features?.[0] as unknown as { properties?: { bid?: string } } | undefined)?.properties?.bid;
+      if (id) { popup.remove(); cb.current.onSelectBuilding(id); }
+    });
+    m.on("mouseenter", "usc-buildings", (e) => { if ((e.features?.[0]?.properties as { bid?: string } | undefined)?.bid) m.getCanvas().style.cursor = "pointer"; });
+    m.on("mouseleave", "usc-buildings", () => { m.getCanvas().style.cursor = ""; });
     m.on("click", "hot-hit", (e) => {
       // events sit on top of crowd areas; let a pin click win
       if (m.queryRenderedFeatures(e.point, { layers: ["ev-pins"] }).length) return;
