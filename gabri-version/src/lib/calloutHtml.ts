@@ -11,13 +11,15 @@ export function calloutHTML(c: Callout, now: Date) {
     // a small live tile of what the camera sees; hover grows it, click opens the stream
     if (c.image) {
       const src = `${c.image}${c.image.includes("?") ? "&" : "?"}t=${Math.floor(+now / 60_000)}`;
-      return `<div class="camt"><div class="camt-tile"><img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="camt-live"><i></i>LIVE</span></div><div class="camt-name">${esc(c.title)}</div><div class="camt-hint">${esc(c.eyebrow)} · Click to watch</div></div>`;
+      return `<div class="camt"><div class="camt-tile"><img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="camt-live" title="Live"><i></i></span></div><div class="camt-name">${esc(c.title)}</div><div class="camt-hint">${esc(c.eyebrow)} · Click to watch</div></div>`;
     }
     return `<div class="cam-tag"><i></i>Live<span>${esc(c.title)}</span></div>`;
   }
   // DPS alerts: the 3D beacon is drawn by the map; this is its small tag (what happened shows on hover)
   if (c.kind === "alert" || c.kind === "alertmini") {
-    return `<div class="al-tag al-${c.severity ?? "medium"}"><i></i>DPS · ${esc(c.eyebrow)}<span>${esc(c.title)}</span></div>`;
+    // DPS: a white marker with a shield tinted by severity, how long ago, and (on hover) what happened
+    const ago = c.eyebrow.replace(" min ago", "m").replace(" h ago", "h").replace(" days ago", "d").replace("just now", "now").replace("yesterday", "1d");
+    return `<div class="dps dps-${c.severity ?? "medium"}"><span class="dps-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2 4 5v6c0 5.25 3.4 9.8 8 11 4.6-1.2 8-5.75 8-11V5l-8-3z"/><path d="M11 7h2v6h-2zM11 15h2v2h-2z" fill="#fff"/></svg></span><span class="dps-t"><b>${esc(ago)}</b><span>${esc(c.title)}</span></span></div>`;
   }
   // live games: a small score pill (team badges + score); hovering shows the full card, clicking opens the side panel
   if (c.game) {

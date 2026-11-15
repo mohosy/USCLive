@@ -494,3 +494,24 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .evb-moment b { font-weight: 650; color: #1d1d1f; }
 .evb-moment i { width: 26px; height: 26px; border-radius: 99px; background: #e5e5ea center / cover no-repeat; display: grid; place-items: center; font: 700 9px var(--font-apple); font-style: normal; color: #1d1d1f; box-shadow: 0 0 0 2px #16a34a; }
 @keyframes evb-moment { 0% { opacity: 0; transform: translate(-50%, 10px) scale(0.85); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1); } 80% { opacity: 1; transform: translate(-50%, -6px); } 100% { opacity: 0; transform: translate(-50%, -14px); } }
+
+/* camera tile: just a blinking red dot for "live" */
+.camt-live { padding: 0; width: 9px; height: 9px; left: 6px; top: 6px; border-radius: 99px; background: #ff3b30; box-shadow: none; animation: none; }
+.camt-live i { display: none; }
+.co-webcam:hover .camt-live { width: 12px; height: 12px; left: 9px; top: 9px; padding: 0; }
+
+/* ---------- DPS alerts: a clean white marker with a severity-tinted shield (no 3D siren) ---------- */
+.co-alert:hover, .co-alertmini:hover { z-index: 30 !important; }
+.dps { --sev: #dc2626; --sev-soft: rgba(220, 38, 38, 0.14); display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 99px; font-family: var(--font-apple);
+  background: rgba(255, 255, 255, 0.96); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.16); transition: transform 0.2s ease; }
+.dps-medium { --sev: #ea580c; --sev-soft: rgba(234, 88, 12, 0.14); }
+.dps-low { --sev: #d97706; --sev-soft: rgba(217, 119, 6, 0.14); }
+.dps-ic { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 99px; background: var(--sev-soft); color: var(--sev); }
+.dps-t { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #3a3a3c; }
+.dps-t b { font-weight: 650; color: var(--sev); }
+.dps-t span { max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width 0.25s ease; }
+.co-alert:hover .dps-t span, .co-alertmini:hover .dps-t span { max-width: 220px; }
+.co-alert:hover .dps, .co-alertmini:hover .dps { transform: translateY(-2px); }
+.co-alertmini .dps { padding: 2px; }
+.co-alertmini .dps-t { display: none; }
+.co-alertmini:hover .dps-t { display: flex; padding-right: 6px; }

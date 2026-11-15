@@ -531,7 +531,8 @@ export default function MapView(props: Props) {
     // DPS alerts: a red police beacon standing in the zone (click for details)
     m.addLayer({
       id: "alerts-3d", type: "model", source: "alert-pts", slot: "top",
-      layout: { "model-id": "dps-beacon" },
+      // the 3D siren is retired: alerts show as a clean shield marker (HTML callout) over their zone
+      layout: { "model-id": "dps-beacon", visibility: "none" },
       paint: {
         "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [60, 60, 60]], 19, ["literal", [5, 5, 5]]],
         "model-type": "common-3d",
