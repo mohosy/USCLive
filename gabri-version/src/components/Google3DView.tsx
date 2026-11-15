@@ -7,7 +7,7 @@
 import { Deck, FlyToInterpolator, type MapViewState, type PickingInfo } from "@deck.gl/core";
 import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import { Tile3DLayer, TileLayer } from "@deck.gl/geo-layers";
-import { BitmapLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { BitmapLayer, IconLayer, PathLayer, PolygonLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { iconCanvas, iconKey, ICON_PX } from "@/lib/eventIcons";
 import { alertStyle } from "@/lib/alertStyle";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
@@ -44,7 +44,22 @@ function satelliteSession() {
     .catch(() => null);
   return sessionPromise;
 }
-const BOUNDS = { west: -118.2995, south: 34.0115, east: -118.2715, north: 34.0305 };
+const BOUNDS = { west: -118.3035, south: 34.0045, east: -118.2712, north: 34.0382 }; // same as the Explore map
+
+/** Same neighborhood as the Explore map: full detail inside, washed out beyond (draped on the 3D tiles). */
+const AREA = { south: 34.0065, west: -118.3012, north: 34.0362, east: -118.2735 };
+const FADE_RING: [number, number][][] = [
+  [[AREA.west - 0.15, AREA.south - 0.15], [AREA.east + 0.15, AREA.south - 0.15], [AREA.east + 0.15, AREA.north + 0.15], [AREA.west - 0.15, AREA.north + 0.15], [AREA.west - 0.15, AREA.south - 0.15]],
+  [[AREA.west, AREA.south], [AREA.west, AREA.north], [AREA.east, AREA.north], [AREA.east, AREA.south], [AREA.west, AREA.south]],
+];
+/** USC's outline (UPC + Village), from the same file the Explore map uses. */
+let outlinePromise: Promise<[number, number][][]> | null = null;
+const loadOutline = () =>
+  (outlinePromise ??= fetch("/data/usc-campus.json").then((r) => r.json()).then((d: { campus: { geometry: { type: string; coordinates: number[][][] | number[][][][] } } }) => {
+    const g = d.campus.geometry;
+    const polys = (g.type === "MultiPolygon" ? g.coordinates : [g.coordinates]) as [number, number][][][];
+    return polys.map((p) => p[0]); // outer rings
+  }).catch((e) => { outlinePromise = null; throw e; }));
 
 /** Walker avatar clips (from the procedural Trojan, exported to .glb at runtime). */
 const WALKER_CLIPS = ["Idle", "Walk", "Wave", "Happy"] as const;
@@ -221,6 +236,18 @@ export default function Google3DView(props: Props) {
         getFillColor: (h) => [...(LEVEL_RGB[h.level] ?? [120, 120, 120]), h.level === "quiet" || h.level === "normal" ? 0 : 55] as [number, number, number, number],
         extensions: [terrain],
       }),
+      // beyond the neighborhood: washed out, like the Explore map
+      new PolygonLayer({
+        id: "area-fade", data: [{ polygon: FADE_RING }], getPolygon: (d: { polygon: [number, number][][] }) => d.polygon,
+        getFillColor: [247, 245, 242, 150], stroked: false, extensions: [terrain],
+      }),
+      // USC's cardinal outline: a soft glow plus a crisp line
+      new PathLayer<[number, number][]>({
+        id: "usc-edge-glow", data: outline.current, getPath: (r) => r, getColor: [153, 0, 0, 45], getWidth: 9, widthUnits: "pixels", jointRounded: true, extensions: [terrain],
+      }),
+      new PathLayer<[number, number][]>({
+        id: "usc-edge", data: outline.current, getPath: (r) => r, getColor: [153, 0, 0, 220], getWidth: 2.5, widthUnits: "pixels", jointRounded: true, extensions: [terrain],
+      }),
       new ScatterplotLayer<SafetyAlert>({
         id: "alert-zones",
         data: p.alerts,
@@ -269,7 +296,7 @@ export default function Google3DView(props: Props) {
         data: w ? [] : p.callouts.filter((c) => c.kind === "webcam"),
         scenegraph: CAM_MODEL,
         getPosition: (c) => [c.lng, c.lat, zAt.current.get(c.id) ?? gz],
-        getOrientation: [0, 200, 90],
+        getOrientation: (c) => [0, 90 - (c.heading ?? 180), 90], // deck turns counter-clockwise: lens (east) -> the camera's heading
         // Snap Map style: about the same size on screen at every zoom (~45-60 px tall)
         sizeScale: 400,
         sizeMinPixels: 40,
@@ -324,7 +351,13 @@ export default function Google3DView(props: Props) {
   const groundDirty = useRef(true);
   const settled = useRef(new Set<string>()); // bubble ids whose ground height is known
   const activeRef = useRef(props.active !== false); // false while pre-loading behind Explore
-  useEffect(() => { activeRef.current = props.active !== false; }, [props.active]);
+  const outline = useRef<[number, number][][]>([]);
+  // shown at last: start exactly where the Explore map was looking
+  useEffect(() => {
+    activeRef.current = props.active !== false;
+    if (props.active && props.initialCamera) setView({ ...viewState.current, ...props.initialCamera });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.active]);
   function tileLayer() {
     tiles.current ??= new Tile3DLayer({
         id: "google-3d",
@@ -582,7 +615,7 @@ export default function Google3DView(props: Props) {
   // follow the flat map's camera until the 3D campus is ready; give up waiting after 15s
   useEffect(() => {
     const bus = props.follow;
-    const fn = (c: Camera) => { if (!ready.current) setView({ ...viewState.current, ...c }); };
+    const fn = (c: Camera) => { if (!ready.current || !activeRef.current) setView({ ...viewState.current, ...c }); };
     bus?.listeners?.add(fn);
     const t = setTimeout(markReady, 15_000);
     const mb = setInterval(measureBubbles, 1000);
@@ -620,6 +653,7 @@ export default function Google3DView(props: Props) {
       layers: layers(),
     });
     satelliteSession().then((sess) => { session.current = sess; created?.setProps({ layers: layers() }); });
+    loadOutline().then((rings) => { outline.current = rings; created?.setProps({ layers: layers() }); }, () => {});
     }, 0);
     return () => {
       clearTimeout(t);
