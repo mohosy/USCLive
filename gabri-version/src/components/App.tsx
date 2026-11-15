@@ -413,11 +413,11 @@ export default function App() {
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (
               <>
-                <div className="mb-4"><CalendarSync demo={!!state.me.verified} google={google} onSyncGoogle={async () => { await syncGoogle(true); refresh(); pollNotifs(); }}
+                <NowPanel compact active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
+                <div className="mt-4"><MenuPanel active={menuOpen} deadlines={notifs.filter((n) => n.kind === "deadline")} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
+                <div className="mt-4"><CalendarSync demo={!!state.me.verified} google={google} onSyncGoogle={async () => { await syncGoogle(true); refresh(); pollNotifs(); }}
                   onDisconnectGoogle={async () => { await api("/api/auth/google/disconnect", { method: "POST" }); setGoogle((g) => (g ? { ...g, connected: false, lastSync: null } : g)); refresh(); }}
                   onSynced={() => { refresh(); pollNotifs(); }} onOpenInbox={() => setInboxOpen(true)} /></div>
-                <NowPanel compact active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
-                <div className="mt-4"><MenuPanel active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
               </>
             ) : tab === "events" ? (
               <EventsPanel events={visible} filters={filters} setFilters={setFilters} loc={loc} onOpen={openEvent} now={now} />

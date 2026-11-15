@@ -3,7 +3,8 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { BUILDING_BY_ID, walkMinutes } from "@/lib/campus";
-import { fmtTime, isLive, type AppState, type Loc } from "@/lib/client-types";
+import { fmtTime, isLive, type AppState, type Loc, type Notification } from "@/lib/client-types";
+import { primaryAction } from "@/lib/eventActions";
 import { gameState } from "@/lib/games";
 import { LEVEL_COLOR } from "./ui";
 
@@ -31,10 +32,12 @@ function SportIcon({ sport }: { sport: string }) {
 }
 
 /** The menu's overview: what is live, how busy it is, what is next for you. Every row flies the map there. */
-export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onAddEvent, onStudy, active = true }: {
+export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onAddEvent, onStudy, active = true, deadlines }: {
   state: AppState; loc: Loc; onOpenEvent: (id: string) => void; onOpenBuilding: (id: string) => void; onAddEvent: () => void; onStudy: () => void;
   /** the clock only ticks while the menu is open */
   active?: boolean;
+  /** due dates from your calendars (Brightspace, Google), from the notification feed */
+  deadlines?: Notification[];
 }) {
   const [now, setNow] = useState(() => new Date(state.now));
   useEffect(() => { if (!active) return; const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, [active]); // game clocks tick
@@ -46,6 +49,24 @@ export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onA
     .sort((x, y) => y.fill - x.fill).slice(0, 6);
   const next = state.me.today.filter((c) => +new Date(c.end) > +now).slice(0, 2);
   const events = state.events.filter((e) => !e.game && +new Date(e.end) > +now).sort((x, y) => +new Date(x.start) - +new Date(y.start)).slice(0, 3);
+  // plan ahead: the next 7 days of due dates, and events you have to sign up / get tickets for before they fill
+  const week = +now + 7 * 864e5;
+  const comingUp = [
+    ...state.events
+      // only what needs action ahead of time: tickets / registration, or nearly full (drop-ins starting soon are under Events)
+      .filter((e) => !e.game && !e.going && e.visibility !== "invite" && +new Date(e.start) > +now + 2 * 3600_000 && +new Date(e.start) < week
+        && (!!e.link || (e.capacity != null && e.capacity - e.attendeeCount <= Math.max(5, e.capacity * 0.25))))
+      .map((e) => ({ key: e.id, at: e.start, title: e.title, onClick: () => onOpenEvent(e.id),
+        sub: `${e.link ? primaryAction(e).label : `${Math.max(0, (e.capacity ?? 0) - e.attendeeCount)} spots left`} · ${e.buildingName}`,
+        urgent: !e.link && e.capacity != null && e.capacity - e.attendeeCount <= Math.max(5, e.capacity * 0.25) })),
+    ...(deadlines ?? [])
+      .filter((n) => n.dueAt && +new Date(n.dueAt) > +now && +new Date(n.dueAt) < week)
+      .map((n) => ({ key: n.id, at: n.dueAt!, title: n.title, onClick: undefined as undefined | (() => void), sub: `Due · ${n.body}`, urgent: +new Date(n.dueAt!) - +now < 864e5 })),
+  ].sort((a, b) => +new Date(a.at) - +new Date(b.at)).slice(0, 6);
+  const day = (iso: string) => {
+    const d = new Date(iso), t = new Date(now); const tm = new Date(now); tm.setDate(t.getDate() + 1);
+    return d.toDateString() === t.toDateString() ? "Today" : d.toDateString() === tm.toDateString() ? "Tmrw" : d.toLocaleDateString("en-US", { weekday: "short" });
+  };
 
   return (
     <div className="-my-2">
@@ -59,6 +80,21 @@ export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onA
               <span className="min-w-0 flex-1 truncate font-semibold">{e.game!.home} {g.home} – {g.away} {e.game!.away}</span>
               <span className="whitespace-nowrap text-[13.5px] font-bold tabular-nums text-[#8a6700]">{g.period} {g.clock}</span>
             </button>
+          );
+        })}
+      </Section>
+
+      <Section title="Coming up">
+        {comingUp.length === 0 && <p className={empty}>Nothing to sign up for or hand in this week.</p>}
+        {comingUp.map((c) => {
+          const Tag = c.onClick ? "button" : "div";
+          return (
+            <Tag key={c.key} className={row} onClick={c.onClick}>
+              <span className="w-[62px] shrink-0 self-start pt-px text-[13px] font-bold tabular-nums text-cardinal">{day(c.at)}<small className="block text-[11.5px] font-medium text-[#77746d]">{fmtTime(c.at)}</small></span>
+              <span className="min-w-0 flex-1 font-semibold">{c.title}
+                <small className={`block text-[12.5px] font-normal ${c.urgent ? "text-[#b45309]" : "text-[#77746d]"}`}>{c.sub}</small>
+              </span>
+            </Tag>
           );
         })}
       </Section>

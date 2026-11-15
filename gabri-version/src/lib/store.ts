@@ -21,6 +21,9 @@ interface DB {
   dps: { lastSync: number; lastUrl: string | null; error: string | null; syncing: boolean };
   lastLiveTick: number;
   liveScriptIndex: number;
+  /** events we already gave you a "sign up before it fills" heads-up for */
+  reminded: string[];
+  lastReminder: number;
 }
 
 const g = globalThis as unknown as { __usclive?: DB };
@@ -42,6 +45,8 @@ function fresh(): DB {
     dps: { lastSync: 0, lastUrl: null, error: null, syncing: false },
     lastLiveTick: +now,
     liveScriptIndex: 0,
+    reminded: [],
+    lastReminder: 0,
   };
 }
 
@@ -52,6 +57,8 @@ export function db(): DB {
   d.alerts ??= seedAlerts(new Date());
   d.history ??= seedHistory(new Date());
   d.dps ??= { lastSync: 0, lastUrl: null, error: null, syncing: false };
+  d.reminded ??= [];
+  d.lastReminder ??= 0;
   return d;
 }
 

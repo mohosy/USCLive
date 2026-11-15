@@ -29,6 +29,7 @@ export const CORE_BUILDINGS: Building[] = [
   { id: "jff", code: "JFF", name: "Fertitta Hall (Marshall)", lat: 34.018812, lng: -118.282401, kind: "classroom", capacity: 400,
     studySpot: { quiet: false, outlets: true, openLate: false, note: "Marshall study pods, bright and modern" } },
   { id: "hoh", code: "HOH", name: "Hoffman Hall", lat: 34.018973, lng: -118.285626, kind: "classroom", capacity: 250 },
+  { id: "acc", code: "ACC", name: "Leventhal School of Accounting", lat: 34.019543, lng: -118.285279, kind: "classroom", capacity: 250 },
   { id: "jkp", code: "JKP", name: "Popovich Hall", lat: 34.018692, lng: -118.283051, kind: "classroom", capacity: 250 },
   { id: "thh", code: "THH", name: "Taper Hall", lat: 34.022341, lng: -118.284409, kind: "classroom", capacity: 400 },
   { id: "wph", code: "WPH", name: "Waite Phillips Hall", lat: 34.022109, lng: -118.283800, kind: "classroom", capacity: 300 },

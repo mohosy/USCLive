@@ -4,7 +4,18 @@
  * (online meetings never); anything that can't be placed is listed back instead of being pinned somewhere wrong.
  */
 import { detectFoodHeuristic } from "./ai";
-import { BUILDING_BY_ID, matchBuilding } from "./campus";
+import { BUILDING_BY_ID, BUILDINGS, matchBuilding } from "./campus";
+
+/** USC room codes are often written glued together: "KAP160", "ACC303", "JFFLL125" -> the building with that code. */
+function roomCodeBuilding(location: string) {
+  const m = location.trim().toUpperCase().match(/^([A-Z]{2,6})\s*-?\s*\d/);
+  if (!m) return undefined;
+  for (let n = Math.min(4, m[1].length); n >= 2; n--) {
+    const code = m[1].slice(0, n);
+    const b = BUILDINGS.find((x) => x.code === code && !x.minor) ?? BUILDINGS.find((x) => x.code === code);
+    if (b) return b.id;
+  }
+}
 import { addNotification, db, getMe, newId } from "./store";
 import type { CampusEvent, EventSource } from "./types";
 
@@ -39,7 +50,7 @@ export function importCalendarItems(items: CalItem[], source: Extract<EventSourc
     // online meetings never get a building; the title is only a fallback, and only for main campus buildings
     const online = /zoom|teams|google meet|meet\.google|webex|online|virtual|https?:\/\//i.test(it.location);
     const fromTitle = !it.location ? matchBuilding(summary) : null;
-    const buildingId = online ? null : matchBuilding(it.location) ?? (fromTitle && !BUILDING_BY_ID[fromTitle]?.minor ? fromTitle : null);
+    const buildingId = online ? null : roomCodeBuilding(it.location) ?? matchBuilding(it.location) ?? (fromTitle && !BUILDING_BY_ID[fromTitle]?.minor ? fromTitle : null);
     if (!buildingId) { if (!unplaced.has(summary)) unplaced.set(summary, { title: summary, start: it.start.toISOString(), location: it.location }); continue; }
     haveEvent.add(key);
     const food = detectFoodHeuristic(summary + " " + it.description);

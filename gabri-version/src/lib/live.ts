@@ -4,7 +4,7 @@
  */
 import { BUILDING_BY_ID, INTERSECTIONS } from "./campus";
 import { computeHotspots } from "./hotspots";
-import { addNotification, db, getMe, newId } from "./store";
+import { addNotification, canSee, db, getMe, newId } from "./store";
 import type { CampusEvent } from "./types";
 
 const TICK_MS = 35_000;
@@ -88,4 +88,31 @@ export function tickLive() {
   d.lastLiveTick = now;
   if (d.liveScriptIndex >= SCRIPT.length) return;
   SCRIPT[d.liveScriptIndex++]();
+}
+
+/**
+ * Heads-up before it's too late: once per event, for things in the next 3 days you haven't joined that are
+ * nearly full or need a ticket / registration. At most one every 2 minutes, so the feed never floods.
+ */
+export function remindSignups(now = Date.now()) {
+  const d = db();
+  if (now - d.lastReminder < 2 * 60_000) return; // at most one heads-up every 2 minutes
+  const me = getMe();
+  const done = new Set(d.reminded);
+  const e = d.events
+    .filter((x) => !done.has(x.id) && !x.game && canSee(x, me) && x.visibility !== "invite" && !x.attendees.includes(me.id))
+    .filter((x) => { const t = +new Date(x.start); return t > now + 60 * MIN && t < now + 72 * 60 * MIN; })
+    .find((x) => !!x.link || (x.capacity != null && x.capacity - x.attendees.length <= Math.max(5, x.capacity * 0.25)));
+  if (!e) return;
+  d.reminded.push(e.id);
+  d.lastReminder = now;
+  const when = new Date(e.start).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
+  const where = BUILDING_BY_ID[e.buildingId]?.name ?? "";
+  const left = e.capacity != null ? e.capacity - e.attendees.length : null;
+  addNotification({
+    kind: "event",
+    title: e.link ? `${e.link.label}: ${e.title}` : `Filling up: ${e.title}`,
+    body: `${left != null && !e.link ? `${left} spots left · ` : ""}${when} · ${where}`,
+    eventId: e.id, source: "live",
+  });
 }
