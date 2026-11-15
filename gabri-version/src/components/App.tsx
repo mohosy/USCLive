@@ -366,8 +366,8 @@ export default function App() {
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
+      <WeatherPill weather={weather} />
       <div ref={accountArea} className="account-area">
-        <WeatherPill weather={weather} />
         {/* notifications, beside your profile; opens the same panel on its Notifications tab */}
         <button onClick={() => { setAccountOpen((o) => !(o && accountTab === "notifications")); setAccountTab("notifications"); }} className="map-bell" aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}>
           <Bell size={18} strokeWidth={2} />
@@ -505,6 +505,8 @@ export default function App() {
               me={loc}
               layers={mapLayers}
               people={showPeople}
+              onLocate={locateMe}
+              gps={gps}
               leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 384 : 0}
               mapStyle="map"
               light={light}
@@ -564,11 +566,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Maps-style locate button above the zoom column: centers on you, asks for location the first time */}
-          <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
-            className={cx("map-locate", gps === "on" && "map-locate-on")}>
-            {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={16} className={cx(gps === "on" && "fill-current")} />}
-          </button>
 
           {/* Bottom dock: locate + one filter row (each chip is a layer on the map and its legend), then search and assistant in one bar */}
           <div className="map-dock">
@@ -580,7 +577,7 @@ export default function App() {
                       // what's on the map: a slim banner on top of the bar; click it for the checkboxes
                       <div className={cx("filter-tray", filtersOpen && "filter-tray-open")}>
                         <button type="button" className="filter-tab" onClick={() => setFiltersOpen((o) => !o)} aria-expanded={filtersOpen} aria-controls="map-layer-chips">
-                          <span className="filter-tab-label">Map layers</span>
+                          <span className="filter-tab-label">Filters</span>
                           <span className="filter-tab-count">{LAYERS.filter(([k]) => chips[k]).length} of {LAYERS.length}</span>
                           <ChevronDown size={14} className="filter-tab-chev" aria-hidden="true" />
                         </button>

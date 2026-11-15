@@ -433,9 +433,23 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { display: flex; align-items: center; gap: 5px; height: 40px; padding: 0 13px 0 11px; border-radius: 99px; cursor: default;
-  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; transition: background-color 180ms ease; }
+.weather-pill { position: absolute; top: calc(70px + var(--sat)); right: 24px; z-index: 34; min-width: 112px; border-radius: 14px; color: #1d1d1f;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
+.weather-now { display: grid; grid-template-columns: auto auto; column-gap: 6px; justify-items: end; align-items: center; padding: 8px 12px; white-space: nowrap; text-align: right; color: inherit; cursor: pointer; }
+.weather-now .weather-condition, .weather-now .weather-range { grid-column: 1 / -1; }
+/* tap the card: the next hours unfold straight down, same width, same glass */
+.weather-drop { display: grid; grid-template-rows: 0fr; width: 0; min-width: 100%; opacity: 0; transition: grid-template-rows 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease; }
+.weather-open .weather-drop { grid-template-rows: 1fr; opacity: 1; }
+.weather-drop > div { min-height: 0; overflow: hidden; }
+.weather-hours { margin: 0 12px; padding: 4px 0 8px; border-top: 0.5px solid rgba(0,0,0,0.12); }
+.weather-hour { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 4px; height: 26px; font-size: 12px; }
+.weather-hour-time { opacity: 0.75; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.weather-hour-sky { display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+.weather-hour-sky i { font-style: normal; font-size: 10px; font-weight: 600; color: #0a84ff; }
+.weather-hour-temp { font-weight: 600; font-variant-numeric: tabular-nums; }
+.weather-hours-note { padding: 6px 0; font-size: 11.5px; opacity: 0.75; text-align: right; }
+.map-app[data-night="true"] .weather-hours { border-top-color: rgba(255,255,255,0.2); }
+.map-app[data-night="true"] .weather-hour-sky i { color: #7cc4ff; }
 .weather-sun { color: #e8a200; }
 .weather-temperature { font-size: 14px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
@@ -473,9 +487,9 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .mapboxgl-ctrl-attrib.mapboxgl-compact:not(.mapboxgl-compact-show) { transform: translateY(2px); }
 
 /* ---------- Event banners: a small photo ring on the map that grows into a card on hover ---------- */
-.co-event { z-index: 1; }
-.co-event:hover { z-index: 30 !important; }
-.co-event .co-foot { margin-top: 6px; }
+.co-event, .co-schedule { z-index: 1; }
+.co-event:hover, .co-schedule:hover { z-index: 30 !important; }
+.co-event .co-foot, .co-schedule:has(.sch) .co-foot { margin-top: 6px; }
 .evb { position: relative; font-family: var(--font-apple); }
 .evb-mini { display: flex; flex-direction: column; align-items: center; gap: 4px; transition: opacity 0.14s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .evb-ring { position: relative; padding: 2.5px; border-radius: 99px; background: #c7c7cc; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
@@ -498,8 +512,8 @@ button:active:not(:disabled) { transform: scale(0.97); }
   opacity: 0; transform: translateX(-50%) scale(0.55); transform-origin: 50% 100%; pointer-events: none;
   transition: opacity 0.16s ease, transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.co-event:hover .evb-card { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: auto; }
-.co-event:hover .evb-mini { opacity: 0; transform: scale(0.9); }
+:is(.co-event, .co-schedule):hover .evb-card { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: auto; }
+:is(.co-event, .co-schedule):hover .evb-mini { opacity: 0; transform: scale(0.9); }
 .evb-photo { position: relative; height: 116px; background: #e5e5ea center / cover no-repeat; }
 .evb-strip { height: 6px; }
 .evb-tags { position: absolute; left: 8px; top: 8px; display: flex; gap: 5px; }
@@ -631,8 +645,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .campus-chat-open .filter-tray { opacity: 0; transform: translateY(8px); pointer-events: none; }
 .filter-tab { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 12px 0 14px; color: #1d1d1f; font-size: 12px; cursor: pointer; }
 .filter-tab:hover { background: rgba(255, 255, 255, 0.25); }
-.filter-tab-label { flex-shrink: 0; font-weight: 650; }
-.filter-tab-label { flex: 1; text-align: left; }
+.filter-tab-label { flex: 1; text-align: left; font-weight: 650; }
 .filter-tab-count { flex-shrink: 0; padding: 1px 7px; border-radius: 99px; background: rgba(0, 0, 0, 0.06); color: #55555a; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .filter-tab-chev { flex-shrink: 0; transform: rotate(180deg); transition: transform 0.25s ease; color: #55555a; }
 .filter-tray-open .filter-tab-chev { transform: none; }
@@ -654,3 +667,47 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .play-hud .play-follow { background: rgba(255, 255, 255, 0.16); color: #fff; }
 .play-hud .play-follow:hover { background: rgba(255, 255, 255, 0.26); }
 .play-hud .play-follow-on, .play-hud .play-follow-on:hover { background: #990000; color: #fff; }
+
+/* locate: a glass circle at the top of the right-hand column (same width and glass as the zoom buttons) */
+.mapboxgl-ctrl-group.locate-ctrl { border-radius: 999px !important; }
+.locate-ctrl button { height: 40px !important; color: #1d1d1f; display: grid !important; place-items: center; }
+.locate-ctrl.locate-on svg { fill: currentColor; }
+.locate-ctrl.locate-asking svg { animation: locate-pulse 1s ease-in-out infinite; }
+@keyframes locate-pulse { 50% { opacity: 0.35; } }
+.map-app[data-night="true"] .locate-ctrl button { color: #fff; }
+
+
+/* ---------- directions: next turn on top, trip bar above the search (same frosted glass as the panels) ---------- */
+.wk-top { position: absolute; top: calc(76px + var(--sat)); left: 0; right: 0; margin: 0 auto; z-index: 22; width: min(460px, calc(100vw - 32px)); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; animation: rise-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.wk-pill { pointer-events: auto; width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 10px; border-radius: 22px; color: #1d1d1f;
+  background: var(--frost); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: 0 10px 30px rgba(0,0,0,0.16); }
+.wk-turn { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; background: var(--cardinal); color: #fff; }
+.wk-title { font-size: 16px; font-weight: 650; line-height: 1.25; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-sub { margin-top: 1px; font-size: 12.5px; color: #55555b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-dim { color: #6e6e73; font-weight: 500; }
+.wk-x { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; color: #55555b; background: rgba(0,0,0,0.05); }
+.wk-x:hover { background: rgba(0,0,0,0.1); color: #1d1d1f; }
+.wk-done { flex-shrink: 0; padding: 8px 14px; border-radius: 999px; background: var(--cardinal); color: #fff; font-size: 13px; font-weight: 600; }
+.wk-passing { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: #1d1d1f;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); opacity: 0; transform: translateY(-4px); transition: opacity 0.3s ease, transform 0.3s ease; }
+.wk-passing.wk-show { opacity: 1; transform: none; }
+.map-app[data-night="true"] .wk-passing { color: #fff; }
+.wk-trip { position: absolute; left: 0; right: 0; margin: 0 auto; bottom: calc(max(32px, calc(env(safe-area-inset-bottom) + 20px)) + 70px); z-index: 29; width: min(460px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 8px; padding: 9px 9px 9px 16px; border-radius: 18px; color: #1d1d1f;
+  background: var(--frost); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: 0 8px 24px rgba(0,0,0,0.14); animation: rise-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.wk-trip-line { display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: #55555b; white-space: nowrap; overflow: hidden; }
+.wk-trip-line b { font-size: 16px; font-weight: 650; color: #1d1d1f; }
+.wk-bar { margin-top: 7px; height: 4px; border-radius: 99px; background: rgba(0,0,0,0.08); overflow: hidden; }
+.wk-bar i { display: block; height: 100%; border-radius: 99px; background: var(--cardinal); transition: width 0.15s linear; }
+.wk-btn { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; color: #1d1d1f; background: rgba(0,0,0,0.05); }
+.wk-btn:hover:not(:disabled) { background: rgba(0,0,0,0.1); }
+.wk-btn:disabled { opacity: 0.4; }
+@media (max-width: 900px) { .wk-top { top: calc(70px + var(--sat)); } .wk-trip { bottom: calc(max(32px, calc(env(safe-area-inset-bottom) + 20px)) + 66px); } }
+
+/* classes and office hours: the event ticket with a blue stub (no photo) */
+.sch .sch-stub { background: #2563eb; }
+.sch .sch-strip { background: #2563eb; }
+.sch .sch-when { color: #2563eb; }
+.sch .sch-dot { background: #2563eb; }
+.co-schedule:has(.sch) { --co-edge: transparent; }
+.sch .evt-when { color: #2563eb; }

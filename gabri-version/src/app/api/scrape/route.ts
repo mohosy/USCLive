@@ -7,7 +7,7 @@ import { withState } from "@/lib/state";
 
 // Only scrape USC-owned public pages.
 const ALLOW = /(^|\.)usc\.edu$/i;
-export const DEFAULT_SOURCES = ["https://calendar.usc.edu/", "https://www.usc.edu/events/"];
+export const DEFAULT_SOURCES = ["https://calendar.usc.edu/"]; // usc.edu/events was retired (404)
 
 function htmlToText(html: string) {
   return html
