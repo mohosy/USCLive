@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { api } from "@/lib/client-types";
 import type { DirectoryEntry } from "@/lib/directory";
@@ -17,6 +17,8 @@ export interface Session {
   email: string;
   /** private calendar link synced from the Home panel (re-synced after the demo server restarts) */
   calendarUrl?: string;
+  /** signed in with Google: the calendar syncs live */
+  google?: boolean;
   /** a new (non-directory) account: what the student entered when creating it */
   signup?: Signup;
   interests: string[];
@@ -91,11 +93,14 @@ export function AccountTypePicker({ type, orgId, onType, onOrg }: { type: Accoun
  * Sign-in gate: usc.edu email only. Demo students (mock USC directory) sign straight in.
  * Anyone else creates an account with their first and last name and school, and nothing else is filled in for them.
  */
-export default function SignIn({ onDone }: { onDone: () => void }) {
-  const [step, setStep] = useState<"email" | "create">("email");
-  const [email, setEmail] = useState("");
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
+export interface GooglePrefill { email: string; firstName: string; lastName: string }
+export default function SignIn({ onDone, google }: { onDone: () => void; google?: GooglePrefill | null }) {
+  const [step, setStep] = useState<"email" | "create">(google ? "create" : "email");
+  const [email, setEmail] = useState(google?.email ?? "");
+  const [first, setFirst] = useState(google?.firstName ?? "");
+  const [last, setLast] = useState(google?.lastName ?? "");
+  const [googleReady, setGoogleReady] = useState(false); // shown only when the server has Google credentials
+  useEffect(() => { api<{ configured: boolean }>("/api/auth/google/status").then((r) => setGoogleReady(r.configured), () => {}); }, []);
   const [school, setSchool] = useState<SchoolId | "">("");
   // suggested from the name until the student types their own
   const [handle, setHandle] = useState<string | null>(null);
@@ -120,7 +125,7 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
   function create() {
     if (!first.trim() || !last.trim() || !school || uStatus.state !== "ok") return;
     setBusy(true); setErr(null);
-    void go({ email: email.trim().toLowerCase(), interests: [], accountType: "student", username: uStatus.u, signup: { firstName: first.trim(), lastName: last.trim(), school } });
+    void go({ email: email.trim().toLowerCase(), interests: [], accountType: "student", username: uStatus.u, signup: { firstName: first.trim(), lastName: last.trim(), school }, google: !!google });
   }
 
   return (
@@ -136,11 +141,16 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
             </label>
             {err && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{err}</p>}
             <Button type="submit" className="mt-4 w-full" disabled={busy || !email.trim()}>Continue</Button>
+            {googleReady && (
+              <a href="/api/auth/google/start" className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium hover:bg-surface">
+                <GoogleMark /> Continue with Google
+              </a>
+            )}
             <Button variant="secondary" className="mt-2 w-full" disabled={busy} onClick={() => { setEmail("ttrojan@usc.edu"); next("ttrojan@usc.edu"); }}>Use the demo student</Button>
           </form>
         ) : (
           <form className="mt-1 space-y-3" onSubmit={(e) => { e.preventDefault(); create(); }}>
-            <p className="text-sm text-muted">Create your account for <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>.</p>
+            <p className="text-sm text-muted">{google ? "Signed in with Google. Pick your school to finish" : "Create your account"} for <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>.</p>
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <div className="mb-1 text-xs font-medium text-muted">First name</div>
@@ -170,5 +180,17 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
         <p className="mt-4 text-center text-[11px] text-muted">Demo sign-in, not an official USC service. You can add interests and switch to a creator account in Settings.</p>
       </div>
     </div>
+  );
+}
+
+/** Google's "G" mark, as Google's sign-in guidelines ask for on the button. */
+function GoogleMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+    </svg>
   );
 }

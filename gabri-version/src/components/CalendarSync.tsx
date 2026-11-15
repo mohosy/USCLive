@@ -17,7 +17,11 @@ export async function syncCalendar(url: string) {
  * "Sync your classes": paste a private calendar link; classes and deadlines land on your map, visible only to you.
  * The link is remembered for this browser session so a server restart re-syncs it. Demo students also get the AI inbox scan.
  */
-export default function CalendarSync({ demo, onSynced, onOpenInbox }: { demo: boolean; onSynced: () => void; onOpenInbox: () => void }) {
+export default function CalendarSync({ demo, google, onSyncGoogle, onDisconnectGoogle, onSynced, onOpenInbox }: {
+  demo: boolean; google: { configured: boolean; connected: boolean; lastSync: string | null } | null;
+  onSyncGoogle: () => Promise<void>; onDisconnectGoogle: () => Promise<void>; onSynced: () => void; onOpenInbox: () => void;
+}) {
+  const [gBusy, setGBusy] = useState(false);
   const [url, setUrl] = useState(() => loadSession()?.calendarUrl ?? "");
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<SyncRes | null>(null);
@@ -42,7 +46,19 @@ export default function CalendarSync({ demo, onSynced, onOpenInbox }: { demo: bo
         <SyncIcon size={16} className="text-cardinal" />
         <h2 className="text-sm font-semibold">{synced ? "Your calendar is synced" : "Sync your classes"}</h2>
       </div>
-      <p className="mt-1 text-xs leading-relaxed text-muted">Paste your calendar&apos;s private link. Classes and deadlines show up on your map, only for you.</p>
+      {google?.connected ? (
+        <div className="mt-2 rounded-xl bg-surface px-3 py-2 text-xs">
+          <div className="flex items-center gap-1.5 font-medium text-foreground"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Google Calendar · live</div>
+          <p className="mt-0.5 text-muted">{google.lastSync ? `Synced ${fmtTime(google.lastSync)}, updates every 3 min.` : "Syncing…"} Only you see these.</p>
+          <div className="mt-1.5 flex gap-3">
+            <button type="button" disabled={gBusy} onClick={async () => { setGBusy(true); await onSyncGoogle(); setGBusy(false); }} className="font-medium text-foreground hover:underline">{gBusy ? "Syncing…" : "Sync now"}</button>
+            <button type="button" onClick={() => void onDisconnectGoogle()} className="text-muted hover:text-foreground">Disconnect</button>
+          </div>
+        </div>
+      ) : google?.configured ? (
+        <a href="/api/auth/google/start" className="mt-2 flex items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-xs font-medium hover:bg-surface">Connect Google Calendar (live)</a>
+      ) : null}
+      <p className="mt-2 text-xs leading-relaxed text-muted">{google?.connected ? "Or add another calendar by its private link:" : "Paste your calendar\u2019s private link. Classes and deadlines show up on your map, only for you."}</p>
       <form className="mt-2.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (url.trim().length > 10) void sync(); }}>
         <input className={cx(inputCls, "text-xs")} placeholder="webcal:// or https:// calendar link" value={url} onChange={(e) => setUrl(e.target.value)} />
         <Button type="submit" variant="secondary" className="shrink-0 !rounded-full" disabled={busy || url.trim().length < 10}>{busy ? "Syncing" : synced ? "Re-sync" : "Sync"}</Button>

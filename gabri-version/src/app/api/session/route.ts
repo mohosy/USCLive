@@ -4,11 +4,14 @@ import { SCHOOLS } from "@/lib/campus";
 import { directoryLookup, initialsOf, INTERESTS, isUscEmail } from "@/lib/directory";
 import { seedUsers } from "@/lib/seed";
 import { body } from "@/lib/http";
+import { getSession } from "@/lib/google";
 import { getMe, getUser, setFriends, uniqueUsername, usernameFree } from "@/lib/store";
 import { normalizeUsername, suggestUsername, usernameProblem } from "@/lib/username";
 
 const Input = z.object({
   action: z.enum(["lookup", "signin"]),
+  /** signed in with Google: the email must be the one Google verified for this server's Google session */
+  google: z.boolean().optional(),
   // new account: what the student tells us (nothing else is filled in for them)
   signup: z.object({
     firstName: z.string().trim().min(1).max(40),
@@ -36,7 +39,8 @@ const Input = z.object({
 export async function POST(req: Request) {
   const b = await body(req, Input);
   if (!b.ok) return b.res;
-  if (!isUscEmail(b.data.email)) return Response.json({ error: "Use your @usc.edu email." }, { status: 403 });
+  const viaGoogle = !!b.data.google && getSession()?.email === b.data.email.trim().toLowerCase();
+  if (!viaGoogle && !isUscEmail(b.data.email)) return Response.json({ error: "Use your @usc.edu email." }, { status: 403 });
   const entry = directoryLookup(b.data.email);
   if (b.data.action === "lookup") return Response.json({ profile: entry, isNew: !entry });
 

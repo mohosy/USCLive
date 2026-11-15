@@ -21,7 +21,7 @@ import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
 import type { Camera, MapLayers } from "./MapView";
 import MenuPanel from "./MenuPanel";
-import SignIn, { clearSession, loadSession, signIn } from "./SignIn";
+import SignIn, { clearSession, loadSession, signIn, type GooglePrefill } from "./SignIn";
 import FindFriends from "./FindFriends";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
@@ -91,6 +91,8 @@ export default function App() {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [toasts, setToasts] = useState<Notification[]>([]);
   const [askKey, setAskKey] = useState(0); // bump to clear the search box
+  const [google, setGoogle] = useState<{ configured: boolean; connected: boolean; lastSync: string | null } | null>(null);
+  const [googlePrefill, setGooglePrefill] = useState<GooglePrefill | null>(null);
   const [askRes, setAskRes] = useState<AskRes | null>(null);
   const [askBusy, setAskBusy] = useState(false);
   const [tick, setTick] = useState(0);
@@ -111,6 +113,21 @@ export default function App() {
     camera.current = c;
     camBus.listeners.forEach((fn) => fn(c));
   };
+
+  const loadGoogle = useCallback(async () => {
+    try {
+      const st = await api<{ configured: boolean; connected: boolean; lastSync: string | null; profile: GooglePrefill | null }>("/api/auth/google/status");
+      setGoogle(st);
+      return st;
+    } catch { return null; }
+  }, []);
+  /** Pull Google Calendar into the map (replaces what came from it before, so edits show up). */
+  const syncGoogle = useCallback(async (first = false) => {
+    try {
+      const r = await api<{ lastSync: string }>(`/api/calendar/google${first ? "?first=1" : ""}`, { method: "POST" });
+      setGoogle((g) => (g ? { ...g, lastSync: r.lastSync } : g));
+    } catch { /* not connected or Google is unreachable: try again next round */ }
+  }, []);
 
   const refresh = useCallback(async () => {
     try { const next = await api<AppState>("/api/state"); setState((prev) => mergeState(prev, next)); setTick((t) => t + 1); } catch { /* keep last state */ }
@@ -140,6 +157,14 @@ export default function App() {
   // restore a saved sign-in (the demo store forgets it when the server restarts, so it is re-applied)
   useEffect(() => {
     const saved = loadSession();
+    // back from Google's sign-in: new here -> finish the account (name prefilled); already signed in -> just sync
+    const gq = new URLSearchParams(window.location.search).get("google");
+    if (gq) {
+      const reason = new URLSearchParams(window.location.search).get("reason");
+      window.history.replaceState(null, "", "/");
+      if (gq === "connected") setTimeout(() => void loadGoogle().then((st) => { if (!saved && st?.profile) setGooglePrefill(st.profile); }), 0);
+      else if (gq === "error") setTimeout(() => alert(`Google sign-in didn't work: ${reason ?? "unknown error"}`), 0);
+    } else setTimeout(() => void loadGoogle(), 0);
     // one data load at startup: after the saved sign-in is re-applied, or straight away for the sign-in screen
     const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(async () => {
       setSignedIn(true);
@@ -163,6 +188,15 @@ export default function App() {
     document.addEventListener("visibilitychange", back);
     return () => { clearTimeout(first); clearInterval(a); clearInterval(b); document.removeEventListener("visibilitychange", back); };
   }, [refresh, pollNotifs]);
+  // Google Calendar stays live: sync when signed in, then every 3 minutes while the tab is visible
+  const googleOn = !!(signedIn && google?.connected);
+  useEffect(() => {
+    if (!googleOn) return;
+    const run = (first = false) => { if (!document.hidden) void syncGoogle(first).then(() => { refresh(); if (first) pollNotifs(); }); };
+    const t0 = setTimeout(() => run(true), 0);
+    const t = setInterval(() => run(), 3 * 60_000);
+    return () => { clearTimeout(t0); clearInterval(t); };
+  }, [googleOn, syncGoogle, refresh, pollNotifs]);
   // start downloading the map code right away instead of after the first data load
   useEffect(() => { void import("./MapView"); }, []);
 
@@ -379,7 +413,9 @@ export default function App() {
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (
               <>
-                <div className="mb-4"><CalendarSync demo={!!state.me.verified} onSynced={() => { refresh(); pollNotifs(); }} onOpenInbox={() => setInboxOpen(true)} /></div>
+                <div className="mb-4"><CalendarSync demo={!!state.me.verified} google={google} onSyncGoogle={async () => { await syncGoogle(true); refresh(); pollNotifs(); }}
+                  onDisconnectGoogle={async () => { await api("/api/auth/google/disconnect", { method: "POST" }); setGoogle((g) => (g ? { ...g, connected: false, lastSync: null } : g)); refresh(); }}
+                  onSynced={() => { refresh(); pollNotifs(); }} onOpenInbox={() => setInboxOpen(true)} /></div>
                 <NowPanel compact active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
                 <div className="mt-4"><MenuPanel active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
               </>
@@ -512,7 +548,7 @@ export default function App() {
       {cam && <WebcamViewer key={cam.id} cam={cam} onClose={() => setCam(null)} />}
       {state && <AddEventModal open={addOpen} onClose={() => setAddOpen(false)} state={state} onCreated={(e) => { refresh(); setTimeout(() => openEvent(e.id), 300); }} />}
       <InboxModal open={inboxOpen} onClose={() => setInboxOpen(false)} onChanged={() => { refresh(); pollNotifs(); }} />
-      {signedIn === false && <SignIn onDone={() => { setSignedIn(true); refresh(); }} />}
+      {signedIn === false && <SignIn key={googlePrefill?.email ?? "plain"} google={googlePrefill} onDone={() => { setSignedIn(true); setGooglePrefill(null); refresh(); }} />}
     </div>
   );
 }
