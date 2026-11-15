@@ -1,0 +1,63 @@
+/**
+ * Public live cameras on and around campus (verified live on 2026-11-14).
+ *
+ * - Caltrans CCTV: open public data (cwwp2.dot.ca.gov), CORS allowed. Credit "Caltrans".
+ *   Full District 7 list: https://cwwp2.dot.ca.gov/data/d7/cctv/cctvStatusD07.json
+ * - USC Tommy Cam / Hecuba Cam: USC's own player only runs on usc.edu, so we play the public HLS
+ *   stream directly (team decision for the hackathon demo) and credit/link the official page.
+ *   Ask USC Communications before using this in production.
+ */
+export interface Webcam {
+  id: string;
+  name: string;
+  view: string; // what it looks at
+  lat: number;
+  lng: number;
+  source: "Caltrans" | "USC";
+  /** compass direction the camera looks (0 = north, 90 = east): the 3D camera on the map faces this way */
+  heading: number;
+  /** HLS stream we may play directly */
+  hls?: string;
+  /** still image, refreshed every ~30-60 s */
+  image: string;
+  /** official page, for cameras we can't stream directly */
+  page?: string;
+}
+
+const CT = "https://cwwp2.dot.ca.gov/data/d7/cctv/image";
+
+export const WEBCAMS: Webcam[] = [
+  {
+    id: "usc-tommy", name: "Tommy Trojan", view: "Hahn Plaza: Tommy Trojan, Bovard and Trousdale Parkway",
+    // just outside the Student Union's northeast corner, looking at the statue
+    lat: 34.020310, lng: -118.285452, source: "USC", heading: 19,
+    hls: "https://cs9.pixelcaster.com/live/usc-tommy.stream/playlist.m3u8",
+    image: "https://cdn.pixelcaster.com/public.pixelcaster.com/snapshots/usc-tommy/latest_1920x.jpg",
+    page: "https://www.usc.edu/tommy-cam/",
+  },
+  {
+    id: "usc-hecuba", name: "Hecuba, USC Village", view: "USC Village plaza, looking north",
+    lat: 34.02482, lng: -118.28469, source: "USC", heading: 0,
+    hls: "https://cs9.pixelcaster.com/live/usc-hecuba.stream/playlist.m3u8",
+    image: "https://cdn.pixelcaster.com/public.pixelcaster.com/snapshots/usc-hecuba/latest_1920x.jpg",
+    page: "https://www.usc.edu/hecuba-cam/",
+  },
+  {
+    id: "ct-178", name: "I-110 at Exposition (north)", view: "Harbor Freeway looking north toward downtown",
+    lat: 34.0198, lng: -118.2794, source: "Caltrans", heading: 10, // up the I-110 toward downtown
+    hls: "https://wzmedia.dot.ca.gov/D7/CCTV-178.stream/playlist.m3u8",
+    image: `${CT}/i110178expositionblvd/i110178expositionblvd.jpg`,
+  },
+  {
+    id: "ct-822", name: "I-110 at Exposition (south)", view: "Harbor Freeway looking south",
+    lat: 34.017754, lng: -118.280744, source: "Caltrans", heading: 190, // down the I-110
+    hls: "https://wzmedia.dot.ca.gov/D7/CCTV-822.stream/playlist.m3u8",
+    image: `${CT}/i110822soexpositionblvd/i110822soexpositionblvd.jpg`,
+  },
+  {
+    id: "ct-177", name: "I-110 at MLK Blvd", view: "Harbor Freeway by Exposition Park, looking south",
+    lat: 34.009798, lng: -118.281435, source: "Caltrans", heading: 190, // down the I-110
+    hls: "https://wzmedia.dot.ca.gov/D7/CCTV-177.stream/playlist.m3u8",
+    image: `${CT}/i110177martinlutherkingblvd/i110177martinlutherkingblvd.jpg`,
+  },
+];
