@@ -7,8 +7,9 @@ import { fmtTime, isLive, type AppState } from "./client-types";
 import type { GameInfo } from "./types";
 import { WEBCAMS } from "./webcams";
 import { eventPhoto } from "./eventPhotos";
+import { DINING_HALLS } from "./dining";
 
-export type CalloutKind = "game" | "busy" | "quiet" | "event" | "schedule" | "alert" | "alertmini" | "webcam";
+export type CalloutKind = "game" | "busy" | "quiet" | "dining" | "event" | "schedule" | "alert" | "alertmini" | "webcam";
 
 export interface Callout {
   id: string; // "ev:<id>" | "b:<buildingId>" | "al:<id>" | "cam:<id>"
@@ -22,6 +23,8 @@ export interface Callout {
   game?: { info: GameInfo; start: string };
   /** busy/quiet marker on a building that also has an event pin: drawn just above the pin, not on top of it */
   stacked?: boolean;
+  /** dining halls: how busy it is right now (absent when hidden or unknown) */
+  level?: "quiet" | "normal" | "busy" | "packed";
   /** busy/quiet ring intensity 0..1 */
   intensity?: number;
   /** webcams: compass direction the camera looks */
@@ -44,6 +47,8 @@ export interface Callout {
 
 /** The one filter row on the map. Each chip adds a layer; none hides another (Free food adds food highlights, it never hides sports). */
 export interface ChipState { games: boolean; events: boolean; food: boolean; crowds: boolean; safety: boolean; schedule: boolean; webcams: boolean }
+
+const LEVEL_WORD = { quiet: "Quiet", normal: "Normal", busy: "Busy", packed: "Packed" } as const;
 
 const ago = (iso: string, now: Date) => {
   const m = Math.max(0, Math.round((+now - +new Date(iso)) / 60_000));
@@ -68,14 +73,27 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
     }
   }
 
+  const fill = (h: AppState["hotspots"][number]) => Math.min(99, Math.round((h.count / b(h.buildingId).capacity) * 100));
+
+  // an event pin at the same building (on now or soon): lift the busy or dining marker above it
+  const t = now.getTime();
+  const hasPin = (id: string) => s.events.some((e) => e.buildingId === id && +new Date(e.end) > t && +new Date(e.start) - t < 6 * 3600_000);
+
+  // dining halls: always on the map, with how busy they are (they get no separate busy/quiet bubble)
+  const hallBuildings = new Set(Object.values(DINING_HALLS).map((d) => d.buildingId));
+  for (const d of Object.values(DINING_HALLS)) {
+    const h = s.hotspots.find((x) => x.buildingId === d.buildingId);
+    const known = h && !h.suppressed && b(d.buildingId);
+    out.push({
+      id: `b:${d.buildingId}`, kind: "dining", lng: d.lng, lat: d.lat, eyebrow: d.name, title: d.short, stacked: hasPin(d.buildingId),
+      ...(known ? { level: h.level, meta: `${LEVEL_WORD[h.level]} · ${fill(h)}%` } : {}),
+    });
+  }
+
   if (chips.crowds) {
-    const tracked = s.hotspots.filter((h) => !h.suppressed && b(h.buildingId) && ["dining", "gym", "library", "student_center"].includes(b(h.buildingId).kind));
-    const fill = (h: (typeof tracked)[number]) => Math.min(99, Math.round((h.count / b(h.buildingId).capacity) * 100));
+    const tracked = s.hotspots.filter((h) => !h.suppressed && !hallBuildings.has(h.buildingId) && b(h.buildingId) && ["dining", "gym", "library", "student_center"].includes(b(h.buildingId).kind));
     const busiest = [...tracked].filter((h) => h.level === "busy" || h.level === "packed").sort((x, y) => fill(y) - fill(x)).slice(0, 3);
     const quietest = [...tracked].filter((h) => h.level === "quiet").sort((x, y) => fill(x) - fill(y)).slice(0, 1);
-    // an event pin at the same building (on now or soon): lift the busy marker above it
-    const t = now.getTime();
-    const hasPin = (id: string) => s.events.some((e) => e.buildingId === id && +new Date(e.end) > t && +new Date(e.start) - t < 6 * 3600_000);
     for (const h of busiest) {
       const bd = b(h.buildingId);
       out.push({ id: `b:${bd.id}`, kind: "busy", lng: bd.lng, lat: bd.lat, eyebrow: bd.name, title: h.level === "packed" ? "Packed" : "Busy", meta: `${fill(h)}%`, intensity: Math.min(1, h.ratio / 2), stacked: hasPin(bd.id) });

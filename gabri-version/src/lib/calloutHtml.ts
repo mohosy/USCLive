@@ -40,6 +40,10 @@ export function calloutHTML(c: Callout, now: Date) {
   if (c.kind === "busy" || c.kind === "quiet") {
     return `<div class="bz bz-${c.kind}${c.stacked ? " bz-up" : ""}"><span class="bz-ic">${placeIcon(c.id)}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
   }
+  // dining halls: fork-and-knife marker with the short name, and how busy it is when known
+  if (c.kind === "dining") {
+    return `<div class="bz bz-dining${c.level ? ` bz-${c.level}` : ""}${c.stacked ? " bz-up" : ""}"><span class="bz-ic">${UTENSILS}</span><span class="dn-t"><b>${esc(c.title)}</b>${c.meta ? `<span>${esc(c.meta)}</span>` : ""}</span></div><div class="co-foot"></div>`;
+  }
   const title = esc(c.title);
   const meta = c.meta ? esc(c.meta) : "";
   return `<div class="co-card">

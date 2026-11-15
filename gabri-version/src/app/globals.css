@@ -730,3 +730,14 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* a busy marker on a building that also has an event pin sits just above the pin instead of on it */
 .bz-up { position: relative; top: -38px; }
 
+/* dining halls: same marker, cardinal fork and knife, name always shown; the busy word takes the level colour. */
+.bz-dining { --c: var(--cardinal); --lv: #6e6e73; padding-right: 10px; }
+.bz-dining.bz-quiet { --c: var(--cardinal); --lv: #16a34a; }
+.bz-dining.bz-normal { --lv: #ca8a04; }
+.bz-dining.bz-busy { --lv: #ea580c; }
+.bz-dining.bz-packed { --lv: #dc2626; }
+.dn-t { white-space: nowrap; font-size: 11.5px; color: #3a3a3c; }
+.dn-t b { font-weight: 650; color: #1d1d1f; }
+.dn-t span { margin-left: 5px; font-weight: 600; color: var(--lv); }
+.co-dining:hover { z-index: 30 !important; }
+.co-dining:hover .bz { transform: translateY(-2px); }
