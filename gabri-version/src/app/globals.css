@@ -350,7 +350,6 @@ html, body {
 @media (max-width: 900px) {
   .map-menu-button { left: 16px; top: calc(16px + var(--sat)); }
   .account-area { right: 16px; top: calc(16px + var(--sat)); }
-  .weather-pill { top: calc(66px + var(--sat)); right: 16px; }
   .account-content { max-height: calc(100dvh - 370px - var(--sat)); }
   .map-dock { left: 16px; right: 16px; }
   .dock-options-open { padding-bottom: 6px; }
@@ -454,12 +453,11 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { position: absolute; top: calc(70px + var(--sat)); right: 24px; z-index: 10; display: grid; grid-template-columns: auto auto; column-gap: 6px; justify-items: end; align-items: center; padding: 8px 12px; border-radius: 14px;
+.weather-pill { display: flex; align-items: center; gap: 5px; height: 40px; padding: 0 13px 0 11px; border-radius: 99px; cursor: default;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; text-align: right; transition: background-color 180ms ease; }
-.weather-pill .weather-condition, .weather-pill .weather-range { grid-column: 1 / -1; }
+  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; transition: background-color 180ms ease; }
 .weather-sun { color: #e8a200; }
-.weather-temperature { font-size: 16px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.weather-temperature { font-size: 14px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
 .weather-range { font-size: 12px; font-weight: 500; color: #6e6e73; font-variant-numeric: tabular-nums; }
 

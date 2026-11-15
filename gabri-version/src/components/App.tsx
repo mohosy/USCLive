@@ -364,6 +364,7 @@ export default function App() {
       {/* Floating glass header over the full-screen map */}
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
       <div ref={accountArea} className="account-area">
+        <WeatherPill weather={weather} />
         {/* notifications, beside your profile; opens the same panel on its Notifications tab */}
         <button onClick={() => { setAccountOpen((o) => !(o && accountTab === "notifications")); setAccountTab("notifications"); }} className="map-bell" aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}>
           <Bell size={18} strokeWidth={2} />
@@ -429,7 +430,6 @@ export default function App() {
         )}
       </div>
       {findOpen && <FindFriends me={state?.me.username} onClose={() => setFindOpen(false)} onChanged={refresh} />}
-      <WeatherPill weather={weather} />
 
       <div className="absolute inset-0">
         {/* Sidebar */}

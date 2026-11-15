@@ -67,6 +67,7 @@ import type { PlayMode } from "./walk/PlayMode";
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 /** Phones get a lighter scene: fewer pixels, no 3D trees, campus buildings only, no shadows. */
 const PHONE = typeof window !== "undefined" && window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+const TOUCH = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 
 export type MapStyle = "map" | "satellite";
 const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }> = {
@@ -1033,11 +1034,11 @@ export default function MapView(props: Props) {
       )}
       {playing && (
         <div className="play-hud">
-          <span>{PHONE ? "Push up to walk, sideways to turn" : "↑ walk · ← → turn · Shift to run · Esc to stop"}</span>
+          <span>{TOUCH ? "Push up to walk, sideways to turn" : "↑ walk · ← → turn · Shift to run · Esc to stop"}</span>
           <button type="button" onClick={stopPlay}>Done</button>
         </div>
       )}
-      {playing && PHONE && <PlayStick onMove={(x, y) => { if (play.current) play.current.stick = { x, y }; }} />}
+      {playing && TOUCH && <PlayStick onMove={(x, y) => { if (play.current) play.current.stick = { x, y }; }} />}
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}

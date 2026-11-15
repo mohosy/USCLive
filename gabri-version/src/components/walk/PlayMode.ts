@@ -11,12 +11,12 @@ import { buildTrojan } from "./trojanModel";
 type LL = { lng: number; lat: number };
 type Ring = { pts: [number, number][]; minX: number; minZ: number; maxX: number; maxZ: number };
 
-const WALK_MPS = 5; // brisk, so exploring campus doesn't drag
-const RUN_MPS = 11;
+const WALK_MPS = 9; // a jog: campus is big, so walking around shouldn't drag
+const RUN_MPS = 18;
 const BODY_M = 1.8; // keeps the (drawn larger) character off the walls
 const DRAW_SCALE = 2.8; // the Trojan is drawn bigger than life so it reads like a game character
 const CELL = 40;
-const TURN_DPS = 150; // how fast left/right turns the character (degrees per second)
+const TURN_DPS = 170; // how fast left/right turns the character (degrees per second)
 
 /** Building footprints in local meters (x east, z south), bucketed on a grid so collision checks stay cheap. */
 class Walls {
@@ -110,8 +110,9 @@ export class PlayMode {
     this.followAt = Infinity;
     if (map.isMoving() || map.isEasing()) map.once("moveend", fly);
     else fly();
-    window.addEventListener("keydown", this.down);
-    window.addEventListener("keyup", this.up);
+    // capture: the character hears its keys before the page's other shortcuts do
+    window.addEventListener("keydown", this.down, true);
+    window.addEventListener("keyup", this.up, true);
     window.addEventListener("blur", this.clear);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.tick);
@@ -122,7 +123,11 @@ export class PlayMode {
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
     if (e.key === "Escape") { this.onExit(); return; }
     const k = e.key.toLowerCase();
-    if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) { this.keys.add(k); e.preventDefault(); }
+    if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) {
+      this.keys.add(k);
+      e.preventDefault();
+      e.stopImmediatePropagation(); // W also cycles the demo weather; while you play it only walks
+    }
   };
   private up = (e: KeyboardEvent) => { this.keys.delete(e.key.toLowerCase()); };
   private clear = () => { this.keys.clear(); };
@@ -150,7 +155,7 @@ export class PlayMode {
       else if (!this.walls.blocked(this.x, this.z + dz)) this.z += dz;
     }
     if (this.started) this.layer.heading = this.hdg;
-    this.layer.timeScale = !walking ? 1.2 : k.has("shift") ? 2.6 : 1.7;
+    this.layer.timeScale = !walking ? 1.4 : k.has("shift") ? 3.4 : 2.5;
     if (going !== this.moving) { this.moving = going; this.layer.play(going ? "Walk" : "Idle"); }
     const p = this.walls.toLL(this.x, this.z);
     this.layer.pos = p;
@@ -170,8 +175,8 @@ export class PlayMode {
   destroy() {
     this.gone = true;
     cancelAnimationFrame(this.raf);
-    window.removeEventListener("keydown", this.down);
-    window.removeEventListener("keyup", this.up);
+    window.removeEventListener("keydown", this.down, true);
+    window.removeEventListener("keyup", this.up, true);
     window.removeEventListener("blur", this.clear);
     try {
       this.map.keyboard.enable();
