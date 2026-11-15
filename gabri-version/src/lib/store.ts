@@ -40,6 +40,8 @@ export interface DB {
   registrations: Registration[];
   /** friend requests waiting for an answer (see lib/friends.ts) */
   friendRequests: FriendRequest[];
+  /** changes whenever this data starts over (a demo server restart or a reset): tells a browser its saved copy is newer */
+  bootId: string;
 }
 
 /** The demo students (not real people). The demo account itself is used by a real person, so it is not in here. */
@@ -86,6 +88,7 @@ export function fresh(): DB {
     registrations: [],
     // two demo students have asked the demo student to be friends, so Accept and Decline can be tried
     friendRequests: demoRequests(+now),
+    bootId: `boot_${(+now).toString(36)}${Math.random().toString(36).slice(2, 8)}`,
   };
 }
 
@@ -107,6 +110,7 @@ export function db(): DB {
   d.registrations ??= [];
   d.friendRequests ??= demoRequests(Date.now()).filter((r) => !d.users.find((u) => u.id === ME)?.friends.includes(r.from)); // state saved before requests existed
   demoPrefs(d.users);
+  d.bootId ??= `boot_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   return d;
 }
 

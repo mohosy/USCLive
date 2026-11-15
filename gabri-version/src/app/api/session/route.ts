@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { currentUserId, db, DEMO_ID, getUser, setFriends, signInAs, signOutCookie, uniqueUsername, usernameFree } from "@/lib/store";
 import type { User } from "@/lib/types";
 import { normalizeUsername, suggestUsername, usernameProblem } from "@/lib/username";
-import { withState } from "@/lib/state";
+import { persisted, withState } from "@/lib/state";
 
 const Input = z.object({
   action: z.enum(["lookup", "signin", "signout"]),
@@ -31,6 +31,8 @@ const Input = z.object({
   username: z.string().max(40).optional(),
   /** friends added in the app, re-applied after the demo server restarts */
   friendIds: z.array(z.string().max(40)).max(500).optional(),
+  /** which run of the demo server the browser's saved friend list belongs to (see below) */
+  boot: z.string().max(60).optional(),
 });
 
 /**
@@ -66,7 +68,7 @@ async function POST_(req: Request) {
     // Google accounts open only through Google sign-in, never by typing the email
     if (me.googleAccount && !already) return Response.json({ error: "This account uses Google sign-in. Use Continue with Google." }, { status: 403 });
     // returning to your own account (page reload): nothing to change
-    if (already && !b.data.signup) return Response.json({ ok: true, username: me.username, friendIds: me.friends });
+    if (already && !b.data.signup) return Response.json({ ok: true, username: me.username, friendIds: me.friends, boot: db().bootId });
   }
   if (!me) {
     me = { id: `u_${randomUUID().replace(/-/g, "").slice(0, 16)}`, name: email, avatar: "?", school: "all", year: "", major: "", friends: [], classes: [], interests: [], orgs: [] };
@@ -86,8 +88,10 @@ async function POST_(req: Request) {
     const demo = seedUsers(new Date()).find((u) => u.id === DEMO_ID)!; // the demo student's schedule, friends and clubs
     Object.assign(me, {
       ...base, name: entry.name, avatar: initialsOf(entry.name), school: entry.school, major: entry.major, year: entry.year, email: entry.email, verified: true,
-      interests: (b.data.interests ?? demo.interests).filter((i) => INTERESTS.includes(i)), classes: demo.classes, friends: demo.friends, orgs: demo.orgs,
+      interests: (b.data.interests ?? demo.interests).filter((i) => INTERESTS.includes(i)), classes: demo.classes, orgs: demo.orgs,
     });
+    // friends are not reset here: the demo student starts with the seeded friends, and from then on friendships
+    // change only through friend requests (or the after-restart restore below)
   } else {
     if (!existing && !b.data.signup) return Response.json({ error: "Create your account first." }, { status: 400 });
     if (existing) {
@@ -108,14 +112,19 @@ async function POST_(req: Request) {
   applyProfile(me, existing ? { ...(b.data.profile ?? {}), ...(b.data.creatorOrgId !== undefined ? { creatorOrgId: b.data.creatorOrgId } : {}) } : { ...(b.data.profile ?? {}), creatorOrgId: b.data.creatorOrgId ?? null });
   // a returning account that sent no username keeps the one it had
   me.username = wanted ?? uniqueUsername(existing?.username ?? suggestUsername(b.data.email.split("@")[0]), me.id);
-  // friends: what the browser saved (after adds/removes), else the defaults above; always both ways
-  if (b.data.friendIds) {
+  // Friends: the server's list is the truth (friendships are made by requests, see /api/friends). The one exception is
+  // the demo server without a database, which forgets everything when it restarts: then, and only when the browser's
+  // saved list is from before that restart, the saved list is put back. With a database a browser can never set friends.
+  const d = db();
+  if (!persisted() && b.data.friendIds && b.data.boot !== d.bootId) {
     for (const id of [...me.friends]) { const u = getUser(id); if (u) setFriends(me, u, false); }
-    for (const id of b.data.friendIds) { const u = getUser(id); if (u && u.id !== me.id) setFriends(me, u, true); }
+    for (const id of b.data.friendIds) { const u = getUser(id); if (u && u.id !== me.id && !u.id.startsWith("anon")) setFriends(me, u, true); }
+    // someone who is a friend again has no request waiting
+    d.friendRequests = d.friendRequests.filter((r) => !((r.from === me.id && me.friends.includes(r.to)) || (r.to === me.id && me.friends.includes(r.from))));
   } else {
     for (const id of me.friends) { const u = getUser(id); if (u) setFriends(me, u, true); }
   }
-  return Response.json({ ok: true, username: me.username, friendIds: me.friends });
+  return Response.json({ ok: true, username: me.username, friendIds: me.friends, boot: d.bootId });
 }
 
 export const POST = withState(POST_);

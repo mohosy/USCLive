@@ -7,7 +7,7 @@ import { gameState } from "@/lib/games";
 import type { SchoolId } from "@/lib/types";
 import { BookOpen, Briefcase, Trophy, Users, Utensils, Volleyball, Waves, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Avatar, Chip, Tag, cx, inputCls } from "./ui";
+import { Avatar, Chip, cx, inputCls } from "./ui";
 
 const CATS: Category[] = [...EVENT_TYPES];
 
@@ -44,16 +44,17 @@ export function EventRow({ e, loc, onOpen, now }: { e: EventView; loc: Loc; onOp
       </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px] font-semibold leading-snug">{e.title}</div>
-        <div className="flex min-w-0 items-center gap-1.5 text-[13px] leading-snug text-muted">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-[13px] leading-snug text-muted">
           {g ? (
             <span className="truncate">
               <b className="font-semibold tabular-nums text-foreground">{e.game!.home} {g.home} – {g.away}</b>{" · "}
               <span className="font-semibold tabular-nums text-amber-700">{g.final ? "Final" : `${g.period} ${g.clock}`}</span> · {place}
             </span>
           ) : (
-            <span className="truncate">{place} · {whenLine(e, now)}{status ? ` · ${status}` : ""}</span>
+            <span className="min-w-0 shrink truncate">{place} · {whenLine(e, now)}{status ? ` · ${status}` : ""}</span>
           )}
-          {e.freeFood && <span className="shrink-0"><Tag tone="food">{e.foodDetail ?? "Free food"}</Tag></span>}
+          {/* a long food note gives way before the place and time do; a schedule clash takes its place when there is one */}
+          {e.freeFood && !e.conflict && <span className="min-w-[3.5rem] shrink-[10] truncate rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800" title={e.foodDetail ?? "Free food"}>{e.foodDetail ?? "Free food"}</span>}
           {by && <span className="shrink-0 font-semibold text-cardinal">{by}</span>}
           {e.conflict && <span className="shrink-0 font-semibold text-cardinal">{e.conflict}</span>}
         </div>

@@ -1,3 +1,4 @@
+import { prefsOf } from "@/lib/prefs";
 import { after, connection } from "next/server";
 import { runWithState } from "@/lib/state";
 import { aiEnabled } from "@/lib/ai";
@@ -25,6 +26,7 @@ async function GET_() {
     aiEnabled: aiEnabled(),
     me: {
       ...me,
+      prefs: prefsOf(me),
       // the photo is served once as an image (cacheable), not re-sent inside every refresh
       photo: me.photo ? `/api/profile/photo?v=${photoVersion(me.photo)}` : undefined,
       friends: me.friends.map((id) => {

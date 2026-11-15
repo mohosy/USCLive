@@ -379,8 +379,10 @@ export default function Google3DView(props: Props) {
         // maximumScreenSpaceError 24 (default 16): a bit less detail -> far fewer tiles, sharp much sooner
         loadOptions: { fetch: { headers: { "X-GOOG-API-KEY": KEY } }, tileset: { maximumScreenSpaceError: PHONE ? 40 : 24, maximumMemoryUsage: 256, memoryAdjustedScreenSpaceError: true } },
         operation: "terrain+draw",
-        onTileLoad: () => { tileGen.current++; },
-        onTileError: () => setError("Google 3D tiles failed to load. Check that the Map Tiles API is enabled for this key."),
+        // a loaded tile proves the key works: clear any earlier error
+        onTileLoad: () => { tileGen.current++; setError((e) => (e ? null : e)); },
+        // one dropped tile out of hundreds is a network blip, not a broken key: only say so when nothing has loaded
+        onTileError: () => { if (tileGen.current === 0) setError("Google 3D tiles failed to load. Check that the Map Tiles API is enabled for this key."); },
         onTilesetLoad: (tileset: Tileset3D) => {
           // Google requires showing the data providers for the tiles on screen
           tileset.options.onTraversalComplete = (selected) => {

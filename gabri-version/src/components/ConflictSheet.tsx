@@ -2,6 +2,7 @@
 
 import { CalendarClock, Footprints } from "lucide-react";
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { Conflict } from "@/lib/conflicts";
 import { Button } from "./ui";
 
@@ -23,7 +24,8 @@ export default function ConflictSheet({ title, conflicts, busy, goLabel = "Regis
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [onCancel]);
-  return (
+  // drawn on the page itself, not inside the side panel: the panel's frosted glass would otherwise confine it to the panel
+  return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/25 p-4 sm:items-center" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div role="alertdialog" aria-label="Schedule conflict" className="fade-in w-full max-w-sm rounded-2xl border border-line bg-white p-4 shadow-2xl">
         <div className="text-[15px] font-semibold leading-snug">This clashes with your schedule</div>
@@ -41,6 +43,7 @@ export default function ConflictSheet({ title, conflicts, busy, goLabel = "Regis
           <Button variant="secondary" className="flex-1 whitespace-nowrap !rounded-full" disabled={busy} onClick={onCancel}>Cancel</Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

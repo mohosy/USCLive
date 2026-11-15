@@ -29,7 +29,7 @@ import type { Conflict } from "@/lib/conflicts";
 import MenuPanel from "./MenuPanel";
 import WeatherPill from "./weather/WeatherPill";
 import { useCampusWeather } from "./weather/useCampusWeather";
-import SignIn, { clearSession, loadSession, saveGoogleSession, signIn, type GooglePrefill } from "./SignIn";
+import SignIn, { clearSession, loadSession, saveGoogleSession, signIn, updateSavedSession, type GooglePrefill } from "./SignIn";
 import FindFriends from "./FindFriends";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
@@ -427,6 +427,10 @@ export default function App() {
   const openMe = useCallback(() => setMeCard({ accuracyM: meLive.current.accuracyM }), []);
   const closeMe = useCallback(() => setMeCard(null), []);
   const playAsked = useCallback(() => setPlayAsk(false), []);
+  // the browser's saved friend list follows the server's (it is only used to put friends back after a demo-server restart)
+  const friendKey = state?.me.friends.map((f) => f.id).join(",");
+  useEffect(() => { if (friendKey !== undefined) updateSavedSession({ friendIds: friendKey ? friendKey.split(",") : [] }); }, [friendKey]);
+
   /** Accept or decline a friend request from the Notifications list. */
   async function answerFriend(n: Notification, accept: boolean) {
     try { await api("/api/friends", { json: { userId: n.fromUserId, action: accept ? "accept" : "decline" } }); } catch { /* already answered somewhere else */ }
@@ -499,7 +503,8 @@ export default function App() {
               {accountTab === "notifications" && <div className="p-2">
                 {unread > 0 && <div className="flex justify-end px-2 pb-2"><button onClick={markAllRead} className="min-h-10 text-sm font-medium text-cardinal">Mark all read</button></div>}
                 {!notifs.length && <p className="px-3 py-8 text-center text-sm text-muted">You&apos;re all caught up.</p>}
-                {notifs.map((n) => n.fromUserId ? (
+                {/* friend requests waiting for an answer stay at the top, above newer notifications */}
+                {[...notifs.filter((n) => n.fromUserId), ...notifs.filter((n) => !n.fromUserId)].map((n) => n.fromUserId ? (
                   // a friend request: answer it right here
                   <div key={n.id} className="menu-item !items-start !cursor-default">
                     <span className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-cardinal" />
