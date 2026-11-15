@@ -85,6 +85,30 @@ What is real, what only opens another site, and what would need USC.
 - The rate limit is kept in one server's memory; on a host running several copies each copy counts separately.
 - Run the rule checks with `node scripts/check-registration.mjs`.
 
+## Friends, profile and settings: real vs demo
+**Real, working now**
+- Friend requests: search by name or @username, or scan someone's QR code (it opens `/?add=<username>`). Send, accept, decline,
+  cancel and unfriend go through `POST /api/friends`; who is asking always comes from the session cookie. No duplicates, you
+  can't add yourself, and asking someone who already asked you accepts their request. Rules in `src/lib/friends.ts`.
+- Requests to you show at the top of Notifications with Accept and Decline. The friends list says what you share
+  ("2 classes, 1 event together").
+- Settings (`src/lib/prefs.ts`) save the moment you change them, on your account, and are re-applied when you sign back in.
+  Privacy is all off by default. "Show events I'm going to" is enforced on the server: friends only see "Maya is going" for
+  friends who turned it on. Each Notifications switch hides that kind of notification.
+- Your Trojan's plume and cape colours show on your profile avatar and on your Trojan in Explore and in play mode.
+
+**Demo behaviour, on purpose**
+- The demo students are not real people, so a request sent to one is accepted automatically after about 8 seconds. Requests
+  between real accounts wait for a real answer. Two demo students have a request waiting for the demo student.
+- Demo students have "Show events I'm going to" switched on so the map has friends on it.
+
+**Not built**
+- Viewing someone else's profile page. The profile page shows your own, as others would see it.
+- "Share my location with friends" and "Who can see my schedule" are saved, but nothing in the app shares a location or a
+  schedule with anyone yet, so turning them on changes nothing today.
+- The jersey number shows on the profile avatar only, and the Satellite view's Trojan keeps the default colours.
+- Run the rule checks with `node scripts/check-friends.mjs`.
+
 ## Security notes (for the "securely" part of the rubric)
 - All flyer/email/web text is passed to Claude as delimited untrusted data; system prompts forbid following instructions inside it.
 - Structured outputs + zod re-validation; building ids constrained to an enum; hallucinated event ids dropped.

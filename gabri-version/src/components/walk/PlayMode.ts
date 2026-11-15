@@ -7,7 +7,7 @@
 import mapboxgl from "mapbox-gl";
 import type { Feature, FeatureCollection, Position } from "geojson";
 import { CharacterLayer } from "./WalkGuide";
-import { buildTrojan } from "./trojanModel";
+import { buildMyTrojan, buildTrojan } from "./trojanModel";
 
 type LL = { lng: number; lat: number };
 type Ring = { pts: [number, number][]; minX: number; minZ: number; maxX: number; maxZ: number; h: number };
@@ -105,7 +105,7 @@ export class PlayMode {
   private flying = false;
   get isActive() { return this.active && !this.gone; }
 
-  constructor(private map: mapboxgl.Map, start: LL, buildings: (FeatureCollection | null | undefined)[], private onExit: () => void, private onFollow: (on: boolean) => void = () => {}) {
+  constructor(private map: mapboxgl.Map, start: LL, buildings: (FeatureCollection | null | undefined)[], private onExit: () => void, private onFollow: (on: boolean) => void = () => {}, colors?: { plume: string; cape: string }) {
     this.walls = new Walls(start.lat, start.lng);
     for (const fc of buildings) this.walls.add(fc);
     // if "you" are standing inside a building's footprint, step out to the nearest open spot
@@ -115,7 +115,7 @@ export class PlayMode {
         if (!this.walls.blocked(x, z)) { this.x = x; this.z = z; break outer; }
       }
     }
-    this.layer = new CharacterLayer(buildTrojan(), this.walls.toLL(this.x, this.z));
+    this.layer = new CharacterLayer(colors ? buildMyTrojan(colors) : buildTrojan(), this.walls.toLL(this.x, this.z)); // your plume and cape colours
     this.layer.scale = this.drawScale();
     this.layer.alwaysOnTop = true;
     this.layer.id = "play-character"; // its own layer: a tour's guide can be on the map at the same time

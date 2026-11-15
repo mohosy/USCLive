@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, type EventView } from "@/lib/client-types";
-import type { SchoolId } from "@/lib/types";
+import type { SchoolId, UserPrefs } from "@/lib/types";
 import { loadSession, signIn } from "../SignIn";
 
 export interface ProfileView {
@@ -23,12 +23,20 @@ export interface ProfileView {
   creatorOrgId: string | null;
   creatorOrgName: string | null;
   friendsCount: number;
+  /** clubs and orgs you belong to */
+  clubs: { id: string; name: string; logo?: string }[];
+  /** Settings (your Trojan's look, privacy, notifications, map) */
+  prefs: UserPrefs;
 }
 export interface ProfileData {
   profile: ProfileView;
   upcoming: EventView[];
   past: EventView[];
   hosting: EventView[];
+  /** events you are going to in the next 7 days */
+  goingThisWeek: number;
+  /** your friends, each with what you share ("2 classes, 1 event together"; empty when nothing) */
+  friends: { id: string; name: string; avatar: string; photo?: string; username: string; shared: string }[];
 }
 
 /**

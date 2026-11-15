@@ -2,6 +2,7 @@ import { z } from "zod";
 import { initialsOf, INTERESTS } from "./directory";
 import { ORGS } from "./orgs";
 import type { User } from "./types";
+import { mergePrefs, prefsOf } from "./prefs";
 
 export const PRONOUNS = ["she/her", "he/him", "they/them", "she/they", "he/they"];
 
@@ -22,6 +23,8 @@ export const ProfileInput = z.object({
   interests: z.array(z.string().max(40)).max(20).optional(),
   accountType: z.enum(["student", "creator"]).optional(),
   creatorOrgId: z.string().max(40).nullable().optional(),
+  /** Settings (your Trojan, privacy, notifications, map): any part of it; checked field by field in lib/prefs.ts */
+  prefs: z.record(z.string(), z.unknown()).optional(),
 });
 export type ProfilePatch = z.infer<typeof ProfileInput>;
 
@@ -38,6 +41,7 @@ export function applyProfile(u: User, p: ProfilePatch) {
   if (p.accountType !== undefined) u.accountType = p.accountType;
   if (p.creatorOrgId !== undefined) u.creatorOrgId = p.creatorOrgId && ORGS.some((o) => o.id === p.creatorOrgId) ? p.creatorOrgId : undefined;
   if (u.accountType !== "creator") u.creatorOrgId = undefined;
+  if (p.prefs !== undefined) u.prefs = mergePrefs(prefsOf(u), p.prefs);
 }
 
 /** Short stable hash of the photo, so its URL changes only when the photo does (lets the browser cache it). */

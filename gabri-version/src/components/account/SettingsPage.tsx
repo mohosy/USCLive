@@ -7,7 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { api } from "@/lib/client-types";
 import { INTERESTS } from "@/lib/directory";
-import { loadMapLighting, loadShowPeople, saveMapLighting, saveShowPeople, type MapLighting } from "@/lib/mapLighting";
+import { loadMapLighting, loadShowPeople, saveMapLighting, saveOpenIn, saveShowPeople, type MapLighting } from "@/lib/mapLighting";
+import { mergePrefs } from "@/lib/prefs";
+import type { UserPrefs } from "@/lib/types";
+import { PrefsCards, Segmented, type SavePrefs } from "./PrefsCards";
 import { AccountTypePicker, clearSession, updateSavedSession, type AccountType } from "../SignIn";
 import { Avatar, cx, inputCls } from "../ui";
 import { UsernameInput, useUsernameStatus } from "../UsernameField";
@@ -63,6 +66,19 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
   // a preference kept in this browser; it applies straight away, without the Save bar (this form only renders in the browser)
   const [lighting, setLighting] = useState<MapLighting>(loadMapLighting);
   const [people, setPeople] = useState(loadShowPeople);
+  // Settings that save the moment you change them (your Trojan, privacy, notifications, where the map opens)
+  const [prefs, setPrefs] = useState<UserPrefs>(initial.prefs);
+  const [prefsErr, setPrefsErr] = useState<string | null>(null);
+  const savePrefs: SavePrefs = (patch) => {
+    const before = prefs;
+    const next = mergePrefs(prefs, patch);
+    setPrefs(next); setPrefsErr(null);
+    if (patch.map?.openIn) saveOpenIn(next.map.openIn);
+    api<{ profile: ProfileView }>("/api/profile", { method: "PATCH", json: { prefs: patch } })
+      .then((r) => { setPrefs(r.profile.prefs); updateSavedSession({ profile: { prefs: r.profile.prefs as unknown as Record<string, unknown> } }); })
+      .catch((e) => { setPrefs(before); setPrefsErr(`That change was not saved: ${(e as Error).message}`); });
+  };
+  useEffect(() => { saveOpenIn(initial.prefs.map.openIn); }, [initial.prefs.map.openIn]);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -169,6 +185,9 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
         </div>
       </Card>
 
+      {prefsErr && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{prefsErr}</p>}
+      <PrefsCards prefs={prefs} save={savePrefs} firstName={name.trim().split(/\s+/)[0] || "Your name"} />
+
       <Card title="USC account" subtitle={initial.verified ? "These come from USC's directory and can't be changed here." : "Set when you created your account and can't be changed. In the real app these come from your USC sign-in."}>
         <div className="divide-y divide-line rounded-xl border border-line">
           <Locked label="Email" value={initial.email || "—"} />
@@ -200,6 +219,10 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
             ))}
           </div>
         </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+          <div className="text-sm font-medium" id="map-open-label">Open in</div>
+          <Segmented labelledBy="map-open-label" value={prefs.map.openIn} options={[["explore", "Explore"], ["satellite", "Satellite"]] as const} onChange={(openIn) => savePrefs({ map: { openIn } })} />
+        </div>
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
           <div>
             <div className="text-sm font-medium" id="map-people-label">Show people on the map</div>
@@ -210,6 +233,10 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
             <span className={cx("absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform", people && "translate-x-4")} />
           </button>
         </div>
+      </Card>
+
+      <Card title="Connected" subtitle="Other accounts linked to USCLive.">
+        <Connected />
       </Card>
 
       <div className="mt-6">
@@ -242,6 +269,25 @@ function Card({ title, subtitle, children, refEl }: { title: string; subtitle?: 
       {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
       <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+/** Google Calendar: whether it is linked, read from the server. Linking happens from the Home panel on the map. */
+function Connected() {
+  const [g, setG] = useState<{ configured: boolean; connected: boolean } | null>(null);
+  useEffect(() => {
+    let live = true;
+    api<{ configured: boolean; connected: boolean }>("/api/auth/google/status").then((r) => { if (live) setG(r); }).catch(() => { if (live) setG({ configured: false, connected: false }); });
+    return () => { live = false; };
+  }, []);
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-line px-3.5 py-2.5 text-sm">
+      <div className="min-w-0">
+        <div className="font-medium">Google Calendar</div>
+        <div className="text-xs text-muted">{!g ? "Checking…" : g.connected ? "Your calendar syncs to the Home panel. USCLive only reads it." : g.configured ? "Not connected. Connect it from the Home panel on the map." : "Not available on this server."}</div>
+      </div>
+      <span className={cx("shrink-0 rounded-full px-2.5 py-1 text-xs font-medium", g?.connected ? "bg-emerald-50 text-emerald-700" : "bg-surface text-muted")}>{g?.connected ? "Connected" : "Not connected"}</span>
+    </div>
   );
 }
 

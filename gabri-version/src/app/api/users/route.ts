@@ -1,5 +1,6 @@
 import { connection } from "next/server";
-import { db, getMe, usernameFree } from "@/lib/store";
+import { db, getMe, settleFriendRequests, usernameFree } from "@/lib/store";
+import { relation, sharedWith } from "@/lib/friends";
 import { normalizeUsername, usernameProblem } from "@/lib/username";
 import type { User } from "@/lib/types";
 import { withState } from "@/lib/state";
@@ -11,6 +12,10 @@ function personView(u: User, me: User) {
     id: u.id, name: u.name, avatar: u.avatar, photo: u.photo?.startsWith("/") ? u.photo : undefined, username: u.username ?? "",
     school: u.school, major: u.major, year: u.year,
     isFriend: me.friends.includes(u.id),
+    /** friends | outgoing (you asked) | incoming (they asked) | none */
+    relation: relation(db().users, db().friendRequests, me.id, u.id),
+    /** what you share with a friend: "2 classes, 1 event together" (empty when nothing) */
+    shared: me.friends.includes(u.id) ? sharedWith(me, u, db().events, Date.now()).line : "",
     mutualCount: mutual.length,
     mutualNames: mutual.slice(0, 2).map((id) => db().users.find((x) => x.id === id)?.name.split(" ")[0] ?? ""),
   };
@@ -34,16 +39,19 @@ async function GET_(req: Request) {
     return Response.json({ username: u, available: !problem && usernameFree(u, me.id), problem: problem ?? (usernameFree(u, me.id) ? null : "Taken") });
   }
 
+  settleFriendRequests();
   const others = db().users.filter((u) => u.id !== me.id && !u.id.startsWith("anon"));
   const q = normalizeUsername(url.searchParams.get("q") ?? "").slice(0, 40);
   if (!q) {
     const friends = others.filter((u) => me.friends.includes(u.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const asked = new Set(db().friendRequests.filter((r) => r.to === me.id).map((r) => r.from));
+    const incoming = others.filter((u) => asked.has(u.id)).map((u) => personView(u, me));
     const suggested = others
-      .filter((u) => !me.friends.includes(u.id))
+      .filter((u) => !me.friends.includes(u.id) && !asked.has(u.id))
       .map((u) => personView(u, me))
       .sort((a, b) => b.mutualCount - a.mutualCount || a.name.localeCompare(b.name))
       .slice(0, 8);
-    return Response.json({ friends: friends.map((u) => personView(u, me)), suggested });
+    return Response.json({ friends: friends.map((u) => personView(u, me)), suggested, incoming });
   }
   // rank: exact @username, username starts with, name word starts with, contains anywhere
   const score = (u: User) => {

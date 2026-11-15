@@ -678,6 +678,11 @@ export function buildTrojan(): CharacterAsset {
   return cached;
 }
 
+/** Your own Trojan: the mascot with your plume and cape colours (Settings > Your Trojan). Not shared with the tour guide. */
+export function buildMyTrojan(colors: { plume: string; cape: string }): CharacterAsset {
+  return { scene: makeScene({ ...MASCOT, plume: colors.plume, cape: colors.cape }), animations: clips() };
+}
+
 let glbUrl: Promise<string> | null = null;
 /** The same character as a .glb blob URL, for deck.gl's ScenegraphLayer (photoreal 3D tour). */
 export function trojanGlbUrl(): Promise<string> {

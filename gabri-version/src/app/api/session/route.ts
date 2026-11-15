@@ -26,7 +26,7 @@ const Input = z.object({
   accountType: z.enum(["student", "creator"]).optional(),
   creatorOrgId: z.string().max(40).nullable().optional(),
   // profile edits saved in the browser, re-applied after the demo server restarts
-  profile: ProfileInput.pick({ name: true, pronouns: true, bio: true, photo: true }).optional(),
+  profile: ProfileInput.pick({ name: true, pronouns: true, bio: true, photo: true, prefs: true }).optional(),
   /** @username: required for a new account; demo students default to their email name */
   username: z.string().max(40).optional(),
   /** friends added in the app, re-applied after the demo server restarts */

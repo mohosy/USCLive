@@ -11,7 +11,7 @@ import { Button, cx, inputCls } from "./ui";
 import { UsernameInput, useUsernameStatus } from "./UsernameField";
 
 export type AccountType = "student" | "creator";
-export interface SavedProfile { name?: string; pronouns?: string; bio?: string; photo?: string | null }
+export interface SavedProfile { name?: string; pronouns?: string; bio?: string; photo?: string | null; /** Settings, re-applied after the demo server restarts */ prefs?: Record<string, unknown> }
 export interface Signup { firstName: string; lastName: string; school: SchoolId }
 export interface Session {
   email: string;
