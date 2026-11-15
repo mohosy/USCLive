@@ -724,4 +724,6 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .toast { display: flex; align-items: center; gap: 10px; }
 .toast-ic { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background: #fff; color: var(--cardinal); box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
 .toast-text { min-width: 0; flex: 1; }
+/* the walk button while you play: lit (tap it again to stop) */
+.mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"], .map-app[data-night="true"] .mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"] { background: var(--cardinal) !important; color: #fff; }
 

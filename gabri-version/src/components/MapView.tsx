@@ -375,8 +375,8 @@ export default function MapView(props: Props) {
   const walkers = useRef<CampusCrowd | null>(null); // people walking the campus paths to events
   const play = useRef<PlayMode | null>(null); // "play as your Trojan"
   const locateEl = useRef<HTMLDivElement | null>(null);
+  const playEl = useRef<HTMLButtonElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [following, setFollowing] = useState(false); // play mode: is the camera locked behind your Trojan?
   const togglePlay = useRef<() => void>(() => {});
   const recallPlay = useRef<() => void>(() => {});
   const onArrive = useRef<(eventId: string) => void>(() => {}); // set below, once popArrival exists
@@ -633,7 +633,9 @@ export default function MapView(props: Props) {
       b.type = "button";
       b.className = "mapboxgl-ctrl-play";
       b.setAttribute("aria-label", "Walk around as your Trojan");
-      b.title = "Walk around as your Trojan (double-click to bring it back to you)";
+      b.title = "Walk as your Trojan: arrows to walk, Shift to run, Space to jump, click the map to teleport. Tap again to stop; double-click brings it back to you.";
+      b.setAttribute("aria-pressed", "false");
+      playEl.current = b;
       b.innerHTML = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="1.6"/><path d="m9 20 3-6 3 6"/><path d="m6 8.5 6 1.5 6-1.5"/><path d="M12 10v4"/></svg>';
       // one tap: go to your Trojan (or park it); two taps: pick it up and fly it back to you
       let pending: ReturnType<typeof setTimeout> | undefined;
@@ -877,7 +879,6 @@ export default function MapView(props: Props) {
   function stopPlay() {
     play.current?.park();
     setPlaying(false);
-    setFollowing(false);
   }
   // the walk button in the zoom pill turns cardinal while you're playing
   useEffect(() => { map.current?.getContainer().querySelector(".mapboxgl-ctrl-play")?.setAttribute("aria-pressed", String(playing)); }, [playing]);
@@ -892,7 +893,7 @@ export default function MapView(props: Props) {
       // the 3D character engine loads on demand (same as tours), so the page stays light until you play
       void import("./walk/PlayMode").then(({ PlayMode }) => {
         if (map.current !== m || play.current) return;
-        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay, setFollowing);
+        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay, () => {});
         play.current.setLight(cb.current.light);
         // while playing, tap anywhere on the map (not on a pin or a bubble) to jump your Trojan there
         const jump = (e: mapboxgl.MapMouseEvent) => {
@@ -915,6 +916,8 @@ export default function MapView(props: Props) {
   });
   useEffect(() => () => { play.current?.destroy(); }, []);
   useEffect(() => { play.current?.setLight(props.light); }, [props.light]);
+  // the walk button stays lit while you play (tap it again to stop)
+  useEffect(() => { playEl.current?.setAttribute("aria-pressed", playing ? "true" : "false"); }, [playing]);
   useEffect(() => {
     const el = locateEl.current;
     if (!el) return;
@@ -1078,15 +1081,6 @@ export default function MapView(props: Props) {
       {rotateHint && !props.walk && (
         <div className="glass fade-in pointer-events-none absolute left-1/2 top-[calc(1.25rem+var(--sat))] z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
           Swipe sideways with two fingers to turn the map · <span className="text-muted">⌥ + swipe to tilt</span>
-        </div>
-      )}
-      {playing && (
-        <div className="play-hud">
-          <span>{TOUCH ? "Push up to walk · tap the map to jump" : "↑ walk · ← → turn · Shift to run · click the map to jump · Esc to stop"}</span>
-          <button type="button" className={following ? "play-follow play-follow-on" : "play-follow"} aria-pressed={following}
-            title={following ? "The camera is following your Trojan (drag the map to look around)" : "Lock the camera behind your Trojan (or click your Trojan)"}
-            onClick={() => play.current?.setFollow(!following)}>{following ? "Following" : "Follow"}</button>
-          <button type="button" onClick={stopPlay}>Done</button>
         </div>
       )}
       {playing && TOUCH && <PlayStick onMove={(x, y) => { if (play.current) play.current.stick = { x, y }; }} />}

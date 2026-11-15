@@ -118,7 +118,7 @@ export function seedEvents(now: Date): CampusEvent[] {
     e({ title: "Hack night: build an AI agent", description: "Bring a laptop; mentors walk you through building an agent with tool use. Pizza at 9.", category: "student", buildingId: "sgm", room: "SGM 101",
       start: inMin(now, -10).toISOString(), end: inMin(now, 110).toISOString(), host: { kind: "usc", name: "tiehub (Viterbi Innovation & Entrepreneurship)", id: "org_startup" },
       visibility: "public", freeFood: true, foodDetail: "Pizza at 9", attendees: ["u_ethan", "u_ryan", "u_nina", ...crowd(55, "hn")], tags: ["AI"], expectedTurnout: 70 }),
-    e({ title: "Film club screening: Spider-Verse", description: "Big screen in Norris, popcorn provided.", category: "student", buildingId: "sci", room: "Norris Theatre",
+    e({ title: "Movie night: Spider-Verse", description: "Big screen in Norris, popcorn provided.", category: "student", buildingId: "sci", room: "Norris Theatre",
       start: inMin(now, 30).toISOString(), end: inMin(now, 150).toISOString(), host: { kind: "user", name: "Maya Chen", id: "u_maya" },
       visibility: "open", capacity: 120, freeFood: true, foodDetail: "Free popcorn", attendees: ["u_maya", "u_sofia", ...crowd(46, "fs")], tags: ["film"], expectedTurnout: 90 }),
     e({ title: "Open mic at Parkside", description: "Sign up at the door: music, poetry, comedy.", category: "student", buildingId: "pks",
@@ -194,7 +194,7 @@ export function seedEvents(now: Date): CampusEvent[] {
     e({ title: "WRIT 340 peer review swap", description: "Bring a draft of the persuasive essay, we'll swap and mark up.", category: "academic", buildingId: "dml", room: "Doheny 2nd floor",
       start: dayAt(now, 1, 15).toISOString(), end: dayAt(now, 1, 16, 30).toISOString(), host: { kind: "user", name: "Sofia Martinez", id: "u_sofia" },
       visibility: "open", course: "WRIT 340", capacity: 8, freeFood: false, attendees: ["u_sofia", ...crowd(2)], tags: [], expectedTurnout: 6 }),
-    e({ title: "Startup Garage weekly build night", description: "Bring your side project. Mentors floating around.", category: "student", buildingId: "rth", room: "RTH 115",
+    e({ title: "Founders build night", description: "Bring your side project. Mentors floating around.", category: "student", buildingId: "rth", room: "RTH 115",
       start: dayAt(now, 3, 19).toISOString(), end: dayAt(now, 3, 22).toISOString(), host: { kind: "usc", name: "tiehub (Viterbi Innovation & Entrepreneurship)", id: "org_startup" },
       visibility: "public", schools: ["viterbi"], capacity: 60, freeFood: true, foodDetail: "Snacks + Red Bull", attendees: crowd(23), tags: ["build"], expectedTurnout: 40 }),
     e({ title: "Boba & board games", description: "Monthly social, all welcome.", category: "student", buildingId: "vil",
@@ -240,15 +240,15 @@ export function seedEvents(now: Date): CampusEvent[] {
 /** Events the demo student went to in the past few weeks (shown under "Past" on their profile). */
 export function seedHistory(now: Date): CampusEvent[] {
   const past: (Seed & { daysAgo: number; h: number; m?: number; durMin: number })[] = [
-    { daysAgo: 2, h: 18, durMin: 120, title: "Startup Garage weekly build night", description: "Heads-down build session with mentors and pizza.", category: "student", buildingId: "rth", room: "RTH 526",
+    { daysAgo: 2, h: 18, durMin: 120, title: "Founders build night", description: "Heads-down build session with mentors and pizza.", category: "student", buildingId: "rth", room: "RTH 526",
       start: "", end: "", host: { kind: "usc", name: "tiehub (Viterbi Innovation & Entrepreneurship)", id: "org_startup" }, visibility: "public", freeFood: true, foodDetail: "Pizza", attendees: crowd(34, "h1") },
     { daysAgo: 4, h: 17, durMin: 90, title: "CSCI 104 TA review: linked lists & recursion", description: "TA-led review before HW4.", category: "academic", buildingId: "sal", room: "SAL 101",
-      start: "", end: "", host: { kind: "usc", name: "CSCI 104 course staff" }, visibility: "school", schools: ["viterbi"], course: "CSCI 104", freeFood: false, attendees: crowd(48, "h2") },
+      start: "", end: "", host: { kind: "usc", name: "CSCI 104 Course Staff" }, visibility: "school", schools: ["viterbi"], course: "CSCI 104", freeFood: false, attendees: crowd(48, "h2") },
     { daysAgo: 6, h: 12, durMin: 240, title: "Fall Career Fair: Tech & Engineering", description: "120+ employers hiring for internships and full-time.", category: "career", buildingId: "gal",
       start: "", end: "", host: { kind: "usc", name: "USC Career Center", id: "org_career" }, visibility: "public", freeFood: false, attendees: crowd(410, "h3") },
     { daysAgo: 9, h: 20, durMin: 120, title: "Boba & board games", description: "Catan, Codenames and 40+ other games.", category: "student", buildingId: "tcc",
       start: "", end: "", host: { kind: "org", name: "Spoon University USC", id: "org_boba" }, visibility: "public", freeFood: true, foodDetail: "Free boba", attendees: crowd(57, "h4") },
-    { daysAgo: 13, h: 7, m: 30, durMin: 60, title: "Sunrise run club: 5K around Expo Park", description: "Easy pace, coffee after.", category: "sports_play", buildingId: "tommy",
+    { daysAgo: 13, h: 7, m: 30, durMin: 60, title: "Sunrise 5K around Expo Park", description: "Easy pace, coffee after.", category: "sports_play", buildingId: "tommy",
       start: "", end: "", host: { kind: "user", name: "Jordan Lee", id: "u_jordan" }, visibility: "open", freeFood: false, attendees: ["u_jordan", ...crowd(14, "h5")] },
   ];
   return past.map(({ daysAgo, h, m, durMin, ...s }, i) => {

@@ -18,7 +18,8 @@ const MAP_MAX_ZOOM = 19.5;
 const WALK_MPS = 9; // quick, so getting across campus doesn't drag
 const RUN_MPS = 20; // hold Shift
 const BODY_M = 1.8; // keeps the (drawn larger) character off the walls
-const DRAW_SCALE = 2.8; // the Trojan is drawn bigger than life so it reads like a game character
+/** the Trojan is drawn the same size as everyone else on the map: ~2.4 m up close, ~24 px tall zoomed out */
+const MIN_SCALE = 1.2; // x the model's 2 m = 2.4 m
 const CELL = 40;
 const TURN_DPS = 170; // how fast left/right turns the character (degrees per second)
 
@@ -115,7 +116,7 @@ export class PlayMode {
       }
     }
     this.layer = new CharacterLayer(buildTrojan(), this.walls.toLL(this.x, this.z));
-    this.layer.scale = DRAW_SCALE;
+    this.layer.scale = this.drawScale();
     this.layer.alwaysOnTop = true;
     this.layer.id = "play-character"; // its own layer: a tour's guide can be on the map at the same time
     if (map.getLayer(this.layer.id)) map.removeLayer(this.layer.id);
@@ -127,6 +128,7 @@ export class PlayMode {
     map.keyboard.disable(); // arrows drive the character, not the map
     this.closeZoom(true);
     this.flyIn();
+    this.follow = true; // the camera always follows your Trojan while you play
     window.addEventListener("keydown", this.down, true); // capture: the character hears its keys before the page's other shortcuts do
     window.addEventListener("keyup", this.up, true);
     window.addEventListener("blur", this.clear);
@@ -135,6 +137,7 @@ export class PlayMode {
     map.on("rotatestart", this.letGo);
     map.on("click", this.clickChar);
     map.on("mousemove", this.hoverChar);
+    map.on("zoom", this.rescale);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.tick);
   }
@@ -148,7 +151,7 @@ export class PlayMode {
       if (this.gone) return;
       // the character sits in the lower part of the screen with the street ahead of it, like a game
       const h = map.getContainer().clientHeight;
-      map.easeTo({ center: [p.lng, p.lat], zoom: 19.3, pitch: 70, bearing: this.hdg, padding: { top: Math.round(h * 0.38), bottom: 0, left: 0, right: 0 }, duration: 1200, essential: true });
+      map.easeTo({ center: [p.lng, p.lat], zoom: 20.3, pitch: 68, bearing: this.hdg, padding: { top: Math.round(h * 0.38), bottom: 0, left: 0, right: 0 }, duration: 1200, essential: true });
       this.followAt = performance.now() + 1250; // start following once the camera has flown in
     };
     this.followAt = Infinity;
@@ -163,7 +166,7 @@ export class PlayMode {
     if (!this.active || this.gone) return;
     this.active = false;
     this.closeZoom(false);
-    this.setFollow(false);
+    this.follow = false; this.onFollow(false);
     cancelAnimationFrame(this.raf);
     window.removeEventListener("keydown", this.down, true);
     window.removeEventListener("keyup", this.up, true);
@@ -181,6 +184,7 @@ export class PlayMode {
     if (this.active || this.gone) return;
     this.active = true;
     this.closeZoom(true);
+    this.follow = true;
     this.map.keyboard.disable();
     this.flyIn();
     window.addEventListener("keydown", this.down, true); // capture: the character hears its keys before the page's other shortcuts do
@@ -251,6 +255,7 @@ export class PlayMode {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
     if (e.key === "Escape") { this.onExit(); return; }
+    if (e.key === " ") { e.preventDefault(); e.stopImmediatePropagation(); this.jump(); return; }
     const k = e.key.toLowerCase();
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) {
       this.keys.add(k);
@@ -296,6 +301,7 @@ export class PlayMode {
       const bearing = Math.abs(diff) < 0.05 ? this.hdg : b + diff * Math.min(1, dt * 6);
       this.map.jumpTo({ center: [p.lng, p.lat], bearing });
     } else this.map.triggerRepaint();
+    this.hop(now);
     this.checkSight(now);
     this.raf = requestAnimationFrame(this.tick);
   };
@@ -318,7 +324,7 @@ export class PlayMode {
     if (!cam) return;
     const camLL = cam.toLngLat(), camAlt = cam.toAltitude();
     const [cx, cz] = this.walls.toXZ(camLL.lng, camLL.lat);
-    const head = 2 * DRAW_SCALE * 0.75; // meters: the drawn Trojan's chest/head
+    const head = 2 * this.drawScale() * 0.75; // meters: the drawn Trojan's chest/head
     const dist = Math.hypot(this.x - cx, this.z - cz);
     if (dist < 4) return;
     const steps = Math.min(120, Math.ceil(dist / 2.5));
@@ -338,6 +344,27 @@ export class PlayMode {
     this.sightAt = now + 520;
   }
 
+  /** Space: a little hop (you keep moving while in the air) */
+  private jumpAt = 0;
+  jump() {
+    if (this.gone || this.flying || this.jumpAt) return;
+    this.jumpAt = performance.now();
+  }
+  private hop(now: number) {
+    if (!this.jumpAt || !this.layer) return;
+    const t = (now - this.jumpAt) / 520;
+    if (t >= 1) { this.layer.lift = 0; this.jumpAt = 0; return; }
+    this.layer.lift = 1.1 * this.drawScale() * 4 * t * (1 - t);
+  }
+
+  /** same rule as the crowds and the walkers: 24 px tall on screen, never smaller than real size */
+  private drawScale() {
+    const lat = this.walls.toLL(0, 0).lat;
+    const mpp = (78_271.517 * Math.cos((lat * Math.PI) / 180)) / 2 ** this.map.getZoom();
+    return Math.max(MIN_SCALE, (24 * mpp) / 2);
+  }
+  private rescale = () => { if (this.layer) this.layer.scale = this.drawScale(); };
+
   /** lock the camera behind the character, or let the map go free */
   setFollow(on: boolean) {
     if (this.gone || on === this.follow || (on && !this.active)) return;
@@ -350,13 +377,13 @@ export class PlayMode {
     this.onFollow(on);
   }
   // you grabbed the map: the camera stops chasing (only real drags, not the chase cam's own moves)
-  private letGo = (e: { originalEvent?: unknown }) => { if (e.originalEvent) this.setFollow(false); };
+  private letGo = () => { /* the camera always follows while you play */ };
   /** is a screen point on the character? (it's drawn standing up from its feet, so the box reaches up) */
   onChar(pt: { x: number; y: number }) {
     const p = this.position();
     const s = this.map.project([p.lng, p.lat]);
     const mpp = (78_271.517 * Math.cos((p.lat * Math.PI) / 180)) / 2 ** this.map.getZoom();
-    const tall = Math.max(28, (2 * DRAW_SCALE) / mpp);
+    const tall = Math.max(28, (2 * this.drawScale()) / mpp);
     return Math.abs(pt.x - s.x) < Math.max(18, tall * 0.35) && pt.y < s.y + 12 && pt.y > s.y - tall - 8;
   }
   private clickChar = (e: mapboxgl.MapMouseEvent) => { if (this.active && this.onChar(e.point)) this.setFollow(true); };
@@ -394,6 +421,7 @@ export class PlayMode {
     this.map.off("rotatestart", this.letGo);
     this.map.off("click", this.clickChar);
     this.map.off("mousemove", this.hoverChar);
+    this.map.off("zoom", this.rescale);
     try {
       this.map.keyboard.enable();
       this.map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, pitch: Math.min(this.map.getPitch(), 60), duration: 600 });
