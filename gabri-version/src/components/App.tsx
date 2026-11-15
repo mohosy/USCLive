@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Inbox, LayoutDashboard, LogOut, Menu, Navigation, Plus, Settings, UserRound, X } from "lucide-react";
+import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Navigation, Plus, Settings, UserRound } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -128,7 +128,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, [refresh]);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenuOpen(false); setAccountOpen(false); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenuOpen(false); setAccountOpen(false); setNotifOpen(false); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -260,8 +260,7 @@ export default function App() {
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
       <header className="glass absolute left-3 right-3 top-3 z-30 flex h-14 items-center gap-3 rounded-[20px] px-2.5 md:gap-4 md:px-3">
-        <button onClick={() => setMenuOpen((o) => !o)} className="rounded-full p-2 hover:bg-surface" aria-label="Menu" aria-expanded={menuOpen}><Menu size={20} /></button>
-        <Link href="/" className="hidden w-[292px] shrink-0 text-[17px] font-semibold tracking-tight md:block">
+        <Link href="/" className="hidden w-[292px] shrink-0 pl-2 text-[17px] font-semibold tracking-tight md:block">
           USC<span className="text-cardinal">Live</span>
         </Link>
 
@@ -271,7 +270,7 @@ export default function App() {
           <Button variant="ghost" className="max-md:hidden" onClick={() => setInboxOpen(true)}><Inbox size={16} /> Inbox</Button>
           {isCreator && <Link href="/dashboard" className="rounded-full px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>}
           <div className="relative">
-            <button onClick={() => setNotifOpen((o) => !o)} className="relative rounded-full p-2 hover:bg-surface" aria-label="Notifications">
+            <button onClick={() => { setAccountOpen(false); setNotifOpen((o) => !o); }} className="relative rounded-full p-2 hover:bg-surface" aria-label="Notifications" aria-expanded={notifOpen}>
               <Bell size={18} />
               {unread > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-cardinal" />}
             </button>
@@ -301,7 +300,7 @@ export default function App() {
           </div>
           {state && (
             <div className="relative ml-2">
-              <button onClick={() => setAccountOpen((o) => !o)} title={state.me.name} aria-label="Account" aria-expanded={accountOpen} className="rounded-full transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={30} /></button>
+              <button onClick={() => { setNotifOpen(false); setAccountOpen((o) => !o); }} title={state.me.name} aria-label="Account" aria-expanded={accountOpen} className="rounded-full transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={30} /></button>
               {accountOpen && (
                 <div className="menu absolute right-0 top-11 z-40 w-72 p-1.5 text-sm">
                   <div className="flex items-center gap-3 px-2.5 py-2">
@@ -328,18 +327,25 @@ export default function App() {
       <div className="absolute inset-0">
         {/* Sidebar */}
         {/* Menu panel (see .side in globals.css): opened by the menu button, pushes the map on desktop, bottom sheet on phones */}
-        <aside className={cx("side", menuOpen && "side-open")} aria-hidden={!menuOpen}>
+        <aside className={cx("side", menuOpen && "side-open")}>
           <div className="side-inner">
-          <button className="side-grip" aria-label="Close menu" onClick={() => setMenuOpen(false)}
+          <button className="side-grip" aria-label={menuOpen ? "Fold up the panel" : "Open the panel"} onClick={() => setMenuOpen((o) => !o)}
             onPointerDown={(e) => { grip.current = e.clientY; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerUp={(e) => { if (grip.current != null && e.clientY - grip.current > 50) setMenuOpen(false); grip.current = null; }} />
-          {!detailOpen && (
-            <nav className="flex items-center gap-4 border-b border-line px-4">
-              {([["menu", "Home"], ["events", "Events"], ["study", "Study spots"]] as const).map(([t, l]) => (
-                <button key={t} onClick={() => setTab(t)} className={cx("-mb-px border-b-2 py-3 text-sm font-medium", tab === t ? "border-cardinal text-foreground" : "border-transparent text-muted hover:text-foreground")}>{l}</button>
-              ))}
-              <button onClick={() => setMenuOpen(false)} className="ml-auto rounded-md p-1 text-muted hover:bg-surface hover:text-foreground" aria-label="Close menu"><X size={16} /></button>
-            </nav>
-          )}
+          {/* Always-visible bar: tap a tab to open the panel on it, tap the open tab (or the chevron) to fold it up */}
+          <nav className="side-bar flex items-center gap-1 px-2">
+            {([["menu", "Home", House], ["events", "Events", CalendarDays], ["study", "Study spots", BookOpen]] as const).map(([t, l, Icon]) => {
+              const on = tab === t && menuOpen && !detailOpen;
+              return (
+                <button key={t} aria-pressed={on} onClick={() => { closeDetail(); if (on) setMenuOpen(false); else { setTab(t); setMenuOpen(true); } }}
+                  className={cx("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium", on ? "bg-foreground text-white" : "text-foreground hover:bg-black/5")}>
+                  <Icon size={15} /> {l}
+                </button>
+              );
+            })}
+            <button onClick={() => setMenuOpen((o) => !o)} className="ml-auto rounded-full p-1.5 text-muted hover:bg-black/5 hover:text-foreground" aria-label={menuOpen ? "Fold up the panel" : "Open the panel"} aria-expanded={menuOpen}>
+              <ChevronDown size={18} className={cx("transition-transform duration-300", menuOpen && "rotate-180")} />
+            </button>
+          </nav>
           <div className={cx("min-h-0 flex-1 p-4", !detailOpen && tab === "events" ? "overflow-hidden" : "scroll-thin overflow-y-auto")}>
             {!state ? (
               <div className="space-y-2"><div className="skeleton h-24" /><div className="skeleton h-16" /><div className="skeleton h-16" /></div>
@@ -443,7 +449,7 @@ export default function App() {
           </div>
 
           {/* One filter row: each chip is a layer on the map (and its legend) */}
-          <div className="side-shift chip-row absolute left-3 right-3 top-[128px] md:right-[236px] md:top-[80px] z-10 flex gap-1.5 overflow-x-auto pb-1">
+          <div className="chip-row absolute left-3 right-3 top-[128px] md:right-[236px] md:top-[80px] z-10 flex gap-1.5 overflow-x-auto pb-1">
             {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
               <button key={k} aria-pressed={chips[k]}
                 onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}

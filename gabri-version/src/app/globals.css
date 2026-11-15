@@ -124,12 +124,29 @@ html, body {
 .co-foot::after { content: ""; position: absolute; left: 50%; top: 50%; border-radius: 99px; transform: translate(-50%, -50%); pointer-events: none; }
 
 /* live game: gold border, big score, gold ring pulsing from the venue */
+/* live game: small score pill; the full card appears above it on hover */
 .co-game { --co-edge: var(--gold); }
-.co-game .co-card { border-color: var(--gold); }
-.co-game .co-title { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
-.co-game .co-title b { font-weight: 800; }
-.co-game .co-dash { margin: 0 3px; color: #9ca3af; }
-.co-game .co-foot::after { width: 90px; height: 90px; border: 2px solid var(--gold); animation: co-ring 2.4s ease-out infinite; }
+.co-card.gm-pill { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; border-radius: 99px; border-color: var(--gold); }
+.gm-badge { display: inline-grid; place-items: center; min-width: 26px; height: 22px; padding: 0 5px; border-radius: 99px; font-size: 10px; font-weight: 800; letter-spacing: 0.02em; }
+.gm-pill b { font-size: 15px; font-weight: 800; color: #1d1d1f; font-variant-numeric: tabular-nums; }
+.gm-dash { color: #9ca3af; font-weight: 600; margin: 0 -2px; }
+.gm-period { font-size: 10.5px; font-weight: 700; color: #b45309; margin-left: 2px; }
+.gm-more {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; width: 230px; padding: 10px 12px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.97); border: 0.5px solid rgba(0, 0, 0, 0.1); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  opacity: 0; transform: translate(-50%, 6px) scale(0.96); pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.co-game:hover .gm-more { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.gm-top { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #6e6e73; margin-bottom: 6px; }
+.gm-top i { width: 7px; height: 7px; border-radius: 99px; background: #dc2626; animation: co-blink 1.2s steps(2) infinite; }
+.gm-line { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; font-weight: 600; color: #1d1d1f; }
+.gm-line span:not(.gm-badge) { flex: 1; }
+.gm-line b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.gm-sub { margin-top: 5px; font-size: 11px; color: #6e6e73; }
+.co-game .co-foot::after { width: 56px; height: 56px; border: 2px solid var(--gold); animation: co-ring 2.4s ease-out infinite; }
+/* free food badge on any event bubble */
+.co-food { display: inline-block; margin-top: 4px; padding: 1px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 600; color: #92400e; background: #fef3c7; }
 .co-bump .co-card { animation: co-bump 0.7s ease; }
 @keyframes co-bump { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.9) } 35% { transform: scale(1.12); background: #fff7cc } 100% { transform: scale(1); box-shadow: 0 0 0 14px rgba(255, 204, 0, 0) } }
 
@@ -187,26 +204,26 @@ html, body {
 
 /* compact DPS tag for older crime-log incidents */
 
-/* ---------- Menu panel ---------- */
-/* Desktop: opening it takes 360px on the left and the map shrinks to fit, still draggable. */
-/* Slides over the map with a transform (GPU); animating width made the map resize on every frame. */
+/* ---------- Side panel ---------- */
+/* Desktop: a glass card under the header. Folded, only its icon bar shows; opening reveals it downward.
+   The reveal animates clip-path (no layout, no map resize), and the clipped part takes no clicks. */
 .side { position: absolute; left: 12px; top: 80px; bottom: 12px; z-index: 25; width: 360px; border-radius: 26px;
-  transform: translateX(calc(-100% - 24px)); transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform; }
-.side-open { transform: none; }
-/* the map controls glide right with the panel instead of hiding under it */
-.side-shift { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
-@media (min-width: 901px) { .side-on .side-shift { transform: translateX(372px); } .side-on .chip-row { right: 608px; } }
+  clip-path: inset(0 0 calc(100% - 52px) 0 round 26px); transition: clip-path 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.side-open { clip-path: inset(0 0 0 0 round 26px); }
+.side-bar { flex-shrink: 0; height: 52px; border-bottom: 0.5px solid rgba(0, 0, 0, 0.08); }
 .side-inner { display: flex; flex-direction: column; width: 360px; height: 100%; border-radius: 26px; overflow: hidden;
-  background: rgba(255, 255, 255, 0.78); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
-  border: 0.5px solid rgba(255, 255, 255, 0.75); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.7); }
+  background: rgba(255, 255, 255, 0.8); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.75); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 0 0 0.5px rgba(0, 0, 0, 0.06); }
 .side-grip { display: none; }
 .chip-row { scrollbar-width: none; }
 .chip-row::-webkit-scrollbar { display: none; }
-/* Phones: the same panel is a bottom sheet with a drag handle; the map above it stays usable. */
+/* the filter chips sit to the right of the panel */
+@media (min-width: 901px) { main .chip-row { left: 384px; } }
+/* Phones: a bottom sheet whose icon bar peeks up; tap or drag the handle to pull it up. */
 @media (max-width: 900px) {
-  .side { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 40; width: auto; height: 60dvh; border-radius: 26px 26px 0 0;
-    transform: translateY(104%); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .side-open { width: auto; transform: none; }
+  .side { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 40; width: auto; height: 62dvh; border-radius: 26px 26px 0 0; clip-path: none;
+    transform: translateY(calc(100% - 76px)); transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .side-open { transform: none; }
   .side-inner { width: 100%; border-radius: 26px 26px 0 0; }
   .side-grip { display: block; flex-shrink: 0; width: 100%; height: 22px; touch-action: none; cursor: grab; }
   .side-grip::before { content: ""; display: block; width: 36px; height: 5px; margin: 0 auto; border-radius: 3px; background: #d6d3cc; }
@@ -226,7 +243,7 @@ html, body {
 button { transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease; }
 button:active:not(:disabled) { transform: scale(0.97); }
 .mapboxgl-ctrl button:active { transform: none; }
-@media (prefers-reduced-motion: reduce) { .side, .side-shift, button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .side, button { transition: none; } }
 
 /* ---------- Apple-style map controls ---------- */
 .mapboxgl-ctrl-group { background: rgba(255, 255, 255, 0.72) !important; -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);

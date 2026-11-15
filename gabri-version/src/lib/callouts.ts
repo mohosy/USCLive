@@ -21,6 +21,8 @@ export interface Callout {
   game?: { info: GameInfo; start: string };
   /** busy/quiet ring intensity 0..1 */
   intensity?: number;
+  /** events with free food: what's offered (shown as a small badge, whatever the filters are) */
+  food?: string;
   /** DPS alerts: how serious (sets the tag color) */
   severity?: "high" | "medium" | "low";
 }
@@ -99,9 +101,10 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
       .slice(0, 4);
     for (const e of soon) {
       const where = b(e.buildingId)?.name ?? "";
-      const label = chips.food && e.freeFood ? "Free food" : CATEGORY_META[e.category]?.label ?? "Event";
+      // the label is always the event's type; free food is a badge on top, so turning a filter on/off never renames an event
+      const label = CATEGORY_META[e.category]?.label ?? "Event";
       out.push({
-        id: `ev:${e.id}`, kind: "event", lng: e.lng!, lat: e.lat!, eyebrow: `${label} · ${where}`,
+        id: `ev:${e.id}`, kind: "event", lng: e.lng!, lat: e.lat!, eyebrow: `${label} · ${where}`, food: e.freeFood ? e.foodDetail ?? "Free food" : undefined,
         title: e.title.length > 26 ? `${e.title.slice(0, 25)}…` : e.title,
         meta: `${isLive(e, now) ? "Now" : fmtTime(e.start)} · ${e.attendeeCount} going`,
       });
