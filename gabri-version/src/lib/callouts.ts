@@ -151,9 +151,9 @@ export function buildCallouts(s: AppState, chips: ChipState, now: Date): Callout
 
   if (chips.events || chips.food) {
     const soon = s.events
-      .filter((e) => !e.game && e.lat != null && e.lng != null && ((chips.events && (e.visibility === "open" || e.friendsGoing.length > 0)) || (chips.food && e.freeFood)))
+      .filter((e) => !e.game && e.lat != null && e.lng != null && ((chips.events && (e.visibility === "open" || e.friendsGoing.length > 0 || e.attendeeCount >= 200)) || (chips.food && e.freeFood)))
       .filter((e) => +new Date(e.end) > +now && +new Date(e.start) - +now < 90 * 60_000)
-      .sort((x, y) => y.friendsGoing.length - x.friendsGoing.length || +new Date(x.start) - +new Date(y.start))
+      .sort((x, y) => Number(y.attendeeCount >= 200) - Number(x.attendeeCount >= 200) || y.friendsGoing.length - x.friendsGoing.length || +new Date(x.start) - +new Date(y.start))
       .slice(0, 7);
     for (const e of soon) {
       const where = b(e.buildingId)?.name ?? "";
