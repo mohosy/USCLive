@@ -573,3 +573,31 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .co-alertmini .dps { padding: 2px; }
 .co-alertmini .dps-t { display: none; }
 .co-alertmini:hover .dps-t { display: flex; padding-right: 6px; }
+
+/* ---------- Event mini ticket: photo stub, perforation, when + title, friends' faces; grows into the card on hover ---------- */
+.evt { position: relative; display: flex; align-items: center; height: 46px; padding-right: 10px; border-radius: 13px; background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 2px 5px rgba(0, 0, 0, 0.07), 0 10px 24px rgba(0, 0, 0, 0.16); gap: 0; flex-direction: row; }
+.evt-img { flex: none; width: 46px; height: 46px; border-radius: 13px 0 0 13px; background: #e5e5ea center / cover no-repeat; display: grid; place-items: center; color: #fff; }
+.evt-perf { flex: none; align-self: stretch; margin: 7px 0; border-left: 1.5px dotted #d1d1d6; margin-left: 9px; }
+.evt-body { display: flex; flex-direction: column; justify-content: center; padding-left: 9px; min-width: 0; }
+.evt-when { display: flex; align-items: center; gap: 4px; font: 700 9px var(--font-apple); letter-spacing: 0.09em; text-transform: uppercase; color: #8e8e93; }
+.evb-soon .evt-when { color: #b45309; }
+.evb-live .evt-when { color: #c8102e; }
+.evt-when em { display: inline-flex; color: #b45309; margin-left: 2px; }
+.evt-title { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 13px/1.25 var(--font-apple); letter-spacing: -0.01em; color: #1d1d1f; }
+.evt-faces { position: static; margin-left: 8px; }
+.evt-tail { position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; background: #fff; transform: translateX(-50%) rotate(45deg); border-radius: 2px; box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.06); }
+.evt.evb-bump { animation: evb-bump 0.5s ease; }
+.evt .evb-plus { top: -10px; left: 23px; }
+
+/* ---------- Busy / quiet places: a small marker; the name and how busy show only on hover ---------- */
+.co-busy:hover, .co-quiet:hover { z-index: 30 !important; }
+.bz { --c: #ea580c; display: inline-flex; align-items: center; gap: 6px; padding: 3px; border-radius: 99px; background: rgba(255, 255, 255, 0.96); font-family: var(--font-apple);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.16); transition: padding 0.2s ease, transform 0.2s ease; }
+.bz-quiet { --c: #16a34a; }
+.bz-ic { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 99px; background: var(--c); color: #fff; }
+.bz-ic svg { width: 13px; height: 13px; }
+.bz-t { max-width: 0; overflow: hidden; white-space: nowrap; font-size: 11.5px; color: #3a3a3c; transition: max-width 0.25s ease; }
+.bz-t b { font-weight: 650; color: #1d1d1f; margin-right: 5px; }
+.co-busy:hover .bz, .co-quiet:hover .bz { padding-right: 10px; transform: translateY(-2px); }
+.co-busy:hover .bz-t, .co-quiet:hover .bz-t { max-width: 280px; }

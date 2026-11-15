@@ -784,7 +784,7 @@ export default function MapView(props: Props) {
     const t = performance.now();
     if (!b || t - (lastPop.current.get(eventId) ?? 0) < 800) return;
     lastPop.current.set(eventId, t);
-    const ring = b.el.querySelector(".evb-ring");
+    const ring = b.el.querySelector(".evt");
     if (!ring) return;
     const plus = document.createElement("span");
     plus.className = "evb-plus";

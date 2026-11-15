@@ -35,13 +35,15 @@ export function calloutHTML(c: Callout, now: Date) {
     </div><div class="co-stem"></div><div class="co-foot"></div>`;
   }
   if (c.kind === "event" && c.ev) return eventBanner(c);
+  if (c.kind === "busy" || c.kind === "quiet") {
+    return `<div class="bz bz-${c.kind}"><span class="bz-ic">${USERS}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
+  }
   const title = esc(c.title);
   const meta = c.meta ? esc(c.meta) : "";
-  const dot = c.kind === "busy" ? "#ea580c" : c.kind === "quiet" ? "#16a34a" : "";
   return `<div class="co-card">
-    <div class="co-eyebrow">${dot ? `<i style="background:${dot}" class=""></i>` : ""}${esc(c.eyebrow)}</div>
-    <div class="co-title">${title}${meta && (c.kind === "busy" || c.kind === "quiet") ? ` <span class="co-meta">· ${meta}</span>` : ""}</div>
-    ${meta && c.kind !== "busy" && c.kind !== "quiet" ? `<div class="co-meta">${meta}</div>` : ""}
+    <div class="co-eyebrow">${esc(c.eyebrow)}</div>
+    <div class="co-title">${title}</div>
+    ${meta ? `<div class="co-meta">${meta}</div>` : ""}
     ${c.food ? `<div class="co-food">${esc(c.food)}</div>` : ""}
   </div><div class="co-stem"></div><div class="co-foot"></div>`;
 }
@@ -71,9 +73,12 @@ function eventBanner(c: Callout) {
   const tags = `${v.state === "live" ? '<span class="evb-tag live"><i class="evb-dot"></i>Live</span>' : ""}${c.food ? `<span class="evb-tag food">${FORK}${esc(c.food)}</span>` : ""}`;
   const short = v.full.length > 22 ? `${v.full.slice(0, 21)}…` : v.full;
   return `<div class="evb evb-${v.state}">
-    <div class="evb-mini">
-      <div class="evb-ring">${pic}${v.friends.length ? `<span class="evb-faces">${faces(v.friends, 2)}</span>` : ""}${c.food ? `<span class="evb-food">${FORK}</span>` : ""}</div>
-      <div class="evb-label"><b>${esc(short)}</b><span>${v.state === "live" ? '<i class="evb-dot"></i>' : ""}${esc(v.whenShort)}</span></div>
+    <div class="evb-mini evt">
+      ${v.photo ? `<span class="evt-img" style="background-image:url('${v.photo}')"></span>` : `<span class="evt-img evt-noimg" style="background-color:${v.color}">${SPARK}</span>`}
+      <span class="evt-perf"></span>
+      <span class="evt-body"><span class="evt-when">${v.state === "live" ? '<i class="evb-dot"></i>' : ""}${esc(v.whenShort)}${c.food ? `<em>${FORK}</em>` : ""}</span><b class="evt-title">${esc(short)}</b></span>
+      ${v.friends.length ? `<span class="evb-faces evt-faces">${faces(v.friends, 2)}</span>` : ""}
+      <span class="evt-tail"></span>
     </div>
     <div class="evb-card">
       ${v.photo ? `<div class="evb-photo" style="background-image:url('${v.photo}')"><div class="evb-tags">${tags}</div></div>` : `<div class="evb-strip" style="background:${v.color}"></div>`}
