@@ -733,7 +733,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
    status bar's height (a blank band at the bottom). There, size the app to the full physical screen instead.
    (Regular Safari keeps inset 0, which follows its toolbar.) */
 @media (display-mode: standalone) {
-  html, body { min-height: calc(100% + env(safe-area-inset-top)); }
-  .map-app { bottom: auto !important; height: 100vh; min-height: calc(100% + env(safe-area-inset-top)); }
+  /* exactly the reported viewport plus the status-bar band it leaves out: the full screen, no more (100vh overshoots) */
+  .map-app { bottom: auto !important; height: calc(100% + env(safe-area-inset-top)) !important; }
 }
 
