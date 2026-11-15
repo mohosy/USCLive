@@ -10,6 +10,7 @@ import { calloutHTML } from "@/lib/calloutHtml";
 import { declutter } from "@/lib/declutter";
 import { alertStyle } from "@/lib/alertStyle";
 import { allIconKeys, iconCanvas, iconKey, ICON_PX, ICON_RATIO } from "@/lib/eventIcons";
+import type { LightPreset } from "@/lib/sun";
 
 /** the 3D film camera that stands on the map at every live webcam */
 const CAM_MODEL = "/models/film-camera.glb";
@@ -68,8 +69,33 @@ const CONTEXT_LABELS: FeatureCollection = {
   ] as const).map(([name, lng, lat]) => ({ type: "Feature", properties: { name }, geometry: { type: "Point", coordinates: [lng, lat] } })),
 };
 
+// How the spotlight looks under each light. Night: outside sinks into deep blue, campus buildings get warm flood lights.
+const LOOK: Record<LightPreset, { wash: string; washOp: number; edge: string; glow: number; bld: [string, string, string]; flood: number; emissive: number; label: string; halo: string }> = {
+  dawn: { wash: "#f5e8de", washOp: 0.62, edge: "#a3122a", glow: 0.16, bld: ["#f5e6d6", "#efdac4", "#e6cbb0"], flood: 0.12, emissive: 0.04, label: "#7d716c", halo: "rgba(255,247,240,0.95)" },
+  day: { wash: "#f3f1ee", washOp: 0.8, edge: "#990000", glow: 0.12, bld: ["#f2e9de", "#eadccc", "#e0cdb9"], flood: 0, emissive: 0, label: "#7b8088", halo: "rgba(255,255,255,0.95)" },
+  dusk: { wash: "#2a2140", washOp: 0.3, edge: "#c41e3a", glow: 0.3, bld: ["#ffe2c4", "#f8d3ae", "#efc499"], flood: 0.3, emissive: 0.16, label: "#f4e7dd", halo: "rgba(42,30,52,0.85)" },
+  night: { wash: "#090e1d", washOp: 0.52, edge: "#e0303f", glow: 0.45, bld: ["#f6dcb6", "#efcd9f", "#e5bd8a"], flood: 0.9, emissive: 0.22, label: "#d8dde8", halo: "rgba(8,12,26,0.9)" },
+};
+
+/** Switch Mapbox's light preset and restyle the spotlight to match. Safe to call before the spotlight exists. */
+function applyLight(m: mapboxgl.Map, light: LightPreset) {
+  if (m.getConfigProperty("basemap", "lightPreset") !== light) m.setConfigProperty("basemap", "lightPreset", light);
+  const k = LOOK[light];
+  const set = (layer: string, prop: string, v: unknown) => { if (m.getLayer(layer)) m.setPaintProperty(layer, prop as never, v as never); };
+  set("usc-fade", "fill-color", k.wash);
+  set("usc-fade", "fill-opacity", k.washOp);
+  set("usc-edge", "line-color", k.edge);
+  set("usc-edge-glow", "line-color", k.edge);
+  set("usc-edge-glow", "line-opacity", k.glow);
+  set("usc-buildings", "fill-extrusion-color", ["interpolate", ["linear"], ["get", "h"], 0, k.bld[0], 20, k.bld[1], 45, k.bld[2]]);
+  set("usc-buildings", "fill-extrusion-flood-light-intensity", k.flood);
+  set("usc-buildings", "fill-extrusion-emissive-strength", k.emissive);
+  set("usc-context-labels", "text-color", k.label);
+  set("usc-context-labels", "text-halo-color", k.halo);
+}
+
 /** Adds the campus spotlight layers (idempotent). `before` keeps them under our alert/crowd layers when added late. */
-function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, before?: string) {
+function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, light: LightPreset, before?: string) {
   if (m.getSource("usc-mask")) return;
   const at = before && m.getLayer(before) ? before : undefined;
   m.addSource("usc-mask", { type: "geojson", data: c.mask });
@@ -91,6 +117,11 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, before?:
       "fill-extrusion-opacity": 0.97,
       "fill-extrusion-ambient-occlusion-intensity": 0.3,
       "fill-extrusion-ambient-occlusion-radius": 3,
+      // warm uplighting on the walls and a pool of light on the ground; only turned up at dusk/night (applyLight)
+      "fill-extrusion-flood-light-color": "#ffb066",
+      "fill-extrusion-flood-light-intensity": 0,
+      "fill-extrusion-flood-light-wall-radius": ["min", ["get", "h"], 18],
+      "fill-extrusion-flood-light-ground-radius": 7,
     },
   }, at);
   // a few off-campus landmarks for orientation (Mapbox's own labels outside are faded)
@@ -101,6 +132,7 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, before?:
   });
   // remove Mapbox's 3D trees and landmark models outside campus (our own layers are not affected)
   m.addLayer({ id: "usc-clip", type: "clip", source: "usc-mask", layout: { "clip-layer-types": ["model"], "clip-layer-scope": ["basemap"] } });
+  applyLight(m, light);
 }
 
 // Keep the camera on USC University Park Campus (plus a little margin).
@@ -135,6 +167,8 @@ interface Props {
   /** "How do I get to THH" — animated 3D walk from `me` to this building. */
   walk: { to: Building; key: number } | null;
   onWalkEnd: () => void;
+  /** dawn / day / dusk / night lighting (follows the real sun; see lib/sun) */
+  light?: LightPreset;
 }
 
 type FC = FeatureCollection;
@@ -237,6 +271,7 @@ export default function MapView(props: Props) {
   const walkRef = useRef<WalkGuide | null>(null);
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
   const campus = useRef<CampusData | null>(null);
+  const [rotateHint, setRotateHint] = useState(false);
 
   /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
   function tidyBubbles() {
@@ -291,7 +326,7 @@ export default function MapView(props: Props) {
     if (!m.hasModel("film-cam")) m.addModel("film-cam", CAM_MODEL);
     if (!m.hasModel("dps-beacon")) m.addModel("dps-beacon", BEACON_MODEL);
     // USC spotlight first, so alerts, crowds and pins draw above it
-    if (campus.current) installSpotlight(m, sat, campus.current);
+    if (campus.current) installSpotlight(m, sat, campus.current, cb.current.light ?? "day");
     // DPS alert zones
     m.addLayer({ id: "alert-fill", type: "fill", source: "alerts", slot: "middle", paint: { "fill-color": ["get", "color"], "fill-opacity": ["get", "fill"], "fill-emissive-strength": 1 } });
     m.addLayer({ id: "alert-line", type: "line", source: "alerts", slot: "middle", paint: { "line-color": ["get", "color"], "line-width": 1.5, "line-opacity": ["get", "line"], "line-emissive-strength": 1 } });
@@ -420,7 +455,7 @@ export default function MapView(props: Props) {
       container: el.current,
       accessToken: TOKEN,
       style: s.url,
-      config: { basemap: { ...s.config, ...placeConfig(styleRef.current, props.layers.places) } },
+      config: { basemap: { ...s.config, lightPreset: props.light ?? "day", ...placeConfig(styleRef.current, props.layers.places) } },
       center: intro ? [props.me.lng, props.me.lat] : props.initialCamera ? [props.initialCamera.longitude, props.initialCamera.latitude] : USC_CENTER,
       zoom: intro ? 14.6 : props.initialCamera?.zoom ?? 16.4,
       minZoom: intro ? 14 : 15,
@@ -438,7 +473,7 @@ export default function MapView(props: Props) {
     loadCampus().then(
       (c) => {
         campus.current = c;
-        if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, "alert-fill");
+        if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, cb.current.light ?? "day", "alert-fill");
       },
       () => { /* no campus data: fall back to the plain map */ },
     );
@@ -463,6 +498,43 @@ export default function MapView(props: Props) {
     }
     // trackpad two-finger click = right click: rotate the map instead of opening the browser menu
     el.current.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    // Trackpad orbit, like a 3D viewer: two-finger swipe sideways turns the map, ⌥ + swipe up/down tilts it.
+    // (Pinch and plain up/down swipes still zoom.) Runs in the capture phase so Mapbox's scroll-zoom never sees these.
+    const turned = () => {
+      setRotateHint(false);
+      try { localStorage.setItem("usclive.rotateHint", "1"); } catch { /* storage blocked */ }
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || cb.current.walk) return; // pinch-zoom, or the walk owns the camera
+      const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+      if (e.altKey && ay > ax) {
+        e.preventDefault(); e.stopPropagation();
+        m.setPitch(Math.max(0, Math.min(72, m.getPitch() - e.deltaY * 0.2)));
+        turned();
+      } else if (ax > ay * 1.2) {
+        e.preventDefault(); e.stopPropagation();
+        m.setBearing(m.getBearing() - e.deltaX * 0.25);
+        turned();
+      }
+    };
+    el.current.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    // Safari reports the two-finger twist itself
+    let twistFrom = 0;
+    const onGestureStart = (e: Event) => { e.preventDefault(); twistFrom = m.getBearing(); };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      if (cb.current.walk) return;
+      m.setBearing(twistFrom - (e as Event & { rotation: number }).rotation);
+      turned();
+    };
+    el.current.addEventListener("gesturestart", onGestureStart);
+    el.current.addEventListener("gesturechange", onGestureChange);
+    // show "you can turn the map" once, after the intro has landed
+    let seen = false;
+    try { seen = !!localStorage.getItem("usclive.rotateHint"); } catch { /* storage blocked */ }
+    const hintIn = seen ? undefined : setTimeout(() => setRotateHint(true), intro ? 5200 : 1800);
+    const hintOut = seen ? undefined : setTimeout(() => setRotateHint(false), (intro ? 5200 : 1800) + 9000);
     const emit = () => {
       const c = m.getCenter();
       cb.current.onCamera?.({ longitude: c.lng, latitude: c.lat, zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() });
@@ -506,7 +578,14 @@ export default function MapView(props: Props) {
     });
 
     const bb = bubbles.current;
-    return () => { bb.clear(); m.remove(); map.current = null; ready.current = false; };
+    const box = el.current;
+    return () => {
+      clearTimeout(hintIn); clearTimeout(hintOut);
+      box.removeEventListener("wheel", onWheel, { capture: true });
+      box.removeEventListener("gesturestart", onGestureStart);
+      box.removeEventListener("gesturechange", onGestureChange);
+      bb.clear(); m.remove(); map.current = null; ready.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -517,8 +596,14 @@ export default function MapView(props: Props) {
     styleRef.current = props.mapStyle;
     ready.current = false;
     const s = STYLES[props.mapStyle];
-    m.setStyle(s.url, { config: { basemap: { ...s.config, ...placeConfig(props.mapStyle, cb.current.layers.places) } } } as unknown as Parameters<mapboxgl.Map["setStyle"]>[1]);
+    m.setStyle(s.url, { config: { basemap: { ...s.config, lightPreset: cb.current.light ?? "day", ...placeConfig(props.mapStyle, cb.current.layers.places) } } } as unknown as Parameters<mapboxgl.Map["setStyle"]>[1]);
   }, [props.mapStyle]);
+
+  // dawn / day / dusk / night
+  useEffect(() => {
+    const m = map.current;
+    if (m && ready.current) applyLight(m, props.light ?? "day");
+  }, [props.light]);
 
   // data -> sources (only touch the GPU when something actually changed)
   useEffect(() => {
@@ -655,6 +740,11 @@ export default function MapView(props: Props) {
   return (
     <div className="absolute inset-0">
       <div ref={el} className="h-full w-full" />
+      {rotateHint && !props.walk && (
+        <div className="glass fade-in pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs text-foreground">
+          Swipe sideways with two fingers to turn the map · <span className="text-muted">⌥ + swipe to tilt</span>
+        </div>
+      )}
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}

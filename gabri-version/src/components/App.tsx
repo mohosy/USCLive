@@ -1,6 +1,7 @@
 "use client";
 
-import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Navigation, Plus, Settings, UserRound } from "lucide-react";
+import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Moon, Navigation, Plus, Settings, Sun, Sunrise, Sunset, UserRound } from "lucide-react";
+import { lightFor, type LightPreset } from "@/lib/sun";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -23,6 +24,7 @@ import SignIn, { clearSession, loadSession, signIn } from "./SignIn";
 import type { CameraBus } from "./Google3DView";
 import NowPanel from "./NowPanel";
 import StudyPanel from "./StudyPanel";
+import { ExploreThumb, SatelliteThumb } from "./ViewThumb";
 import { AccountBadge, Avatar, Button, cx } from "./ui";
 
 const Google3DView = dynamic(() => import("./Google3DView"), { ssr: false, loading: () => <div className="absolute inset-0 bg-surface" /> });
@@ -57,6 +59,18 @@ export default function App() {
   const [cam, setCam] = useState<Webcam | null>(null);
   const [satLoaded, setSatLoaded] = useState(false); // photoreal tiles loaded enough to show
   const [warmSat, setWarmSat] = useState(false); // Satellite pre-loads while you hover its button
+  // map lighting follows the real sun over campus; rechecked every minute
+  // (read in the browser, not during the prerender; the map mounts after the first data load, so it starts in the right light)
+  const [sunLight, setSunLight] = useState<LightPreset>("day");
+  useEffect(() => {
+    const tick = () => setSunLight(lightFor(new Date()));
+    const first = setTimeout(tick, 0);
+    const t = setInterval(tick, 60_000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, []);
+  // TEMP (testing): force a time of day. Remove this and the switch under the view toggle before the demo.
+  const [lightTest, setLightTest] = useState<LightPreset | "auto">("auto");
+  const light = lightTest === "auto" ? sunLight : lightTest;
   const coolSat = useRef<ReturnType<typeof setTimeout>>(undefined); // ...and unloads 5s after you move away
   const [intro, setIntro] = useState(true); // campus glide on first load (bubbles wait for it)
   useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
@@ -388,6 +402,7 @@ export default function App() {
               layers={mapLayers}
               leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 384 : 0}
               mapStyle="map"
+              light={light}
               selectedEventId={selEvent}
               highlightIds={highlight}
               focus={focus}
@@ -436,9 +451,13 @@ export default function App() {
           {/* Apple-style segmented control */}
           <div className="absolute right-3 top-[80px] z-10 flex items-center gap-2">
             <div className="glass flex rounded-full p-1 text-xs">
-              {([["map", "Explore"], ["3d", "Satellite"]] as const).map(([k, l]) => (
+              {([["map", "Explore", ExploreThumb], ["3d", "Satellite", SatelliteThumb]] as const).map(([k, l, Thumb]) => (
                 <button key={k} onClick={() => switchView(k)} onMouseEnter={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); setWarmSat(true); } }}
-                  onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }} className={cx("rounded-full px-3.5 py-1.5 font-medium", view === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>{l}</button>
+                  onMouseLeave={() => { if (k === "3d" && view === "map") { clearTimeout(coolSat.current); coolSat.current = setTimeout(() => { setWarmSat(false); setSatLoaded(false); }, 5000); } }} className={cx("group flex items-center gap-1.5 rounded-full py-[3px] pl-[3px] pr-3 font-medium", view === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>
+                  {/* Maps-style preview of what this view looks like */}
+                  <span className={cx("h-[22px] w-[22px] overflow-hidden rounded-full shadow-[0_0_0_0.5px_rgba(0,0,0,0.18)] transition-opacity", view === k ? "opacity-100" : "opacity-75 group-hover:opacity-100")}><Thumb /></span>
+                  {l}
+                </button>
               ))}
             </div>
             {/* Maps-style locate button: centers on you, asks for location the first time */}
@@ -448,8 +467,20 @@ export default function App() {
             </button>
           </div>
 
+          {/* TEMP (testing): time-of-day switch. "Auto" = real time at USC. */}
+          {view === "map" && (
+            <div className="glass absolute right-3 top-[124px] z-10 hidden items-center gap-0.5 rounded-full p-1 text-xs md:flex" title="Lighting test: Auto follows the real time">
+              {([["auto", null, `Auto · ${sunLight}`], ["dawn", Sunrise, "Dawn"], ["day", Sun, "Day"], ["dusk", Sunset, "Dusk"], ["night", Moon, "Night"]] as const).map(([k, Icon, label]) => (
+                <button key={k} onClick={() => setLightTest(k)} aria-label={label} aria-pressed={lightTest === k} title={label}
+                  className={cx("grid h-7 place-items-center rounded-full font-medium", Icon ? "w-7" : "px-2.5", lightTest === k ? "bg-white text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.12)]" : "text-muted hover:text-foreground")}>
+                  {Icon ? <Icon size={14} /> : "Auto"}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* One filter row: each chip is a layer on the map (and its legend) */}
-          <div className="chip-row absolute left-3 right-3 top-[128px] md:right-[236px] md:top-[80px] z-10 flex gap-1.5 overflow-x-auto pb-1">
+          <div className="chip-row absolute left-3 right-3 top-[128px] md:right-[264px] md:top-[80px] z-10 flex gap-1.5 overflow-x-auto pb-1">
             {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
               <button key={k} aria-pressed={chips[k]}
                 onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}

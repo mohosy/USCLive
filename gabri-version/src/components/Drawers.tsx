@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowLeft, ArrowUpRight, Navigation } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Navigation, Send } from "lucide-react";
 import { HOST_LABEL, primaryAction } from "@/lib/eventActions";
 import { useEffect, useState } from "react";
 import { BUILDING_BY_ID, SCHOOLS, walkMinutes } from "@/lib/campus";
 import { api, fmtTime, fmtWhen, isLive, type AppState, type EventView, type Hotspot, type Loc } from "@/lib/client-types";
 import type { Building } from "@/lib/types";
 import { EventRow } from "./EventsPanel";
+import SendSheet from "./SendSheet";
 import { Avatar, Button, CatLabel, LevelDot, Tag, cx } from "./ui";
 
 const VIS_LABEL = { public: "Public", school: "School only", open: "Open invite, anyone can join", invite: "Invite only" } as const;
@@ -34,13 +35,16 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenB
   onDirections: (buildingId: string) => void;
 }) {
   const [picking, setPicking] = useState(false);
-  const [sel, setSel] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // a different event closes the share sheet
+  const [sheetFor, setSheetFor] = useState(ev.id);
+  if (sheetFor !== ev.id) { setSheetFor(ev.id); setPicking(false); }
   const now = new Date(state.now);
   const b = BUILDING_BY_ID[ev.buildingId];
   const h = state.hotspots.find((x) => x.buildingId === ev.buildingId);
   const walk = b ? walkMinutes(loc, b) : null;
-  const canInvite = ev.host.id === state.me.id || (ev.visibility !== "invite" && ev.going);
+  // anyone can send an event to friends, except invite-only events (host only)
+  const canSend = ev.host.id === state.me.id || ev.visibility !== "invite";
   const action = primaryAction(ev);
   const toggle = async () => { setBusy(true); await onRsvp(ev.id); setBusy(false); };
   const schools = ev.schools.filter((s) => s !== "all").map((s) => SCHOOLS.find((x) => x.id === s)?.short ?? s);
@@ -80,22 +84,12 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onOpenB
           </Button>
         )}
         <Button variant="secondary" className="!rounded-full" onClick={() => onDirections(ev.buildingId)} aria-label="Directions"><Navigation size={14} /> Directions</Button>
-        {canInvite && <Button variant="secondary" className="!rounded-full" onClick={() => setPicking((p) => !p)}>Invite</Button>}
+        {canSend && <Button variant="secondary" className={cx("!rounded-full", picking && "!bg-surface")} onClick={() => setPicking((p) => !p)} title="Send to friends or share a link"><Send size={14} /> Send</Button>}
       </div>
       {action.kind === "link" && ev.category !== "sports_watch" && (
         <button onClick={toggle} disabled={busy} className="mt-2 text-xs text-muted hover:text-foreground">{ev.going ? "Saved to your schedule · remove" : "Also save to my schedule"}</button>
       )}
-      {picking && (
-        <div className="mt-3 rounded-lg border border-line p-2">
-          {state.me.friends.map((f) => (
-            <label key={f.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
-              <input type="checkbox" checked={sel.includes(f.id)} onChange={() => setSel((s) => (s.includes(f.id) ? s.filter((x) => x !== f.id) : [...s, f.id]))} />
-              <span className="text-sm">{f.name}</span>
-            </label>
-          ))}
-          <Button className="mt-2 w-full" disabled={!sel.length || busy} onClick={async () => { setBusy(true); await onInvite(ev.id, sel); setBusy(false); setPicking(false); setSel([]); }}>Send invites</Button>
-        </div>
-      )}
+      {picking && <SendSheet key={ev.id} ev={ev} friends={state.me.friends} onSend={(ids) => onInvite(ev.id, ids)} onClose={() => setPicking(false)} />}
 
       <p className="mt-6 text-xs text-muted">
         {SRC_LABEL[ev.source] ? `${SRC_LABEL[ev.source]}. ` : ""}Passed safety review.
