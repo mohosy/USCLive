@@ -46,10 +46,13 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
   open: boolean; onClose: () => void; state: AppState; onCreated: (e: EventView) => void; asOrg?: { id: string; name: string };
 }) {
   const [step, setStep] = useState<Step>("source");
+  // anyone can make an event; campus-wide ("Everyone") is for clubs and departments (creator accounts)
+  const creator = state.me.accountType === "creator";
   const [mode, setMode] = useState<"text" | "flyer">("text");
   const [text, setText] = useState("");
   const [img, setImg] = useState<{ data: string; mediaType: "image/jpeg"; preview: string } | null>(null);
   const [form, setForm] = useState<Form>(blank);
+  const vis = !creator && form.visibility === "public" ? "open" : form.visibility;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [precheck, setPrecheck] = useState<ModerationT | null>(null);
@@ -84,7 +87,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
       const r = await api<{ event: EventView; moderation: Moderation }>("/api/events", {
         json: {
           title: form.title, description: form.description, category: form.category, buildingId: form.buildingId, room: form.room || null,
-          start: form.start, end: form.end, visibility: form.visibility, schools: form.schools, course: form.course || null,
+          start: form.start, end: form.end, visibility: vis, schools: form.schools, course: form.course || null,
           invitees: form.invitees, capacity: form.capacity ? Number(form.capacity) : null, freeFood: form.freeFood || undefined, foodDetail: form.foodDetail || null,
           hostAs: asOrg ? "org" : "me", orgId: asOrg?.id ?? null, source: fromFlyer ? "flyer" : "user",
         },
@@ -154,13 +157,13 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
             <div className="col-span-2">
               <Field label="Visible to">
                 <div className="flex rounded-lg border border-line p-0.5 text-sm">
-                  {VIS.map(([v, l]) => (
-                    <button key={v} onClick={() => set("visibility", v)} className={cx("flex-1 rounded-md py-1.5 font-medium", form.visibility === v ? "bg-surface" : "text-muted")}>{l}</button>
+                  {VIS.filter(([v]) => creator || v !== "public").map(([v, l]) => (
+                    <button key={v} onClick={() => set("visibility", v)} className={cx("flex-1 rounded-md py-1.5 font-medium", vis === v ? "bg-surface" : "text-muted")}>{l}</button>
                   ))}
                 </div>
               </Field>
             </div>
-            {form.visibility === "school" && (
+            {vis === "school" && (
               <div className="col-span-2 flex flex-wrap gap-1.5">
                 {SCHOOLS.filter((s) => s.id !== "all").map((s) => (
                   <button key={s.id} onClick={() => set("schools", toggle(form.schools.filter((x) => x !== "all"), s.id))}
@@ -168,9 +171,9 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
                 ))}
               </div>
             )}
-            {(form.visibility === "invite" || form.visibility === "open") && (
+            {(vis === "invite" || vis === "open") && (
               <div className="col-span-2">
-                <Field label={form.visibility === "invite" ? "Invite" : "Notify friends (optional)"}>
+                <Field label={vis === "invite" ? "Invite" : "Notify friends (optional)"}>
                   <div className="flex flex-wrap gap-1.5">
                     {state.me.friends.map((f) => (
                       <button key={f.id} onClick={() => set("invitees", toggle(form.invitees, f.id))}
@@ -178,7 +181,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
                     ))}
                   </div>
                 </Field>
-                {form.visibility === "open" && form.course && <p className="mt-1.5 text-xs text-muted">Students in {form.course.toUpperCase()} will see this marked as their class.</p>}
+                {vis === "open" && form.course && <p className="mt-1.5 text-xs text-muted">Students in {form.course.toUpperCase()} will see this marked as their class.</p>}
               </div>
             )}
             <Field label="Capacity"><input type="number" className={inputCls} value={form.capacity} placeholder="Optional" onChange={(e) => set("capacity", e.target.value)} /></Field>

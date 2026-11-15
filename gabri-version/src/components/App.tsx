@@ -5,7 +5,6 @@ import { lightFor, type LightPreset } from "@/lib/sun";
 import { loadMapLighting, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Hotspot, type Loc, type Notification } from "@/lib/client-types";
@@ -287,9 +286,8 @@ export default function App() {
   const openHost = (host: HostRef) => { setSelHost({ host, from: selEvent }); setSelEvent(null); setSelBuilding(null); setSelAlert(null); setMenuOpen(true); };
 
   // Only Student Creator accounts can post; students are pointed to Settings to switch.
-  const router = useRouter();
   const isCreator = state?.me.accountType === "creator";
-  const requestAddEvent = () => (isCreator ? setAddOpen(true) : router.push("/settings?section=account&reason=post"));
+  const requestAddEvent = () => setAddOpen(true); // anyone can make an event (campus-wide ones are for creators)
 
   // "/?event=<id>" (from the profile page) opens that event once the data is in
   const pendingEvent = useRef<string | null>(null);
@@ -601,6 +599,10 @@ export default function App() {
                     onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
                     onChanged={() => { refresh(); pollNotifs(); }} />
                 )}
+                {/* make an event: place, time, who can see it, who's invited */}
+                <button type="button" onClick={requestAddEvent} aria-label="Create an event" title="Create an event" className="dock-filter dock-add">
+                  <Plus size={21} aria-hidden="true" />
+                </button>
               </div>
             </div>
           </div>
