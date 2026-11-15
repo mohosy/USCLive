@@ -157,7 +157,7 @@ function Form({ initial, onSaved }: { initial: ProfileView; onSaved: (p: Profile
         </div>
       </Card>
 
-      <Card title="USC account" subtitle="These come from USC's directory and can't be changed here.">
+      <Card title="USC account" subtitle={initial.verified ? "These come from USC's directory and can't be changed here." : "Set when you created your account and can't be changed. In the real app these come from your USC sign-in."}>
         <div className="divide-y divide-line rounded-xl border border-line">
           <Locked label="Email" value={initial.email || "—"} />
           <Locked label="School" value={school} />
