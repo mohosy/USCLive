@@ -30,6 +30,17 @@ export function bearingBetween(a: LL, b: LL) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
+/**
+ * The "you are here" circle under the Trojan, as a width in screen pixels (the same at every zoom):
+ * 36 px for a normal phone fix (about 10 m) or when the accuracy is not known, a little smaller for a
+ * better fix and a little larger for a worse one, always between 28 and 48 px.
+ */
+export const ME_CIRCLE_PX = { min: 28, base: 36, max: 48 } as const;
+export function meCirclePx(accuracyM: number | null | undefined) {
+  if (accuracyM == null || !Number.isFinite(accuracyM) || accuracyM <= 0) return ME_CIRCLE_PX.base;
+  return Math.round(Math.min(ME_CIRCLE_PX.max, Math.max(ME_CIRCLE_PX.min, ME_CIRCLE_PX.base * Math.sqrt(accuracyM / 10))));
+}
+
 const norm = (d: number) => ((d % 360) + 360) % 360;
 /** shortest signed turn from one heading to another, in degrees (-180..180) */
 export const turnBetween = (from: number, to: number) => ((norm(to) - norm(from) + 540) % 360) - 180;

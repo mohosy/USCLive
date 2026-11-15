@@ -119,16 +119,16 @@ function softShadowTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-/** the "you are here" circle: soft blue, a little stronger at the rim (blue, so it never reads as a red DPS zone or a gold live game) */
+/** the "you are here" circle: low-opacity blue fading out to a soft edge (blue, so it never reads as a red DPS zone or a gold live game) */
 function accuracyTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = 256;
   const g = c.getContext("2d")!;
   const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-  grad.addColorStop(0, "rgba(59,130,246,0.5)");
-  grad.addColorStop(0.84, "rgba(59,130,246,0.3)");
-  grad.addColorStop(0.94, "rgba(96,165,250,0.95)");
-  grad.addColorStop(1, "rgba(96,165,250,0)");
+  grad.addColorStop(0, "rgba(59,130,246,0.42)");
+  grad.addColorStop(0.55, "rgba(59,130,246,0.3)");
+  grad.addColorStop(0.85, "rgba(59,130,246,0.12)");
+  grad.addColorStop(1, "rgba(59,130,246,0)");
   g.fillStyle = grad;
   g.fillRect(0, 0, 256, 256);
   return new THREE.CanvasTexture(c);
@@ -148,9 +148,10 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
   alwaysOnTop = false;
   /** meters above the ground (picked up and carried by the recall animation) */
   lift = 0;
-  /** "you are here": a soft pulsing circle under the feet with this radius in meters on the ground, in place of
-   *  the thin gold ring (null: the ring, as on the tour guide and in play mode) */
-  accuracyM: number | null = null;
+  /** "you are here": a soft pulsing circle on the ground under the feet, this many screen pixels wide at every zoom
+   *  (it lies flat, so it tilts with the map), in place of the thin gold ring (null: the ring, as on the tour guide
+   *  and in play mode) */
+  circlePx: number | null = null;
   /** called at the start of every frame with the time in ms, so the owner can move and turn the character */
   onFrame: ((now: number) => void) | null = null;
   /** reduced motion: hold the pose, no pulsing, and no continuous redraw (the owner repaints when something changes) */
@@ -269,18 +270,20 @@ export class CharacterLayer implements mapboxgl.CustomLayerInterface {
     this.mixer.update(this.still ? 0 : dt * this.timeScale);
     const t = this.clock.elapsedTime;
     (this.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.35 * Math.sin(t * 3);
-    this.ring.visible = this.accuracyM == null;
-    if (this.accuracyM != null) {
+    this.ring.visible = this.circlePx == null;
+    if (this.circlePx != null) {
       if (!this.disc) {
         this.disc = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({ map: accuracyTexture(), transparent: true, depthWrite: false }));
         this.disc.rotation.x = -Math.PI / 2;
         this.disc.position.y = this.ring.position.y * 0.5; // under the contact shadow
         this.scene.add(this.disc);
       }
-      const pulse = this.still ? 0.5 : 0.5 + 0.5 * Math.sin(t * 2.2);
-      // the radius is meters on the ground, whatever size the character is drawn at
-      this.disc.scale.setScalar(((this.accuracyM * this.unitsPerMeter) / this.scale) * (1 + 0.06 * pulse));
-      (this.disc.material as THREE.MeshBasicMaterial).opacity = 0.6 + 0.4 * pulse;
+      const pulse = this.still ? 0.5 : 0.5 + 0.5 * Math.sin(t * 1.8);
+      // screen pixels -> meters on the ground at this zoom, then into model units whatever size the character is drawn at
+      const mpp = (78_271.517 * Math.cos(toRad(this.pos.lat))) / 2 ** this.map.getZoom();
+      const radiusM = (this.circlePx / 2) * mpp;
+      this.disc.scale.setScalar(((radiusM * this.unitsPerMeter) / this.scale) * (1 + 0.08 * pulse));
+      (this.disc.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.3 * pulse;
       this.disc.visible = true;
     } else if (this.disc) this.disc.visible = false;
 

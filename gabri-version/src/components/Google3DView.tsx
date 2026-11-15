@@ -27,7 +27,7 @@ import type { Camera } from "./MapView";
 import type { WalkPhase, WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
 import { trojanGlbUrl } from "./walk/trojanModel";
-import { MeMotion } from "@/lib/meMotion";
+import { MeMotion, meCirclePx } from "@/lib/meMotion";
 import type { MeLive } from "./MapView";
 
 /** Tiny pub/sub so the flat map can drive this camera while the 3D tiles load (no React re-renders per frame). */
@@ -110,7 +110,6 @@ interface Props {
   onMe?: () => void;
 }
 
-const ME_ACCURACY_M = 10; // the circle's radius when the accuracy is not known
 const prefersStill = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 interface WalkState {
@@ -406,16 +405,18 @@ export default function Google3DView(props: Props) {
     const mo = (meMotion.current ??= new MeMotion({ lat: p.me.lat, lng: p.me.lng }));
     const here = { lng: mo.pos.lng, lat: mo.pos.lat, heading: mo.heading };
     const still = prefersStill();
-    const acc = Math.min(p.meLive?.current.accuracyM ?? ME_ACCURACY_M, 60);
     const pulse = still ? 0.5 : mePulse.current;
+    // the circle under the feet: 28-48 px wide at every zoom, flat on the ground (so it tilts with the map),
+    // drawn as three stacked rings so the edge fades out softly
+    const r = (meCirclePx(p.meLive?.current.accuracyM) / 2) * (1 + 0.08 * pulse);
+    const rings = [1, 0.74, 0.48].map((k) => ({ ...here, r: r * k }));
     const clip = mo.moving ? "Walk" : "Idle";
     return [
       new ScatterplotLayer({
-        id: "me-accuracy", data: [here], getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat, gz],
-        getRadius: acc * (1 + 0.06 * pulse), radiusUnits: "meters", radiusMinPixels: 22,
-        getFillColor: [59, 130, 246, Math.round(70 + 40 * pulse)], getLineColor: [96, 165, 250, Math.round(190 + 60 * pulse)],
-        stroked: true, getLineWidth: 1.5, lineWidthUnits: "pixels",
-        updateTriggers: { getPosition: [here.lng, here.lat], getRadius: [acc, pulse], getFillColor: pulse, getLineColor: pulse },
+        id: "me-accuracy", data: rings, getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat, gz],
+        getRadius: (d: { r: number }) => d.r, radiusUnits: "pixels", stroked: false,
+        getFillColor: [59, 130, 246, Math.round(26 + 14 * pulse)],
+        updateTriggers: { getPosition: [here.lng, here.lat], getRadius: r, getFillColor: pulse },
         parameters: { depthCompare: "always" },
       }),
       ...(walkerUrl.current ? [new ScenegraphLayer({

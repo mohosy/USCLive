@@ -26,7 +26,7 @@ function alertPoints(alerts: SafetyAlert[]): FC {
   return { type: "FeatureCollection", features: alerts.map((a) => ({ type: "Feature", properties: { id: `al:${a.id}`, title: a.title }, geometry: { type: "Point", coordinates: [a.lng, a.lat] } })) };
 }
 import { LEVEL_COLOR } from "./ui";
-import { MeMotion } from "@/lib/meMotion";
+import { MeMotion, meCirclePx } from "@/lib/meMotion";
 import type { WalkGuide, WalkProgress } from "./walk/WalkGuide";
 import { CROWD_MIN_ZOOM, CrowdLayer, type CrowdSpot } from "./walk/CrowdLayer";
 import { busyLine, hotspotFor } from "@/lib/hotspots";
@@ -313,7 +313,6 @@ interface Props {
 
 /** your location's accuracy and the phone's compass, kept in a ref so a turning phone does not re-render the app */
 export interface MeLive { accuracyM: number | null; compass: number | null }
-const ME_ACCURACY_M = 10; // the circle's radius when the accuracy is not known
 const prefersStill = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 type FC = FeatureCollection;
@@ -1116,8 +1115,7 @@ export default function MapView(props: Props) {
           if (mo.moving !== walking) { walking = mo.moving; c.play(walking ? "Walk" : "Idle"); }
           const mpp = (78_271.517 * Math.cos((mo.pos.lat * Math.PI) / 180)) / 2 ** m.getZoom();
           c.scale = Math.max(1.2, (24 * mpp) / 2); // same rule as play mode
-          // the accuracy circle: the real accuracy, but never smaller than 22 px so it reads at every zoom
-          c.accuracyM = Math.max(Math.min(live?.accuracyM ?? ME_ACCURACY_M, 60), 22 * mpp);
+          c.circlePx = meCirclePx(live?.accuracyM); // the circle under the feet: 28-48 px wide at every zoom
         };
         meChar.current = c;
         placeMe.current();

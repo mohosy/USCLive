@@ -121,4 +121,15 @@ assert.equal(M.turnBetween(10, 350), -20);
   near(M.metersBetween(me.pos, north(east(LEAVEY, 40), 30)), 0, 0.01, 'ends at the newest spot');
 }
 
-console.log('Me-motion checks passed: walks instead of jumping, faces its direction, compass when standing, jitter ignored, far jumps and reduced motion snap, mid-walk updates.');
+// 8. the circle under the feet is sized in screen pixels: 36 px normally, always between 28 and 48
+{
+  assert.equal(M.meCirclePx(null), 36, 'unknown accuracy: 36 px');
+  assert.equal(M.meCirclePx(undefined), 36);
+  assert.equal(M.meCirclePx(10), 36, 'a normal 10 m fix: 36 px');
+  assert.equal(M.meCirclePx(3), 28, 'a very good fix: clamped to 28 px');
+  assert.equal(M.meCirclePx(500), 48, 'a poor fix: clamped to 48 px');
+  for (const a of [0, -4, NaN, 1, 5, 8, 12, 20, 35, 80, 2000]) { const px = M.meCirclePx(a); assert.ok(px >= 28 && px <= 48, `${a} m -> ${px} px stays within 28-48`); }
+  assert.ok(M.meCirclePx(6) < M.meCirclePx(14), 'a worse fix is a little larger');
+}
+
+console.log('Me-motion checks passed: walks instead of jumping, faces its direction, compass when standing, jitter ignored, far jumps and reduced motion snap, mid-walk updates, circle 28-48 px.');

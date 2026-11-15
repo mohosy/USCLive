@@ -42,7 +42,8 @@ const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => 
 const NO_HOTSPOTS: Hotspot[] = [];
 
 type Tab = "menu" | "events" | "study";
-const START_LOC: Loc = { lat: BUILDING_BY_ID.gin.lat, lng: BUILDING_BY_ID.gin.lng, label: "Ginsburg Hall", buildingId: "gin" };
+// Until you share your location you stand at the Tommy Trojan statue, the center of campus, so walk times are realistic.
+const START_LOC: Loc = { lat: BUILDING_BY_ID.tommy.lat, lng: BUILDING_BY_ID.tommy.lng, label: "Tommy Trojan", buildingId: "tommy" };
 
 /** Keep the previous object for every part of the state that didn't change, so nothing downstream re-runs. */
 function mergeState(prev: AppState | null, next: AppState): AppState {
