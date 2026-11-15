@@ -7,7 +7,8 @@
 import { Deck, FlyToInterpolator, type MapViewState, type PickingInfo } from "@deck.gl/core";
 import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import { Tile3DLayer, TileLayer } from "@deck.gl/geo-layers";
-import { BitmapLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { BitmapLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { iconCanvas, iconKey, ICON_PX } from "@/lib/eventIcons";
 import { ScenegraphLayer } from "@deck.gl/mesh-layers";
 import type { Tileset3D } from "@loaders.gl/tiles";
 import { RotateCcw, RotateCw, Compass } from "lucide-react";
@@ -97,7 +98,12 @@ interface WalkState {
   waveStart: number;
 }
 
-interface Pin { id: string; position: [number, number]; color: [number, number, number, number]; radius: number; selected: boolean; title: string }
+interface Pin { id: string; position: [number, number]; color: [number, number, number, number]; radius: number; selected: boolean; title: string; icon: string; size: number; dim: boolean }
+
+/** the 3D film camera that stands at every live webcam (same model as the Explore map) */
+const CAM_MODEL = "/models/film-camera.glb";
+const iconUrls = new Map<string, string>();
+const iconUrl = (key: string) => { let u = iconUrls.get(key); if (!u) { u = iconCanvas(key).toDataURL(); iconUrls.set(key, u); } return u; };
 
 const byIdCache = new WeakMap<Building[], Record<string, Building>>();
 function BYID(list: Building[]) {
@@ -163,6 +169,9 @@ export default function Google3DView(props: Props) {
         radius: (isLive(e, now) ? 10 : 8) + (e.id === p.selectedEventId ? 4 : 0),
         selected: e.id === p.selectedEventId,
         title: e.title.length > 28 ? `${e.title.slice(0, 27)}…` : e.title,
+        icon: iconKey(e.category, e.id === p.selectedEventId, e.freeFood),
+        size: ICON_PX * (0.85 + Math.min(0.3, Math.sqrt(e.attendeeCount) * 0.02)) * (e.id === p.selectedEventId ? 1.15 : 1),
+        dim,
       });
     }
     const terrain = new TerrainExtension();
@@ -224,22 +233,34 @@ export default function Google3DView(props: Props) {
         extensions: [terrain],
       }),
       ...walkLayers,
-      new ScatterplotLayer<Pin>({
+      // event type icons (one sprite per type, GPU-drawn)
+      new IconLayer<Pin>({
         id: "pins",
         data: w ? [] : pins,
         getPosition: (d) => [d.position[0], d.position[1], gz],
-        getFillColor: (d) => d.color,
-        getLineColor: (d) => (d.selected ? [153, 0, 0, 255] : [255, 255, 255, 255]),
-        getRadius: (d) => d.radius,
-        radiusUnits: "pixels",
-        lineWidthUnits: "pixels",
-        getLineWidth: (d) => (d.selected ? 3 : 2),
-        stroked: true,
+        getIcon: (d) => ({ id: d.icon, url: iconUrl(d.icon), width: ICON_PX * 2, height: ICON_PX * 2, mask: false }),
+        getSize: (d) => d.size,
+        sizeUnits: "pixels",
+        getColor: (d) => [255, 255, 255, d.dim ? 70 : 255],
         billboard: true,
         pickable: true,
-        
         parameters: { depthCompare: "always" },
-        updateTriggers: { getLineColor: p.selectedEventId, getLineWidth: p.selectedEventId },
+        updateTriggers: { getIcon: p.selectedEventId, getSize: p.selectedEventId },
+      }),
+      // live webcams: a 3D film camera standing on the spot
+      new ScenegraphLayer<Callout>({
+        id: "cams-3d",
+        data: w ? [] : p.callouts.filter((c) => c.kind === "webcam"),
+        scenegraph: CAM_MODEL,
+        getPosition: (c) => [c.lng, c.lat, zAt.current.get(c.id) ?? gz],
+        getOrientation: [0, 200, 90],
+        // Snap Map style: big, and about the same size on screen at every zoom (~70-90 px tall)
+        sizeScale: 400,
+        sizeMinPixels: 60,
+        sizeMaxPixels: 80,
+        _lighting: "pbr",
+        pickable: true,
+        updateTriggers: { getPosition: camZ.current },
       }),
       // names only for the hovered building, plus the main buildings once you zoom in close
       new TextLayer<Building>({
@@ -281,6 +302,7 @@ export default function Google3DView(props: Props) {
   // the photoreal tile layer is created once and reused (rebuilding it on every hover was wasted work)
   const tiles = useRef<Tile3DLayer | null>(null);
   const tileGen = useRef(0); // bumps when a tile loads
+  const camZ = useRef(0); // bumps when a webcam's ground height changes
   const measuredGen = useRef(-1);
   const lastReset = useRef(0);
   const groundDirty = useRef(true);
@@ -485,11 +507,12 @@ export default function Google3DView(props: Props) {
   function measureBubbles() {
     if (document.hidden || !activeRef.current) return;
     if (performance.now() - lastMove.current < 600) return; // each pick re-renders the scene: never while the camera is moving
-    if (tileGen.current !== measuredGen.current && performance.now() - lastReset.current > 3000) {
+    const t = Date.now();
+    if (tileGen.current !== measuredGen.current && t - lastReset.current > 3000) {
       settled.current.clear(); // new detail loaded: heights may have changed
       tries.current.clear();
       measuredGen.current = tileGen.current;
-      lastReset.current = performance.now();
+      lastReset.current = t;
       groundDirty.current = true;
     }
     if (groundDirty.current) { sampleGround(); groundDirty.current = false; }
@@ -505,6 +528,7 @@ export default function Google3DView(props: Props) {
       tries.current.set(b.c.id, n);
       zAt.current.set(b.c.id, z);
       if (prev == null || Math.abs(prev - z) >= 0.5) bubblesDirty.current = true;
+      if (b.c.kind === "webcam" && (prev == null || Math.abs(prev - z) > 0.5)) { camZ.current++; deck.current?.setProps({ layers: layers() }); }
       // done when two looks agree. A spot on a roof edge can flip forever, so three looks is the limit:
       // without it this timer kept re-rendering the scene 8-12 times a second while nothing moved.
       if ((prev != null && Math.abs(prev - z) < 0.5) || n >= 3) settled.current.add(b.c.id);
@@ -586,7 +610,10 @@ export default function Google3DView(props: Props) {
       viewState: viewState.current,
       controller: { touchRotate: true, inertia: 250 },
       onViewStateChange: ({ viewState: v }) => setView(v as MapViewState),
-      onClick: (info: PickingInfo<Pin>) => { if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent(info.object.id); },
+      onClick: (info: PickingInfo) => {
+        if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent((info.object as Pin).id);
+        if (info.layer?.id === "cams-3d" && info.object) cb.current.onCallout(info.object as Callout);
+      },
       onAfterRender: positionBubbles,
       getCursor: ({ isHovering, isDragging }) => (isDragging ? "grabbing" : isHovering ? "pointer" : "grab"),
       getTooltip: (info: PickingInfo<Pin>) => (info.layer?.id === "pins" && info.object ? { text: info.object.title } : null),
@@ -639,6 +666,7 @@ export default function Google3DView(props: Props) {
     for (const [id, b] of bubbles.current) if (!keep.has(id)) { b.el.remove(); bubbles.current.delete(id); }
     bubblesDirty.current = true;
     positionBubbles();
+    deck.current?.setProps({ layers: layers() }); // webcam models follow the Cams filter
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.callouts, walkP?.phase]);
 

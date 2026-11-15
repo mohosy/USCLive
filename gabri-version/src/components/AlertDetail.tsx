@@ -1,14 +1,11 @@
 "use client";
 
 import { ArrowLeft, ShieldAlert } from "lucide-react";
-import { useState } from "react";
-import { api, type SafetyAlert } from "@/lib/client-types";
-import { Button } from "./ui";
+import type { SafetyAlert } from "@/lib/client-types";
 
 const KIND: Record<SafetyAlert["kind"], string> = { crime: "Crime reported", suspicious: "Suspicious activity", hazard: "Hazard", police_activity: "Police activity" };
 
-export default function AlertDetail({ alert, now, onClose, onResolved }: { alert: SafetyAlert; now: Date; onClose: () => void; onResolved: () => void }) {
-  const [busy, setBusy] = useState(false);
+export default function AlertDetail({ alert, now, onClose }: { alert: SafetyAlert; now: Date; onClose: () => void }) {
   const mins = Math.max(0, Math.round((+now - +new Date(alert.createdAt)) / 60_000));
   const left = Math.max(0, Math.round((+new Date(alert.expiresAt) - +now) / 60_000));
   return (
@@ -26,9 +23,6 @@ export default function AlertDetail({ alert, now, onClose, onResolved }: { alert
         <div className="flex gap-3 py-1.5"><div className="w-20 shrink-0 text-muted">On map</div><div>For {left > 120 ? `${Math.round(left / 60)} more hours` : `${left} more min`}, or until DPS clears it</div></div>
       </div>
       <p className="mt-4 text-sm text-muted">Need a walking escort? Call DPS at <a href="tel:2137404321" className="font-medium text-foreground underline">213-740-4321</a>. In an emergency call 911.</p>
-      <Button variant="secondary" className="mt-5 w-full" disabled={busy} onClick={async () => { setBusy(true); await api(`/api/alerts/${alert.id}`, { method: "POST" }); setBusy(false); onResolved(); }}>
-        Mark cleared (DPS staff)
-      </Button>
     </div>
   );
 }
