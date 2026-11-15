@@ -5,13 +5,10 @@ import { gameState } from "./games";
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /** Inner HTML of a callout bubble. Games get their score/clock filled in separately every second. */
-/** Video-camera glyph (lucide "video"), inlined so markers need no React. */
-const CAM_SVG = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>`;
-
 export function calloutHTML(c: Callout, now: Date) {
-  // webcams are icons on the map, not cards: the name shows on hover, the stream opens on click
+  // webcams: the 3D film camera is drawn by the map; this is just its name tag at the camera's feet
   if (c.kind === "webcam") {
-    return `<div class="cam-pin" aria-label="${esc(c.title)} live camera">${CAM_SVG}<i class="cam-live"></i><span class="cam-label">${esc(c.title)}</span></div><div class="cam-stem"></div><div class="co-foot"></div>`;
+    return `<div class="cam-tag"><i></i>Live<span>${esc(c.title)}</span></div>`;
   }
   let title = esc(c.title);
   let meta = c.meta ? esc(c.meta) : "";

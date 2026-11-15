@@ -8,6 +8,10 @@ import type { Callout } from "@/lib/callouts";
 import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
 import { calloutHTML } from "@/lib/calloutHtml";
 import { declutter } from "@/lib/declutter";
+import { allIconKeys, iconCanvas, iconKey, ICON_PX, ICON_RATIO } from "@/lib/eventIcons";
+
+/** the 3D film camera that stands on the map at every live webcam */
+const CAM_MODEL = "/models/film-camera.glb";
 import { LEVEL_COLOR } from "./ui";
 import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
@@ -110,7 +114,7 @@ function hotspotGeo(hotspots: Hotspot[], buildings: Building[]): { points: FC; c
 function buildingLabelGeo(buildings: Building[]): FC {
   return {
     type: "FeatureCollection",
-    features: buildings.map((b) => ({ type: "Feature", properties: { id: b.id, name: b.name }, geometry: { type: "Point", coordinates: [b.lng, b.lat] } })),
+    features: buildings.map((b) => ({ type: "Feature", properties: { id: b.id, name: b.name, minor: !!b.minor }, geometry: { type: "Point", coordinates: [b.lng, b.lat] } })),
   };
 }
 
@@ -138,7 +142,10 @@ function eventGeo(events: EventView[], selectedId: string | null, highlight: str
         id: e.id,
         title: e.title.length > 28 ? `${e.title.slice(0, 27)}…` : e.title,
         color: (CATEGORY_META[e.category] ?? CATEGORY_META.student).color,
-        radius: Math.round(6 + Math.min(5, Math.sqrt(e.attendeeCount) * 0.45)),
+        icon: iconKey(e.category, e.id === selectedId, e.freeFood),
+        // bigger events get slightly bigger icons
+        scale: Math.round((0.85 + Math.min(0.3, Math.sqrt(e.attendeeCount) * 0.02)) * 100) / 100,
+        radius: Math.round((ICON_PX / 2) * (0.85 + Math.min(0.3, Math.sqrt(e.attendeeCount) * 0.02))),
         live: isLive(e, now),
         selected: e.id === selectedId,
         dim: highlight ? !highlight.includes(e.id) : false,
@@ -157,7 +164,7 @@ export default function MapView(props: Props) {
   const ready = useRef(false);
   const styleRef = useRef<MapStyle>(props.mapStyle);
   const meMarker = useRef<mapboxgl.Marker | null>(null);
-  const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC; alerts: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings), alerts: EMPTY });
+  const data = useRef<{ events: FC; points: FC; columns: FC; buildings: FC; alerts: FC; cams: FC }>({ events: EMPTY, points: EMPTY, columns: EMPTY, buildings: buildingLabelGeo(props.buildings), alerts: EMPTY, cams: EMPTY });
   const bubbles = useRef(new Map<string, { m: mapboxgl.Marker; el: HTMLDivElement; html: string; c: Callout }>());
   const cb = useRef(props);
   useEffect(() => { cb.current = props; });
@@ -198,6 +205,14 @@ export default function MapView(props: Props) {
     m.addSource("hot-columns", { type: "geojson", data: data.current.columns });
     m.addSource("building-labels", { type: "geojson", data: data.current.buildings });
     m.addSource("alerts", { type: "geojson", data: data.current.alerts });
+    m.addSource("cams", { type: "geojson", data: data.current.cams });
+    // event type icons, drawn once on a canvas and uploaded as sprites
+    for (const k of allIconKeys()) {
+      if (m.hasImage(k)) continue;
+      const cv = iconCanvas(k);
+      m.addImage(k, cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height), { pixelRatio: ICON_RATIO });
+    }
+    if (!m.hasModel("film-cam")) m.addModel("film-cam", CAM_MODEL);
     // DPS alert zones
     m.addLayer({ id: "alert-fill", type: "fill", source: "alerts", slot: "middle", paint: { "fill-color": "#dc2626", "fill-opacity": 0.16, "fill-emissive-strength": 1 } });
     m.addLayer({ id: "alert-line", type: "line", source: "alerts", slot: "middle", paint: { "line-color": "#dc2626", "line-width": 1.5, "line-opacity": 0.6, "line-emissive-strength": 1 } });
@@ -221,8 +236,20 @@ export default function MapView(props: Props) {
     m.addLayer({ id: "hot-hit", type: "circle", source: "hot-points", slot: "top", paint: { "circle-radius": 18, "circle-opacity": 0 } });
 
     // our own building names (Mapbox POI labels are turned off)
+    // building names: only the main ones by default, every building once you zoom in close
     m.addLayer({
-      id: "building-names", type: "symbol", source: "building-labels", slot: "top", minzoom: 16,
+      id: "building-names", type: "symbol", source: "building-labels", slot: "top", minzoom: 16, filter: ["!", ["get", "minor"]],
+      layout: { "text-field": ["get", "name"], "text-size": ["interpolate", ["linear"], ["zoom"], 16, 10, 18, 12], "text-max-width": 8, "text-padding": 4, "text-anchor": "bottom", "text-offset": [0, -1.1] },
+      paint: {
+        "text-color": sat ? "#ffffff" : "#57534e",
+        "text-halo-color": sat ? "rgba(0,0,0,.7)" : "rgba(255,255,255,.9)",
+        "text-halo-width": 1.2,
+        "text-emissive-strength": 1,
+      },
+    });
+
+    m.addLayer({
+      id: "building-names-minor", type: "symbol", source: "building-labels", slot: "top", minzoom: 17.6, filter: ["get", "minor"],
       layout: { "text-field": ["get", "name"], "text-size": ["interpolate", ["linear"], ["zoom"], 16, 10, 18, 12], "text-max-width": 8, "text-padding": 4, "text-anchor": "bottom", "text-offset": [0, -1.1] },
       paint: {
         "text-color": sat ? "#ffffff" : "#57534e",
@@ -236,7 +263,7 @@ export default function MapView(props: Props) {
     m.addLayer({
       id: "ev-halo", type: "circle", source: "events", slot: "top", filter: ["==", ["get", "live"], true],
       paint: {
-        "circle-radius": ["+", ["get", "radius"], 6],
+        "circle-radius": ["+", ["get", "radius"], 7],
         "circle-color": ["get", "color"],
         "circle-opacity": ["case", ["get", "dim"], 0.05, 0.22],
         "circle-pitch-alignment": "viewport",
@@ -244,25 +271,37 @@ export default function MapView(props: Props) {
       },
     });
     m.addLayer({
-      id: "ev-pins", type: "circle", source: "events", slot: "top",
-      layout: { "circle-sort-key": ["get", "sort"] },
-      paint: {
-        "circle-radius": ["case", ["get", "selected"], ["+", ["get", "radius"], 3], ["get", "radius"]],
-        "circle-color": ["get", "color"],
-        "circle-stroke-color": ["case", ["get", "selected"], "#990000", "#ffffff"],
-        "circle-stroke-width": ["case", ["get", "selected"], 3, 2],
-        "circle-opacity": dimmed,
-        "circle-stroke-opacity": dimmed,
-        "circle-pitch-alignment": "viewport",
-        "circle-emissive-strength": 1,
+      id: "ev-pins", type: "symbol", source: "events", slot: "top",
+      layout: {
+        "icon-image": ["get", "icon"],
+        "icon-size": ["case", ["get", "selected"], ["*", ["get", "scale"], 1.15], ["get", "scale"]],
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+        "icon-pitch-alignment": "viewport",
+        "symbol-sort-key": ["get", "sort"],
+        "symbol-z-order": "source",
       },
+      paint: { "icon-opacity": dimmed, "icon-emissive-strength": 1 },
     });
+    // live webcams: a 3D film camera standing on the spot (GPU model layer; click opens the stream)
+    m.addLayer({
+      id: "cams-3d", type: "model", source: "cams", slot: "top",
+      layout: { "model-id": "film-cam" },
+      paint: {
+        // Snap Map style: oversized, about the same size on screen at every zoom (halves per zoom level)
+        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [90, 90, 90]], 19, ["literal", [7, 7, 7]]],
+        "model-rotation": ["literal", [0, 0, 200]],
+        "model-type": "common-3d",
+        "model-cast-shadows": true,
+        "model-emissive-strength": 0.6,
+      },
+    } as mapboxgl.LayerSpecification);
     m.addLayer({
       id: "ev-labels", type: "symbol", source: "events", slot: "top", minzoom: 17,
       layout: {
         "text-field": ["get", "title"],
         "text-size": 11,
-        "text-offset": [0, 1.3],
+        "text-offset": [0, 1.7],
         "text-anchor": "top",
         "text-optional": true,
         "symbol-sort-key": ["-", 0, ["get", "sort"]],
@@ -338,6 +377,13 @@ export default function MapView(props: Props) {
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
     m.on("mouseenter", "ev-pins", () => (m.getCanvas().style.cursor = "pointer"));
     m.on("mouseleave", "ev-pins", () => (m.getCanvas().style.cursor = ""));
+    m.on("mouseenter", "cams-3d", () => (m.getCanvas().style.cursor = "pointer"));
+    m.on("mouseleave", "cams-3d", () => (m.getCanvas().style.cursor = ""));
+    m.on("click", "cams-3d", (e) => {
+      const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
+      const c = id ? cb.current.callouts.find((x) => x.id === id) : undefined;
+      if (c) cb.current.onCallout(c);
+    });
     m.on("click", "ev-pins", (e) => {
       const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
       if (id) cb.current.onSelectEvent(id);
@@ -392,6 +438,16 @@ export default function MapView(props: Props) {
     data.current.alerts = fc;
     if (ready.current) setSource("alerts", fc);
   }, [props.alerts]);
+
+  // webcams -> points for the 3D camera layer
+  useEffect(() => {
+    const fc: FC = {
+      type: "FeatureCollection",
+      features: props.callouts.filter((c) => c.kind === "webcam").map((c) => ({ type: "Feature", properties: { id: c.id }, geometry: { type: "Point", coordinates: [c.lng, c.lat] } })),
+    };
+    data.current.cams = fc;
+    if (ready.current) setSource("cams", fc);
+  }, [props.callouts]);
 
   // callout bubbles: a few DOM markers (diffed by id, so nothing re-mounts on refresh)
   useEffect(() => {

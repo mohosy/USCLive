@@ -343,7 +343,7 @@ export default function App() {
             {!state ? (
               <div className="space-y-2"><div className="skeleton h-24" /><div className="skeleton h-16" /><div className="skeleton h-16" /></div>
             ) : openAlert ? (
-              <AlertDetail alert={openAlert} now={now} onClose={closeDetail} onResolved={() => { closeDetail(); refresh(); }} />
+              <AlertDetail alert={openAlert} now={now} onClose={closeDetail} />
             ) : event ? (
               <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
