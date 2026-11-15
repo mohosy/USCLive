@@ -1,6 +1,7 @@
 /** HTML for a map callout bubble, shared by the Explore (Mapbox) and Satellite (Google 3D) views. */
 import type { Callout } from "./callouts";
 import { gameState, team } from "./games";
+import { BUILDING_BY_ID } from "./campus";
 
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
@@ -37,7 +38,7 @@ export function calloutHTML(c: Callout, now: Date) {
   if (c.kind === "event" && c.ev) return eventBanner(c);
   if (c.kind === "schedule" && c.sched) return scheduleBanner(c);
   if (c.kind === "busy" || c.kind === "quiet") {
-    return `<div class="bz bz-${c.kind}"><span class="bz-ic">${USERS}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
+    return `<div class="bz bz-${c.kind}"><span class="bz-ic">${placeIcon(c.id)}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
   }
   const title = esc(c.title);
   const meta = c.meta ? esc(c.meta) : "";
@@ -119,3 +120,17 @@ function eventBanner(c: Callout) {
     </div>
   </div><div class="co-foot"></div>`;
 }
+
+// what kind of place it is, at a glance: a barbell for gyms, waves for the pool, fork and knife for dining
+const svg = (paths: string) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+const DUMBBELL = svg('<path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/>');
+const WAVES = svg('<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>');
+const UTENSILS = svg('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>');
+const LIBRARY = svg('<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>');
+function placeIcon(calloutId: string) {
+  const id = calloutId.startsWith("b:") ? calloutId.slice(2) : "";
+  if (id === "uac") return WAVES;
+  const kind = BUILDING_BY_ID[id]?.kind;
+  return kind === "gym" ? DUMBBELL : kind === "dining" ? UTENSILS : kind === "library" ? LIBRARY : USERS;
+}
+

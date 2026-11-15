@@ -575,13 +575,14 @@ export default function MapView(props: Props) {
         "model-emissive-strength": 0.6,
       },
     } as mapboxgl.LayerSpecification);
-    // DPS alerts: a red police beacon standing in the zone (click for details)
+    // DPS alerts: a small red police beacon floating above the middle of its zone (hover for what happened, click for details)
     m.addLayer({
       id: "alerts-3d", type: "model", source: "alert-pts", slot: "top",
-      // the 3D siren is retired: alerts show as a clean shield marker (HTML callout) over their zone
-      layout: { "model-id": "dps-beacon", visibility: "none" },
+      layout: { "model-id": "dps-beacon" },
       paint: {
-        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [60, 60, 60]], 19, ["literal", [5, 5, 5]]],
+        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [30, 30, 30]], 19, ["literal", [2.6, 2.6, 2.6]]],
+        // floats above the red circle, the same height on screen at every zoom
+        "model-translation": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [0, 0, 110]], 19, ["literal", [0, 0, 8]]],
         "model-type": "common-3d",
         "model-cast-shadows": !PHONE,
         "model-emissive-strength": 1,
@@ -790,7 +791,12 @@ export default function MapView(props: Props) {
     m.on("mouseenter", "ev-pins", () => (m.getCanvas().style.cursor = "pointer"));
     m.on("mouseleave", "ev-pins", () => (m.getCanvas().style.cursor = ""));
     m.on("mouseenter", "alerts-3d", () => (m.getCanvas().style.cursor = "pointer"));
-    m.on("mouseleave", "alerts-3d", () => (m.getCanvas().style.cursor = ""));
+    m.on("mousemove", "alerts-3d", (e) => {
+      const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
+      const c = id ? cb.current.callouts.find((x) => x.id === id) : undefined;
+      if (c) popup.setLngLat([c.lng, c.lat]).setHTML(`<b>DPS · ${escapeHtml(c.title)}</b><br/>${escapeHtml(c.eyebrow)} · click for details`).addTo(m);
+    });
+    m.on("mouseleave", "alerts-3d", () => { m.getCanvas().style.cursor = ""; popup.remove(); });
     m.on("click", "alerts-3d", (e) => {
       const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
       const c = id ? cb.current.callouts.find((x) => x.id === id) : undefined;
@@ -1005,6 +1011,7 @@ export default function MapView(props: Props) {
     const now = new Date();
     const keep = new Set<string>();
     for (const c of props.callouts) {
+      if (c.kind === "alert" || c.kind === "alertmini") continue; // DPS alerts are the 3D beacon here
       keep.add(c.id);
       const html = calloutHTML(c, now);
       let b = bubbles.current.get(c.id);
