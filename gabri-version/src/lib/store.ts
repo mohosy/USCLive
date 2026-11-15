@@ -69,7 +69,16 @@ export function activeAlerts(now = new Date()) {
   const d = db();
   const dayAgo = +now - 24 * 3600_000;
   if (d.alerts.some((a) => +new Date(a.expiresAt) < dayAgo)) d.alerts = d.alerts.filter((a) => +new Date(a.expiresAt) >= dayAgo);
-  return d.alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now);
+  const today = campusMidnight(now);
+  // only today's incidents: older crime-log entries are history, not something to steer around now
+  return d.alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now && +new Date(a.createdAt) >= today);
+}
+
+/** Start of today on campus (Los Angeles time), whatever time zone the server runs in. */
+function campusMidnight(now: Date) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "numeric", second: "numeric", hourCycle: "h23" })
+    .formatToParts(now).map((x) => [x.type, Number(x.value)]));
+  return +now - ((p.hour * 60 + p.minute) * 60 + p.second) * 1000 - now.getMilliseconds();
 }
 
 const MAX_NOTIFICATIONS = 200;
