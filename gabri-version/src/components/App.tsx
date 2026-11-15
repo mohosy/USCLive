@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
+import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, SlidersHorizontal, UserPlus, UserRound, X } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
 import { loadMapLighting, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
@@ -69,6 +69,7 @@ export default function App() {
   const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
+  const [filtersOpen, setFiltersOpen] = useState(false); // the layer chips stay tucked away until the filter button opens them
   const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: true, crowds: true, safety: true, schedule: true, webcams: true });
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
@@ -90,6 +91,13 @@ export default function App() {
   useEffect(() => { const t = setTimeout(() => { setLightTest(loadMapLighting()); setShowPeople(loadShowPeople()); }, 0); return () => clearTimeout(t); }, []);
   // the Map lighting setting wins; then demo weather (W key: its "night" turns the map to night); otherwise the real sun
   const light: LightPreset = lightTest !== "auto" ? lightTest : weatherDemo ? (weather.isDay ? "day" : "night") : sunLight;
+  // the page behind the map (what shows under Safari's bottom bar and the home indicator) matches the map, not a white strip
+  useEffect(() => {
+    const bg = light === "night" ? "#22263a" : light === "dusk" || light === "dawn" ? "#3a3550" : "";
+    document.documentElement.style.backgroundColor = bg;
+    document.body.style.backgroundColor = bg;
+    return () => { document.documentElement.style.backgroundColor = ""; document.body.style.backgroundColor = ""; };
+  }, [light]);
   // campus glide on first load (bubbles wait for it); phones skip it and land straight on the map
   const [intro, setIntro] = useState(() => typeof window === "undefined" || !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches);
   useEffect(() => { const t = setTimeout(() => setIntro(false), 6000); return () => clearTimeout(t); }, []); // never hold bubbles back longer // start loading Satellite in the background (on hover)
@@ -546,17 +554,17 @@ export default function App() {
             ))}
           </div>
 
+          {/* Maps-style locate button above the zoom column: centers on you, asks for location the first time */}
+          <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
+            className={cx("map-locate", gps === "on" && "map-locate-on")}>
+            {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={16} className={cx(gps === "on" && "fill-current")} />}
+          </button>
+
           {/* Bottom dock: locate + one filter row (each chip is a layer on the map and its legend), then search and assistant in one bar */}
           <div className="map-dock">
             <div className="dock-inner">
-              <div className="dock-options">
-                <div className="map-view-controls">
-                  {/* Maps-style locate button: centers on you, asks for location the first time */}
-                  <button onClick={locateMe} aria-label="Show my location" title={gps === "on" ? "Center on my location" : "Use my location"}
-                    className={cx("glass grid h-11 w-11 place-items-center rounded-full", gps === "on" ? "text-[#0a84ff]" : "text-foreground")}>
-                    {gps === "asking" ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Navigation size={15} className={cx(gps === "on" && "fill-current")} />}
-                  </button>
-                </div>
+              {/* map layers (each chip is a layer and its legend), hidden until the filter button opens them */}
+              <div id="map-layer-chips" className={cx("dock-options", filtersOpen && "dock-options-open")} inert={!filtersOpen}>
                 <div className="chip-row" role="group" aria-label="Map layers">
                   {([["games", "Live games"], ["events", "Events"], ["food", "Free food"], ["crowds", "Crowds"], ["safety", "Safety"], ["schedule", "My schedule"], ["webcams", "Cams"]] as const).map(([k, l]) => (
                     <button key={k} aria-pressed={chips[k]} onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))} className="map-layer-chip">{l}</button>
@@ -564,6 +572,10 @@ export default function App() {
                 </div>
               </div>
               <div className="dock-search-row">
+                <button type="button" onClick={() => setFiltersOpen((o) => !o)} aria-expanded={filtersOpen} aria-controls="map-layer-chips"
+                  aria-label={filtersOpen ? "Hide map filters" : "Show map filters"} title="Map filters" className={cx("dock-filter", filtersOpen && "dock-filter-on")}>
+                  <SlidersHorizontal size={19} aria-hidden="true" />
+                </button>
                 {state && (
                   <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction} onOpenBuilding={openBuilding}
                     onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}

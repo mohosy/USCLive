@@ -9,7 +9,7 @@ import type { ChatAction } from "@/lib/agent";
 interface Msg { role: "user" | "assistant"; content: string; eventIds?: string[]; actions?: ChatAction[] }
 interface Reply { reply: string; actions: ChatAction[]; eventIds: string[]; ai: boolean }
 
-const SUGGESTIONS = ["What's happening right now?", "Free food near me", "Invite Priya to pickup soccer", "Take me to Leavey", "Is the gym busy?", "What's due this week?"];
+const SUGGESTIONS = ["What's happening now?", "Free food near me", "Take me to Leavey"];
 
 /** Places whose name or code matches what is being typed (main buildings first), for the instant results. */
 function placeMatches(raw: string) {
@@ -75,7 +75,8 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
   const showThread = open && msgs.length > 0 && !showPlaces;
 
   return (
-    <div className="campus-chat">
+    // compact until you use it: focusing, typing or an open conversation widens it to the full dock
+    <div className={"campus-chat" + (focused || text || showThread || busy ? " campus-chat-open" : "")}>
       {showPlaces && (
         <div className="search-results scroll-thin" role="listbox" aria-label="Places and assistant">
           {places.map((b, i) => (
@@ -134,7 +135,7 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
       {!showThread && focused && !text && msgs.length === 0 && (
         <div className="chat-suggestions">
           {SUGGESTIONS.map((s) => (
-            <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void send(s)} className="rounded-full bg-white/90 px-3 py-1.5 text-[12.5px] font-medium shadow-[0_0_0_0.5px_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.08)] hover:bg-white">{s}</button>
+            <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void send(s)} className="chat-suggestion">{s}</button>
           ))}
         </div>
       )}
