@@ -356,7 +356,7 @@ export default function App() {
   const detailOpen = !!(event || selBuilding || openAlert);
 
   return (
-    <div className="map-app relative h-dvh w-full overflow-hidden bg-background" data-night={light === "night"}>
+    <div className={cx("map-app relative h-dvh w-full overflow-hidden bg-background", filtersOpen && "filters-open")} data-night={light === "night"}>
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
