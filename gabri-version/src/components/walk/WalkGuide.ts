@@ -120,13 +120,17 @@ function softShadowTexture() {
 }
 
 // ---------- three.js custom layer ----------
-class CharacterLayer implements mapboxgl.CustomLayerInterface {
+export class CharacterLayer implements mapboxgl.CustomLayerInterface {
   id = "walk-character";
   type = "custom" as const;
   renderingMode = "3d" as const;
   pos: LL;
   heading = 0;
   timeScale = 1;
+  /** drawing size multiplier (play mode draws the Trojan bigger so it reads like a game character) */
+  scale = 1;
+  /** draw over buildings instead of behind them */
+  alwaysOnTop = false;
   private camera = new THREE.Camera();
   private scene = new THREE.Scene();
   private lights = new THREE.Group();
@@ -206,7 +210,7 @@ class CharacterLayer implements mapboxgl.CustomLayerInterface {
     this.clock.start();
   }
 
-  render(_gl: WebGL2RenderingContext, matrix: number[]) {
+  render(gl: WebGL2RenderingContext, matrix: number[]) {
     if (!this.renderer || !this.map) return;
     if (!this.envReady) {
       // studio reflections on the metal (gold armor, helmet, sword) only.
@@ -234,12 +238,14 @@ class CharacterLayer implements mapboxgl.CustomLayerInterface {
     const rotYAngle = Math.PI - toRad(this.heading);
     this.lights.rotation.y = -rotYAngle;
     const mc = mapboxgl.MercatorCoordinate.fromLngLat([this.pos.lng, this.pos.lat], 0);
-    const s = mc.meterInMercatorCoordinateUnits() / this.unitsPerMeter;
+    const s = (mc.meterInMercatorCoordinateUnits() / this.unitsPerMeter) * this.scale;
     const rotX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
     const rotY = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), rotYAngle);
     const l = new THREE.Matrix4().makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s)).multiply(rotX).multiply(rotY);
     this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(l);
     this.renderer.resetState();
+    // play mode: the player is never hidden behind a building (drawn over them, like most map games)
+    if (this.alwaysOnTop) gl.clear(gl.DEPTH_BUFFER_BIT);
     this.renderer.render(this.scene, this.camera);
     this.map.triggerRepaint();
   }

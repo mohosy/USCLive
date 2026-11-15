@@ -62,6 +62,7 @@ function walkerSpots(events: EventView[], now: number): WalkerSpot[] {
   return out;
 }
 import WalkHUD from "./walk/WalkHUD";
+import type { PlayMode } from "./walk/PlayMode";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 /** Phones get a lighter scene: fewer pixels, no 3D trees, campus buildings only, no shadows. */
@@ -368,6 +369,9 @@ export default function MapView(props: Props) {
   const needle = useRef<SVGSVGElement>(null); // the compass needle in the control column
   const crowd = useRef<CrowdLayer | null>(null);
   const walkers = useRef<CampusCrowd | null>(null); // people walking the campus paths to events
+  const play = useRef<PlayMode | null>(null); // "play as your Trojan"
+  const [playing, setPlaying] = useState(false);
+  const togglePlay = useRef<() => void>(() => {});
   const onArrive = useRef<(eventId: string) => void>(() => {}); // set below, once popArrival exists
 
   /** Zoomed into a busy area: let little Trojans hang out at the crowded spots on screen. */
@@ -614,6 +618,18 @@ export default function MapView(props: Props) {
     // weather on the map comes from Open-Meteo (CC BY 4.0): credited here with the map's own credits
     m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a>' }), "bottom-right");
     // Mapbox's own zoom + compass (drag the compass to tilt); phones pinch instead (hidden there in CSS)
+    // "Play as your Trojan" sits just under the zoom buttons (bottom corners stack newest on top, so add it first)
+    const playBtn: mapboxgl.IControl = {
+      onAdd: () => {
+        const box = document.createElement("div");
+        box.className = "mapboxgl-ctrl mapboxgl-ctrl-group play-ctrl";
+        box.innerHTML = `<button type="button" aria-label="Walk around as your Trojan" title="Walk around as your Trojan"><span class="play-ic"><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5C3 6 7 2 12.5 1.6c4-.3 7 1.2 8.5 3.6-3.2-.4-6 .1-8 1.4-3.5 0-6.7 2-9 5.9z" fill="#FFC72C"/><path d="M5.6 13c0-4.4 3-7 6.9-7 4 0 7 2.8 7 6.5V14h-4.4v2.4l3.4 1-1 3.6h-4.4c-1-2-2.1-3-4.1-3H6.6c-.7-1.5-1-3-1-5z" fill="#fff"/></svg></span><span class="play-tip">Play as your Trojan</span></button>`;
+        box.querySelector("button")!.addEventListener("click", () => togglePlay.current());
+        return box;
+      },
+      onRemove: () => {},
+    };
+    m.addControl(playBtn, "bottom-right");
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
     const turnNeedle = () => { if (needle.current) needle.current.style.transform = `rotate(${-m.getBearing()}deg)`; };
     m.on("rotate", turnNeedle);
@@ -832,6 +848,28 @@ export default function MapView(props: Props) {
     }
   }
   const lastMoment = useRef(0);
+
+  // play mode: your Trojan appears where you are; the camera follows it
+  function stopPlay() {
+    play.current?.destroy();
+    play.current = null;
+    setPlaying(false);
+  }
+  useEffect(() => {
+    togglePlay.current = () => {
+      const m = map.current;
+      if (!m) return;
+      if (play.current) return stopPlay();
+      if (cb.current.walk) cb.current.onWalkEnd();
+      setPlaying(true);
+      // the 3D character engine loads on demand (same as tours), so the page stays light until you play
+      void import("./walk/PlayMode").then(({ PlayMode }) => {
+        if (map.current !== m || play.current) return;
+        play.current = new PlayMode(m, cb.current.me, [campus.current?.buildings, area.current], stopPlay);
+      });
+    };
+  });
+  useEffect(() => () => { play.current?.destroy(); }, []);
   useEffect(() => { onArrive.current = popArrival; });
 
   // data -> sources (only touch the GPU when something actually changed)
@@ -948,7 +986,10 @@ export default function MapView(props: Props) {
     walkRef.current = null;
     const w = cb.current.walk;
     if (!m || !w) return;
-    const me = cb.current.me;
+    // a tour asked for while you're walking around starts from where your Trojan is, and takes it over
+    const fromPlay = play.current?.position();
+    if (play.current) stopPlay();
+    const me = fromPlay ? { ...cb.current.me, lng: fromPlay.lng, lat: fromPlay.lat } : cb.current.me;
     let guide: WalkGuide | null = null;
     let cancelled = false;
     // the walking character (three.js) is only downloaded when a walk actually starts
@@ -988,6 +1029,13 @@ export default function MapView(props: Props) {
           Swipe sideways with two fingers to turn the map · <span className="text-muted">⌥ + swipe to tilt</span>
         </div>
       )}
+      {playing && (
+        <div className="play-hud">
+          <span>{PHONE ? "Push up to walk, sideways to turn" : "↑ walk · ← → turn · Shift to run · Esc to stop"}</span>
+          <button type="button" onClick={stopPlay}>Done</button>
+        </div>
+      )}
+      {playing && PHONE && <PlayStick onMove={(x, y) => { if (play.current) play.current.stick = { x, y }; }} />}
       {walkP && props.walk && (
         <WalkHUD
           p={walkP}
@@ -1000,6 +1048,26 @@ export default function MapView(props: Props) {
           onClose={() => props.onWalkEnd()}
         />
       )}
+    </div>
+  );
+}
+
+/** On-screen thumb stick for play mode on touch screens. */
+function PlayStick({ onMove }: { onMove: (x: number, y: number) => void }) {
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const R = 44;
+  const move = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    let x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
+    const d = Math.hypot(x, y);
+    if (d > R) { x = (x / d) * R; y = (y / d) * R; }
+    setKnob({ x, y });
+    onMove(x / R, -y / R);
+  };
+  const end = () => { setKnob({ x: 0, y: 0 }); onMove(0, 0); };
+  return (
+    <div className="play-stick" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); move(e); }} onPointerMove={(e) => { if (e.buttons) move(e); }} onPointerUp={end} onPointerCancel={end}>
+      <span style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
     </div>
   );
 }

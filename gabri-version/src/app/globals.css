@@ -619,3 +619,35 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .bz-t b { font-weight: 650; color: #1d1d1f; margin-right: 5px; }
 .co-busy:hover .bz, .co-quiet:hover .bz { padding-right: 10px; transform: translateY(-2px); }
 .co-busy:hover .bz-t, .co-quiet:hover .bz-t { max-width: 280px; }
+
+/* ---------- Play as your Trojan ---------- */
+.mapboxgl-ctrl-group.play-ctrl { position: relative; overflow: visible; width: 44px; height: 44px; margin-right: 8px !important; border-radius: 99px; background: linear-gradient(160deg, #b8141a, #8a0000) !important;
+  box-shadow: 0 0 0 2.5px #ffc72c, 0 8px 20px rgba(153, 0, 0, 0.45) !important; transition: transform 0.15s ease; }
+.mapboxgl-ctrl-group.play-ctrl:hover { transform: translateY(-1px) scale(1.06); }
+.play-ctrl button { width: 44px !important; height: 44px !important; border-radius: 99px !important; background: transparent !important; }
+.play-tip { position: absolute; right: 54px; top: 50%; transform: translate(6px, -50%); opacity: 0; pointer-events: none; white-space: nowrap; padding: 5px 10px; border-radius: 99px;
+  background: rgba(28, 28, 30, 0.88); color: #fff; font: 600 12px var(--font-apple); transition: opacity 0.15s ease, transform 0.15s ease; }
+.play-ctrl:hover .play-tip { opacity: 1; transform: translate(0, -50%); }
+.play-hud { position: absolute; top: calc(70px + var(--sat, 0px)); left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 99px;
+  background: rgba(28, 28, 30, 0.82); color: #fff; font: 500 12.5px var(--font-apple); white-space: nowrap; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); backdrop-filter: blur(12px); }
+.play-hud button { padding: 5px 12px; border-radius: 99px; background: #fff; color: #1d1d1f; font-weight: 600; }
+.play-stick { position: absolute; left: 24px; bottom: calc(120px + var(--sab, 0px)); z-index: 20; width: 120px; height: 120px; border-radius: 99px; touch-action: none;
+  background: rgba(255, 255, 255, 0.35); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.7), 0 8px 24px rgba(0, 0, 0, 0.2); backdrop-filter: blur(10px); display: grid; place-items: center; }
+.play-stick span { width: 52px; height: 52px; border-radius: 99px; background: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25); transition: transform 0.06s linear; }
+
+/* smaller event tickets */
+.evt { height: 38px; border-radius: 11px; padding-right: 8px; }
+.evt-img { width: 38px; height: 38px; border-radius: 11px 0 0 11px; }
+.evt-img svg { width: 15px; height: 15px; }
+.evt-perf { margin: 6px 0 6px 7px; }
+.evt-body { padding-left: 7px; }
+.evt-when { font-size: 8px; }
+.evt-title { max-width: 128px; font-size: 11.5px; }
+.evt .evb-faces i { width: 16px; height: 16px; line-height: 16px; font-size: 7px; }
+.evt-faces { margin-left: 6px; }
+.evt-tail { width: 8px; height: 8px; bottom: -4px; }
+.evt .evb-plus { left: 19px; }
+
+.play-ic { display: grid; place-items: center; width: 100%; height: 100%; }
+.play-ic svg { transition: transform 0.15s ease; }
+.play-ctrl button:hover .play-ic svg { transform: scale(1.1) rotate(-4deg); }
