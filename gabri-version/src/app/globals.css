@@ -729,11 +729,4 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"], .map-app[data-night="true"] .mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"] { background: var(--cardinal) !important; color: #fff; }
 /* a busy marker on a building that also has an event pin sits just above the pin instead of on it */
 .bz-up { position: relative; top: -38px; }
-/* iPhone home-screen app: with the status bar laid over the page, iOS reports a screen that is short by the
-   status bar's height (a blank band at the bottom). There, size the app to the full physical screen instead.
-   (Regular Safari keeps inset 0, which follows its toolbar.) */
-@media (display-mode: standalone) {
-  /* exactly the reported viewport plus the status-bar band it leaves out: the full screen, no more (100vh overshoots) */
-  .map-app { bottom: auto !important; height: calc(100% + env(safe-area-inset-top)) !important; }
-}
 

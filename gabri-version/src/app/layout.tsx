@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "USCLive",
   description: "A live 3D map of everything happening at USC, with an AI assistant that tells you what to do now.",
   // installed on an iPhone home screen: full-screen, its own name, the map runs under the status bar
-  appleWebApp: { capable: true, title: "USCLive", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "USCLive", statusBarStyle: "default" /* like HQ: the status bar gets its own strip, so iOS reports the real screen height (black-translucent shifts the page and leaves a band) */ },
 };
 
 export const viewport: Viewport = {
@@ -25,7 +25,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1, // the map handles pinch-zoom; the page itself shouldn't zoom
   viewportFit: "cover", // use the whole screen; content is kept clear of the notch with safe-area insets
-  themeColor: "#990000",
+  // the status bar strip (home-screen app) follows light/dark mode, like HQ
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
