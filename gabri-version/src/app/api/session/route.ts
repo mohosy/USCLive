@@ -56,6 +56,11 @@ async function POST_(req: Request) {
   const existing = !entry && me && me.school !== "all" ? me : null;
   if (b.data.action === "lookup") return Response.json({ profile: entry, isNew: !entry && !existing });
 
+  // real accounts are opened only through Google (a verified email) or by this browser that already holds them;
+  // typing someone's USC email never opens their account. The demo student is open to everyone.
+  if (!entry && !viaGoogle && !(me && currentUserId() === me.id)) {
+    return Response.json({ error: "Sign in with Google, or try the demo student." }, { status: 403 });
+  }
   if (me && !entry) {
     const already = currentUserId() === me.id; // this browser is already signed in as them
     // Google accounts open only through Google sign-in, never by typing the email

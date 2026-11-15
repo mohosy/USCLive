@@ -20,6 +20,7 @@ import { CATEGORY_META, USC_CENTER } from "@/lib/campus";
 import { calloutHTML } from "@/lib/calloutHtml";
 import type { Callout } from "@/lib/callouts";
 import { declutter } from "@/lib/declutter";
+import { busyLine, hotspotFor } from "@/lib/hotspots";
 import { isLive, type Building, type EventView, type Hotspot, type Loc, type SafetyAlert } from "@/lib/client-types";
 import { bearing as bearingTo, fetchWalkRoute, Path, type Step } from "@/lib/walkRoute";
 import type { Camera } from "./MapView";
@@ -85,6 +86,8 @@ interface Props {
   highlightIds: string[] | null;
   focus: { lat: number; lng: number; zoom?: number; key: number } | null;
   onSelectEvent: (id: string) => void;
+  /** a building's name was clicked: open it (how busy, what's on) */
+  onSelectBuilding?: (id: string) => void;
   /** camera to start from (shared with the flat map) */
   initialCamera: Camera | null;
   /** while not ready, follow this camera */
@@ -703,12 +706,22 @@ export default function Google3DView(props: Props) {
       onViewStateChange: ({ viewState: v }) => setView(v as MapViewState),
       onClick: (info: PickingInfo) => {
         if (info.layer?.id === "pins" && info.object) cb.current.onSelectEvent((info.object as Pin).id);
+        if (info.layer?.id === "building-hit" && info.object) cb.current.onSelectBuilding?.((info.object as Building).id);
         if (info.layer?.id === "cams-3d" && info.object) cb.current.onCallout(info.object as Callout);
         if (info.layer?.id === "alerts-3d" && info.object) { const a = info.object as SafetyAlert; cb.current.onCallout({ id: `al:${a.id}`, kind: "alert", lng: a.lng, lat: a.lat, eyebrow: "", title: a.title }); }
       },
       onAfterRender: positionBubbles,
       getCursor: ({ isHovering, isDragging }) => (isDragging ? "grabbing" : isHovering ? "pointer" : "grab"),
-      getTooltip: (info: PickingInfo<Pin>) => (info.layer?.id === "pins" && info.object ? { text: info.object.title } : null),
+      getTooltip: (info: PickingInfo) => {
+        if (info.layer?.id === "pins" && info.object) return { text: (info.object as Pin).title };
+        // any building, main or minor: the same "how busy" line as the Explore map
+        if (info.layer?.id === "building-hit" && info.object) {
+          const b = info.object as Building;
+          const h = cb.current.hotspots.find((x) => x.buildingId === b.id) ?? hotspotFor(b, cb.current.events, new Date());
+          return { text: `${b.name}\n${busyLine(h)}` };
+        }
+        return null;
+      },
       onHover: (info: PickingInfo) => {
         const id = info.layer?.id === "building-hit" ? (info.object as Building | undefined)?.id ?? null : null;
         if (id !== hovered.current) { hovered.current = id; deck.current?.setProps({ layers: layers() }); }

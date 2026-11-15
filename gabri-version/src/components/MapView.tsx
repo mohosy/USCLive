@@ -28,6 +28,9 @@ function alertPoints(alerts: SafetyAlert[]): FC {
 import { LEVEL_COLOR } from "./ui";
 import type { WalkGuide, WalkProgress } from "./walk/WalkGuide";
 import { CROWD_MIN_ZOOM, CrowdLayer, type CrowdSpot } from "./walk/CrowdLayer";
+import { busyLine, hotspotFor } from "@/lib/hotspots";
+
+const escapeHtml = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 import { CampusCrowd, type CrowdSpot as WalkerSpot, type PathGraph } from "./crowd/CampusCrowd";
 
 // campus walkways (OpenStreetMap footways + crosswalks): the paths people walk to events
@@ -419,7 +422,7 @@ export default function MapView(props: Props) {
     m.setLayoutProperty("hot-heat", "visibility", vis(hotspots));
     m.setLayoutProperty("hot-hit", "visibility", vis(hotspots));
     m.setLayoutProperty("hot-columns", "visibility", vis(columns));
-    walkers.current?.setVisible(events);
+    walkers.current?.setVisible(events && cb.current.people !== false); // Settings: Show people on the map
     for (const [k, v] of Object.entries(placeConfig(styleRef.current, cb.current.layers.places))) {
       if (m.getConfigProperty("basemap", k) !== v) m.setConfigProperty("basemap", k, v);
     }
@@ -639,7 +642,7 @@ export default function MapView(props: Props) {
         walkers.current = w;
         w.setTarget(walkerCount(cb.current.events, cb.current.light ?? "day"));
         w.setSpots(walkerSpots(cb.current.events, Date.now()));
-        w.setVisible(cb.current.layers.events);
+        w.setVisible(cb.current.layers.events && cb.current.people !== false);
         w.onArrive = (id) => onArrive.current(id);
         if (ready.current && styleRef.current !== "satellite") w.install(m, cb.current.light ?? "day");
       },
@@ -745,11 +748,34 @@ export default function MapView(props: Props) {
       if (id) cb.current.onSelectEvent(id);
     });
     m.on("mousemove", "hot-hit", (e) => {
-      const p = (e.features?.[0] as unknown as { properties?: { name: string; count: number; ratio: number; level: string } } | undefined)?.properties;
-      if (!p) return;
-      popup.setLngLat(e.lngLat).setHTML(`<b>${p.name}</b><br/>About ${p.count} people, ${p.level} (${Number(p.ratio).toFixed(1)}x usual)`).addTo(m);
+      const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
+      const r = id ? busyFor(id) : null;
+      if (!r) return;
+      popup.setLngLat(e.lngLat).setHTML(`<b>${escapeHtml(r.bd.name)}</b><br/>${escapeHtml(busyLine(r.h))}`).addTo(m);
     });
     m.on("mouseleave", "hot-hit", () => popup.remove());
+    // every building name (main and the smaller ones you see zoomed in): hover shows how busy it is, click opens it
+    const busyFor = (id: string) => {
+      const p = cb.current;
+      const bd = BYID(p.buildings)[id];
+      if (!bd) return null;
+      return { bd, h: p.hotspots.find((x) => x.buildingId === id) ?? hotspotFor(bd, p.events, new Date()) };
+    };
+    for (const layer of ["building-names", "building-names-minor"]) {
+      m.on("mousemove", layer, (e) => {
+        const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
+        const r = id ? busyFor(id) : null;
+        if (!r) return;
+        m.getCanvas().style.cursor = "pointer";
+        popup.setLngLat([r.bd.lng, r.bd.lat]).setHTML(`<b>${escapeHtml(r.bd.name)}</b><br/>${escapeHtml(busyLine(r.h))}`).addTo(m);
+      });
+      m.on("mouseleave", layer, () => { m.getCanvas().style.cursor = ""; popup.remove(); });
+      m.on("click", layer, (e) => {
+        if (m.queryRenderedFeatures(e.point, { layers: ["ev-pins"] }).length) return; // a pin on top wins
+        const id = (e.features?.[0] as unknown as { properties?: { id?: string } } | undefined)?.properties?.id;
+        if (id) { popup.remove(); cb.current.onSelectBuilding(id); }
+      });
+    }
     m.on("click", "hot-hit", (e) => {
       // events sit on top of crowd areas; let a pin click win
       if (m.queryRenderedFeatures(e.point, { layers: ["ev-pins"] }).length) return;
@@ -864,6 +890,7 @@ export default function MapView(props: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(syncLayers, [props.layers]);
   useEffect(updateCrowd, [props.layers, props.walk?.key, props.people]);
+  useEffect(() => { walkers.current?.setVisible(props.layers.events && props.people !== false); }, [props.layers.events, props.people]);
 
   useEffect(() => {
     const fc = alertGeo(props.alerts);

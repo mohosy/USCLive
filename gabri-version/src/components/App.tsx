@@ -527,6 +527,7 @@ export default function App() {
                 highlightIds={highlight}
                 focus={view === "3d" ? focus : null}
                 onSelectEvent={openEvent}
+                onSelectBuilding={openBuilding}
                 initialCamera={startCam}
                 follow={camBus}
                 onReady={() => { setSatLoaded(true); if (view === "3d") setTimeout(() => setFlatGone(true), 800); }}
