@@ -586,12 +586,17 @@ export default function App() {
             </div>
           </div>
 
-          <div className="pointer-events-none absolute bottom-44 right-14 z-20 flex w-80 max-w-[calc(100vw-32px)] flex-col gap-2">
+          {/* new notifications: top right, just left of the bell (and the weather under it); clicking one opens it and clears it */}
+          <div className="toast-stack" aria-live="polite">
             {toasts.map((n) => (
-              <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setToasts((t) => t.filter((x) => x.id !== n.id)); }}
-                className="glass glass-strong fade-in pointer-events-auto rounded-2xl p-3 text-left">
-                <div className="text-sm font-medium">{n.title}</div>
-                <div className="text-xs text-muted">{n.body}</div>
+              <button key={n.id} type="button" className="toast"
+                onClick={() => {
+                  if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId);
+                  setToasts((t) => t.filter((x) => x.id !== n.id));
+                  void api("/api/notifications", { json: { ids: [n.id] } }).then(() => pollNotifs(), () => {}); // read, so the bell's dot updates
+                }}>
+                <div className="text-sm font-semibold">{n.title}</div>
+                {n.body && <div className="toast-body">{n.body}</div>}
               </button>
             ))}
           </div>

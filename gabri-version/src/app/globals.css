@@ -18,6 +18,9 @@
   --glass: rgba(255, 255, 255, 0.3);
   --glass-blur: blur(8px);
   --glass-shadow: 0 3px 14px rgba(30, 20, 20, 0.07);
+  /* frosted glass for the big reading panels (side panel, assistant): the map shows through, the text stays crisp */
+  --frost: rgba(255, 255, 255, 0.78);
+  --frost-blur: blur(24px) saturate(180%);
   --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", var(--font-geist-sans), system-ui, sans-serif;
 }
 
@@ -229,6 +232,18 @@ html, body {
 /* see-through, Apple style: 70% white, a light 8px blur (heavier blurs slow the map), thin white border, soft shadow */
 .account-panel { position: absolute; right: 0; top: 46px; width: 280px; max-width: calc(100vw - 32px); overflow: hidden; border-radius: 16px; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); }
 .account-panel .text-muted { color: #47474d; }
+/* notification toasts: top right, left of the bell / profile (and of the weather card below them) */
+.toast-stack { position: absolute; top: calc(20px + var(--sat)); right: 124px; z-index: 36; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; width: 300px; pointer-events: none; }
+.toast { pointer-events: auto; width: 100%; padding: 10px 14px; border-radius: 16px; text-align: left; color: #1d1d1f; cursor: pointer;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow);
+  animation: toast-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; transition: background-color 180ms ease; }
+.toast:hover { background: rgba(255,255,255,0.5); }
+.toast-body { margin-top: 2px; font-size: 12.5px; line-height: 1.35; color: #47474d; }
+@keyframes toast-in { from { opacity: 0; transform: translateX(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+.map-app[data-night="true"] .toast { color: #fff; }
+.map-app[data-night="true"] .toast-body { color: rgba(255,255,255,0.78); }
+.map-app[data-night="true"] .toast:hover { background: rgba(255,255,255,0.18); }
+@media (max-width: 900px) { .toast-stack { top: calc(66px + var(--sat)); right: 128px; left: 12px; width: auto; } }
 .account-tabs { display: flex; flex-direction: column; padding: 4px 8px 10px; gap: 2px; border-bottom: 1px solid rgba(0,0,0,0.1); }
 .account-tabs [role="tab"] { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 40px; padding: 9px 12px; font-size: 13px; font-weight: 550; color: #47474d; border-radius: 9px; cursor: pointer; }
 .account-tabs [aria-selected="true"] { background: #fbefef; color: var(--cardinal); }
@@ -321,6 +336,8 @@ html, body {
 .side:not(.side-open) { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .side:not(.side-open) .side-inner { background: transparent; box-shadow: none; }
 .side:not(.side-open) .side-bar { border-bottom-color: transparent; }
+.side-open { background: var(--frost); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); }
+.side-open .side-inner { background: transparent; }
 .side-inner { transition: background-color 0.3s ease; }
 .side-bar { display: flex; align-items: center; gap: 2px; flex-shrink: 0; height: 50px; padding: 0 6px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
 .side-tab { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 999px; font-size: 13.5px; font-weight: 550; color: #1d1d1f; white-space: nowrap; }
@@ -420,8 +437,8 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* ---------- Assistant conversation (Gabriele's chat thread, opened from the search bar) ---------- */
 .chat-thread {
   border-radius: 22px; overflow: hidden;
-  background: rgba(252, 252, 253, 0.96); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
-  border: 0.5px solid rgba(0, 0, 0, 0.08); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
+  background: var(--frost); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur);
+  border: 0.5px solid rgba(255, 255, 255, 0.6); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
   animation: menu-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: bottom center;
 }
 
