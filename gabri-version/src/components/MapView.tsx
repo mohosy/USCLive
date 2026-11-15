@@ -20,7 +20,8 @@ const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }>
   // Mapbox's own POIs, landmark icons and place names are off: every label on the map is ours.
   map: {
     url: "mapbox://styles/mapbox/standard",
-    config: { lightPreset: "day", show3dObjects: true, show3dBuildings: true, show3dLandmarks: true, show3dTrees: true, showTransitLabels: false, showRoadLabels: true },
+    // Mapbox's 3D buildings are off: we draw only USC's buildings (see installSpotlight). Trees/landmarks stay, clipped to campus.
+    config: { lightPreset: "day", show3dObjects: true, show3dBuildings: false, show3dLandmarks: true, show3dTrees: true, showTransitLabels: false, showRoadLabels: true },
   },
   // Aerial imagery: shown as the placeholder while the photoreal 3D view loads
   satellite: {
@@ -34,6 +35,61 @@ function placeConfig(style: MapStyle, on: boolean): Record<string, boolean> {
   const c: Record<string, boolean> = { showPointOfInterestLabels: on, showPlaceLabels: on };
   if (style === "map") Object.assign(c, { showLandmarkIcons: on, showLandmarkIconLabels: on });
   return c;
+}
+
+// ---------- USC focus ("spotlight") ----------
+// Campus (UPC + USC Village, from OpenStreetMap) stays in full color with its buildings in 3D;
+// everything outside the boundary is flat and faded, with a few landmarks kept for orientation.
+interface CampusData { campus: Feature; mask: Feature; buildings: FeatureCollection }
+let campusPromise: Promise<CampusData> | null = null;
+const loadCampus = () =>
+  (campusPromise ??= fetch("/data/usc-campus.json")
+    .then((r) => { if (!r.ok) throw new Error(`campus data ${r.status}`); return r.json() as Promise<CampusData>; })
+    .catch((e) => { campusPromise = null; throw e; }));
+
+const CONTEXT_LABELS: FeatureCollection = {
+  type: "FeatureCollection",
+  features: ([
+    ["LA Memorial Coliseum", -118.2879, 34.0141],
+    ["Natural History Museum", -118.2888, 34.0171],
+    ["California Science Center", -118.2859, 34.0156],
+    ["BMO Stadium", -118.2842, 34.0128],
+  ] as const).map(([name, lng, lat]) => ({ type: "Feature", properties: { name }, geometry: { type: "Point", coordinates: [lng, lat] } })),
+};
+
+/** Adds the campus spotlight layers (idempotent). `before` keeps them under our alert/crowd layers when added late. */
+function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, before?: string) {
+  if (m.getSource("usc-mask")) return;
+  const at = before && m.getLayer(before) ? before : undefined;
+  m.addSource("usc-mask", { type: "geojson", data: c.mask });
+  m.addSource("usc-campus", { type: "geojson", data: c.campus });
+  m.addSource("usc-buildings", { type: "geojson", data: c.buildings });
+  m.addSource("usc-context", { type: "geojson", data: CONTEXT_LABELS });
+  // wash out everything outside campus
+  m.addLayer({ id: "usc-fade", type: "fill", source: "usc-mask", slot: "middle", paint: { "fill-color": sat ? "#f7f5f2" : "#f3f1ee", "fill-opacity": sat ? 0.58 : 0.8, "fill-emissive-strength": 1 } }, at);
+  // campus edge: soft cardinal glow + crisp line
+  m.addLayer({ id: "usc-edge-glow", type: "line", source: "usc-campus", slot: "middle", layout: { "line-join": "round" }, paint: { "line-color": "#990000", "line-width": 9, "line-opacity": 0.12, "line-blur": 6, "line-emissive-strength": 1 } }, at);
+  m.addLayer({ id: "usc-edge", type: "line", source: "usc-campus", slot: "middle", layout: { "line-join": "round" }, paint: { "line-color": "#990000", "line-width": 2, "line-opacity": 0.8, "line-emissive-strength": 1 } }, at);
+  // USC's own buildings, extruded to their real heights (map view only: on the photo they'd hide the real roofs)
+  if (!sat) m.addLayer({
+    id: "usc-buildings", type: "fill-extrusion", source: "usc-buildings", slot: "middle",
+    paint: {
+      "fill-extrusion-color": ["interpolate", ["linear"], ["get", "h"], 0, "#f2e9de", 20, "#eadccc", 45, "#e0cdb9"],
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": ["get", "mh"],
+      "fill-extrusion-opacity": 0.97,
+      "fill-extrusion-ambient-occlusion-intensity": 0.3,
+      "fill-extrusion-ambient-occlusion-radius": 3,
+    },
+  }, at);
+  // a few off-campus landmarks for orientation (Mapbox's own labels outside are faded)
+  m.addLayer({
+    id: "usc-context-labels", type: "symbol", source: "usc-context", slot: "top", minzoom: 14.5,
+    layout: { "text-field": ["get", "name"], "text-size": 11.5, "text-letter-spacing": 0.02, "text-max-width": 9 },
+    paint: { "text-color": "#7b8088", "text-halo-color": "rgba(255,255,255,0.95)", "text-halo-width": 1.4, "text-emissive-strength": 1 },
+  });
+  // remove Mapbox's 3D trees and landmark models outside campus (our own layers are not affected)
+  m.addLayer({ id: "usc-clip", type: "clip", source: "usc-mask", layout: { "clip-layer-types": ["model"], "clip-layer-scope": ["basemap"] } });
 }
 
 // Keep the camera on USC University Park Campus (plus a little margin).
@@ -163,6 +219,7 @@ export default function MapView(props: Props) {
   useEffect(() => { cb.current = props; });
   const walkRef = useRef<WalkGuide | null>(null);
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
+  const campus = useRef<CampusData | null>(null);
 
   /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
   function tidyBubbles() {
@@ -198,6 +255,8 @@ export default function MapView(props: Props) {
     m.addSource("hot-columns", { type: "geojson", data: data.current.columns });
     m.addSource("building-labels", { type: "geojson", data: data.current.buildings });
     m.addSource("alerts", { type: "geojson", data: data.current.alerts });
+    // USC spotlight first, so alerts, crowds and pins draw above it
+    if (campus.current) installSpotlight(m, sat, campus.current);
     // DPS alert zones
     m.addLayer({ id: "alert-fill", type: "fill", source: "alerts", slot: "middle", paint: { "fill-color": "#dc2626", "fill-opacity": 0.16, "fill-emissive-strength": 1 } });
     m.addLayer({ id: "alert-line", type: "line", source: "alerts", slot: "middle", paint: { "line-color": "#dc2626", "line-width": 1.5, "line-opacity": 0.6, "line-emissive-strength": 1 } });
@@ -306,6 +365,13 @@ export default function MapView(props: Props) {
     map.current = m;
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
     m.on("style.load", install);
+    loadCampus().then(
+      (c) => {
+        campus.current = c;
+        if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, "alert-fill");
+      },
+      () => { /* no campus data: fall back to the plain map */ },
+    );
     if (intro) {
       // a gentle glide: zoom in, tilt into 3D and turn slightly, landing on where you are
       // start when the map is ready, but never wait more than 1.5 s after the style for slow tiles
