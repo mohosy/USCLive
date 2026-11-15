@@ -9,7 +9,33 @@ import type { ChatAction } from "@/lib/agent";
 interface Msg { role: "user" | "assistant"; content: string; eventIds?: string[]; actions?: ChatAction[] }
 interface Reply { reply: string; actions: ChatAction[]; eventIds: string[]; ai: boolean }
 
-const SUGGESTIONS = ["What's happening right now?", "Free food near me", "Invite Priya to pickup soccer", "Take me to Leavey", "Is the gym busy?", "What's due this week?"];
+/** Things worth asking at this hour (all of them are questions the assistant's tools can answer). */
+function hourPool(h: number): string[] {
+  if (h >= 5 && h < 11) return ["What's my first class?", "Free breakfast anywhere?", "Quiet place to study now", "What's happening this morning?", "Is the gym busy?"];
+  if (h >= 11 && h < 14) return ["Free lunch on campus?", "What's happening now?", "Is the gym busy?", "Where's quiet to study?", "What's next on my schedule?"];
+  if (h >= 14 && h < 18) return ["Where can I study right now?", "Any games today?", "What's next on my schedule?", "Free food this afternoon?", "What's happening now?"];
+  if (h >= 18 && h < 22) return ["What's happening tonight?", "Free food tonight?", "Any games tonight?", "Where's quiet to study tonight?", "Is Leavey busy?"];
+  return ["Quiet places to study late", "Any safety alerts nearby?", "Take me to Leavey", "What's on tomorrow?", "Walk me to the Village"];
+}
+
+/** Three suggestions for right now: one from what is actually on (when something is), the rest from the hour; a new mix each time. */
+function pickSuggestions(events: EventView[], now: Date): string[] {
+  const t = now.getTime();
+  const live = events.filter((e) => new Date(e.start).getTime() <= t && t < new Date(e.end).getTime());
+  const soon = events
+    .filter((e) => { const s = new Date(e.start).getTime(); return s > t && s - t < 3 * 3600_000; })
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const fromData: string[] = [];
+  if (live.some((e) => e.freeFood)) fromData.push("Where's the free food right now?");
+  const mine = soon.find((e) => e.going);
+  if (mine && mine.buildingName && mine.buildingName.length <= 22) fromData.push(`Take me to ${mine.buildingName}`);
+  const next = soon.find((e) => e.title.length <= 24);
+  if (next) fromData.push(`What's ${next.title}?`);
+  const shuffle = <T,>(a: T[]) => a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map(([, v]) => v);
+  const pool = shuffle(hourPool(now.getHours()));
+  const picked = [...shuffle(fromData).slice(0, 1), ...pool];
+  return [...new Set(picked)].slice(0, 3);
+}
 
 /** Places whose name or code matches what is being typed (main buildings first), for the instant results. */
 function placeMatches(raw: string) {
@@ -47,6 +73,7 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(true);
   const [focused, setFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]); // a fresh, time-aware mix every time the box opens
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [msgs, busy]);
   // instant place results: rows are the matching places, then "ask the assistant" as the last row
@@ -75,7 +102,8 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
   const showThread = open && msgs.length > 0 && !showPlaces;
 
   return (
-    <div className="campus-chat">
+    // compact until you use it: focusing, typing or an open conversation widens it to the full dock
+    <div className={"campus-chat" + (focused || text || showThread || busy ? " campus-chat-open" : "")}>
       {showPlaces && (
         <div className="search-results scroll-thin" role="listbox" aria-label="Places and assistant">
           {places.map((b, i) => (
@@ -133,8 +161,8 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
       )}
       {!showThread && focused && !text && msgs.length === 0 && (
         <div className="chat-suggestions">
-          {SUGGESTIONS.map((s) => (
-            <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void send(s)} className="rounded-full bg-white/90 px-3 py-1.5 text-[12.5px] font-medium shadow-[0_0_0_0.5px_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.08)] hover:bg-white">{s}</button>
+          {suggestions.map((s) => (
+            <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void send(s)} className="chat-suggestion">{s}</button>
           ))}
         </div>
       )}
@@ -147,7 +175,7 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
           else if (e.key === "Escape") { e.stopPropagation(); setText(""); setPick(0); }
         }}>
         <Search size={21} className="search-icon" aria-hidden="true" />
-        <input value={text} onChange={(e) => { setText(e.target.value); setPick(0); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        <input value={text} onChange={(e) => { setText(e.target.value); setPick(0); }} onFocus={() => { setSuggestions(pickSuggestions(events, now)); setFocused(true); }} onBlur={() => setFocused(false)}
           placeholder="What do you want to do today?" aria-label="Search campus or ask the assistant" autoComplete="off" className="campus-search-input" />
         <div className="search-actions">
           {msgs.length > 0 && !open && (

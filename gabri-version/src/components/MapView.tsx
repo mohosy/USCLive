@@ -520,7 +520,7 @@ export default function MapView(props: Props) {
       layout: { "model-id": "film-cam", visibility: "none" },
       paint: {
         // Snap Map style: oversized, about the same size on screen at every zoom (halves per zoom level)
-        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [58, 58, 58]], 19, ["literal", [4.5, 4.5, 4.5]]],
+        "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [40, 40, 40]], 19, ["literal", [3.1, 3.1, 3.1]]],
         // each camera faces the way it actually looks (GeoJSON can't carry arrays, so match on the id)
         "model-rotation": ["match", ["get", "id"], ...WEBCAMS.flatMap((w) => [`cam:${w.id}`, ["literal", [0, 0, camYaw(w.heading)]]]), ["literal", [0, 0, 90]]],
         "model-type": "common-3d",

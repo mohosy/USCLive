@@ -220,7 +220,7 @@ html, body {
 /* Top-right: the cardinal initials button (gold dot = unread notifications) and the account panel it opens */
 .account-area { position: absolute; right: 24px; top: calc(20px + var(--sat)); z-index: 35; display: flex; align-items: center; gap: 10px; }
 .map-bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: #1d1d1f; box-shadow: var(--glass-shadow); }
-.map-bell:hover { background: rgba(255,255,255,0.5); }
+.map-bell:hover, .weather-pill:hover, .side:not(.side-open):hover { background: rgba(255,255,255,0.5); }
 .bell-unread { position: absolute; right: 8px; top: 8px; width: 9px; height: 9px; background: var(--cardinal); border: 2px solid #fff; border-radius: 50%; }
 .map-profile { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--cardinal); color: #fff; font-size: 14.5px; font-weight: 650; box-shadow: 0 4px 14px rgba(65,0,0,0.22); cursor: pointer; }
 .map-profile::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
@@ -243,21 +243,38 @@ html, body {
 /* Bottom dock: locate button and red layer chips, then the one search + assistant bar */
 .map-dock { position: absolute; bottom: max(32px, calc(env(safe-area-inset-bottom) + 20px)); left: 200px; right: 200px; z-index: 30; display: flex; justify-content: center; pointer-events: none; }
 .dock-inner { width: min(100%, 940px); min-width: 0; }
-.dock-options { display: flex; gap: 12px; align-items: flex-start; padding-bottom: 10px; }
-.map-view-controls { flex-shrink: 0; padding-top: 3px; pointer-events: auto; }
-.map-view-controls .glass { border: 0; background: rgba(255,255,255,0.94); box-shadow: 0 2px 8px rgba(40,20,20,0.12); }
-.chip-row { display: flex; gap: 8px; width: 100%; overflow-x: auto; padding: 3px 2px 6px; scrollbar-width: none; pointer-events: auto; }
+.dock-options-open { padding-bottom: 10px; }
+.chip-row { display: flex; justify-content: safe center; gap: 8px; width: 100%; overflow-x: auto; padding: 3px 2px 6px; scrollbar-width: none; pointer-events: auto; }
 .chip-row::-webkit-scrollbar { display: none; }
 .map-layer-chip { flex-shrink: 0; white-space: nowrap; border-radius: 999px; min-height: 40px; padding: 8px 15px; background: rgba(255,255,255,0.94); color: var(--cardinal); font-size: 13px; font-weight: 600; box-shadow: 0 2px 8px rgba(40,20,20,0.12); cursor: pointer; }
 .map-layer-chip[aria-pressed="true"] { color: #fff; background: var(--cardinal); }
 .map-layer-chip:hover { background: #fff; }
 .map-layer-chip[aria-pressed="true"]:hover { background: var(--cardinal-hover); }
-.dock-search-row { display: flex; align-items: center; gap: 12px; pointer-events: none; }
+.dock-search-row { display: flex; align-items: center; justify-content: center; gap: 12px; pointer-events: none; }
+/* filter button left of the search bar: shows the layer chips */
+.dock-filter { flex-shrink: 0; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease, color 180ms ease; }
+.dock-filter:hover { background: rgba(255,255,255,0.5); }
+.dock-filter-on, .dock-filter-on:hover { background: var(--cardinal); color: #fff; }
+/* the chip row slides up out of the dock when the filter button opens it */
+.dock-options { display: grid; grid-template-rows: 0fr; opacity: 0; transform: translateY(8px); transition: grid-template-rows 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.dock-options > .chip-row { min-height: 0; overflow-y: hidden; }
+.dock-options-open { grid-template-rows: 1fr; opacity: 1; transform: none; }
+/* locate: a glass circle right above the zoom / rotate column (centered on its 33px width) */
+.map-locate { position: absolute; right: 46px; bottom: 166px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
+.map-locate:hover { background: rgba(255,255,255,0.5); }
 .dock-search-row > * { pointer-events: auto; }
-.campus-chat { position: relative; flex: 1 1 100%; min-width: 0; }
+.campus-chat { position: relative; flex: 0 1 400px; min-width: 0; transition: flex-basis 0.7s cubic-bezier(0.22, 1, 0.36, 1); will-change: flex-basis; }
+.campus-chat-open { flex-basis: 100%; }
+.campus-chat-open .campus-search { animation: glass-settle 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes glass-settle { 0% { transform: scale(1, 1); } 35% { transform: scale(1.008, 0.94); } 70% { transform: scale(0.998, 1.012); } 100% { transform: scale(1, 1); } }
+.chat-suggestions { animation: rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .campus-chat { transition: none; } .campus-chat-open .campus-search, .chat-suggestions { animation: none; } }
 .campus-search { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px 8px 20px; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-radius: 16px; box-shadow: var(--glass-shadow); transition: background-color 180ms ease, box-shadow 180ms ease, backdrop-filter 180ms ease; }
 .campus-search:hover { background: rgba(255,255,255,0.5); }
-.campus-search:focus-within { background: rgba(255,255,255,0.98); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 6px 24px rgba(30,20,20,0.16); }
+.campus-search:focus-within { background: rgba(255,255,255,0.5); }
 .search-icon { flex-shrink: 0; color: var(--cardinal); }
 .campus-search-input { min-width: 0; flex: 1; height: 44px; background: transparent; color: #262626; font-size: 15px; outline: none; caret-color: var(--cardinal); }
 .campus-search-input::placeholder { color: #343438; opacity: 1; }
@@ -266,20 +283,28 @@ html, body {
 .search-submit:hover:not(:disabled) { background: var(--cardinal-hover); }
 .search-submit:disabled { background: #e7dddd; color: #715c5c; cursor: default; }
 /* instant place results, the assistant's conversation and its suggestions all open above the chip row */
-.search-results, .chat-thread, .chat-suggestions { position: absolute; left: 0; right: 0; bottom: calc(100% + 64px); }
+.search-results, .chat-thread, .chat-suggestions { position: absolute; left: 0; right: 0; bottom: calc(100% + 12px); transition: bottom 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.dock-options-open + .dock-search-row :is(.search-results, .chat-thread, .chat-suggestions) { bottom: calc(100% + 72px); }
 .search-results { max-height: min(48dvh, 420px); overflow-y: auto; padding: 8px; background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(30,20,20,0.17); }
 .search-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; font-size: 14px; text-align: left; cursor: pointer; }
 .search-row[aria-selected="true"] { background: #fbefef; }
-.chat-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.chat-suggestions { display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.chat-suggestion { flex-shrink: 0; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 550; color: #1d1d1f; cursor: pointer;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
+.chat-suggestion:hover { background: rgba(255,255,255,0.5); }
+.map-app[data-night="true"] .chat-suggestion { color: #fff; }
+.map-app[data-night="true"] .chat-suggestion:hover { background: rgba(255,255,255,0.2); }
 .map-app :is(button, a, [role="tabpanel"]):focus-visible { outline: 2px solid var(--cardinal); outline-offset: 3px; }
 .map-app .map-layer-chip[aria-pressed="true"]:focus-visible, .map-app .view-switch button[aria-pressed="true"]:focus-visible { outline-color: #fff; box-shadow: 0 0 0 5px var(--cardinal); }
 .map-app input::selection { background: #f2cbcb; color: #590000; }
 
 /* Explore / Satellite: icon-only switch in the bottom-left corner; the active view is cardinal, names show as tooltips */
-.view-switch { position: absolute; left: 24px; bottom: max(32px, calc(env(safe-area-inset-bottom) + 20px)); z-index: 20; display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: rgba(255,255,255,0.94); box-shadow: 0 2px 8px rgba(40,20,20,0.12); }
+.view-switch { position: absolute; left: 24px; bottom: max(32px, calc(env(safe-area-inset-bottom) + 20px)); z-index: 20; display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); }
 .view-switch button { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #55555b; cursor: pointer; }
-.view-switch button:hover { background: var(--surface); color: var(--foreground); }
-.view-switch button[aria-pressed="true"] { background: var(--cardinal); color: #fff; }
+.view-switch button:hover { background: rgba(255,255,255,0.35); color: var(--foreground); }
+.map-app[data-night="true"] .view-switch button:not([aria-pressed="true"]) { color: #fff; }
+.map-app[data-night="true"] .view-switch button:not([aria-pressed="true"]):hover { background: rgba(255,255,255,0.14); }
+.view-switch button[aria-pressed="true"], .view-switch button[aria-pressed="true"]:hover { background: var(--cardinal); color: #fff; }
 .view-switch button::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); padding: 4px 9px; border-radius: 8px; background: #1d1d1f; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
 .view-switch button:hover::after, .view-switch button:focus-visible::after { opacity: 1; }
 
@@ -289,9 +314,12 @@ html, body {
 .side { position: absolute; left: 16px; top: calc(20px + var(--sat)); bottom: 96px; z-index: 25; width: 360px; border-radius: 18px;
   clip-path: inset(0 0 calc(100% - 50px) 0 round 18px); transition: clip-path 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .side-open { clip-path: inset(0 0 0 0 round 18px); }
+/* the filter chips take the row above the search: the open panel ends above them (the search itself never moves) */
+@media (min-width: 901px) { .side { transition: clip-path 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), bottom 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); } .filters-open .side { bottom: 156px; } }
 .side-inner { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; background: rgba(255,255,255,0.97); box-shadow: 0 8px 28px rgba(30,20,20,0.14); }
 /* folded: just the tab bar, in the same light glass as the chat box at the bottom */
-.side:not(.side-open) .side-inner { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); }
+.side:not(.side-open) { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.side:not(.side-open) .side-inner { background: transparent; box-shadow: none; }
 .side:not(.side-open) .side-bar { border-bottom-color: transparent; }
 .side-inner { transition: background-color 0.3s ease; }
 .side-bar { display: flex; align-items: center; gap: 2px; flex-shrink: 0; height: 50px; padding: 0 6px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
@@ -302,15 +330,13 @@ html, body {
 .side-chevron:hover { background: rgba(0,0,0,0.05); color: #1d1d1f; }
 .side-grip { display: none; }
 .side .text-muted { color: #626267; }
-@media (min-width: 901px) { .side-on .map-dock { left: 400px; } }
 @media (max-width: 900px) {
   .map-menu-button { left: 16px; top: calc(16px + var(--sat)); }
   .account-area { right: 16px; top: calc(16px + var(--sat)); }
-  .weather-pill { top: calc(84px + var(--sat)); right: 16px; }
+  .weather-pill { top: calc(66px + var(--sat)); right: 16px; }
   .account-content { max-height: calc(100dvh - 370px - var(--sat)); }
   .map-dock { left: 16px; right: 16px; }
-  .dock-options { flex-direction: column; gap: 6px; padding-bottom: 6px; }
-  .map-view-controls { align-self: center; }
+  .dock-options-open { padding-bottom: 6px; }
   .dock-search-row { gap: 8px; }
   /* phones: the switch sits at the left of the dock's top row, beside the locate button */
   .view-switch { left: 16px; bottom: calc(max(32px, calc(env(safe-area-inset-bottom) + 20px)) + 125px); }
@@ -319,7 +345,8 @@ html, body {
   .side-tab { padding: 0 10px; }
   @media (max-width: 430px) { .side:not(.side-open) .side-tab span { display: none; } }
   .map-layer-chip { min-height: 44px; padding: 9px 14px; }
-  .search-results, .chat-thread, .chat-suggestions { bottom: calc(100% + 120px); }
+  .search-results, .chat-thread, .chat-suggestions { bottom: calc(100% + 10px); }
+  .dock-options-open + .dock-search-row :is(.search-results, .chat-thread, .chat-suggestions) { bottom: calc(100% + 70px); }
   .search-results { max-height: calc(100dvh - 320px); }
 }
 @media (max-width: 540px) {
@@ -335,9 +362,33 @@ html, body {
 .map-app[data-night="true"] .map-menu-button svg { filter: drop-shadow(0 1px 3px rgba(0,0,0,0.45)); }
 .map-app[data-night="true"] .map-menu-button:hover,
 .map-app[data-night="true"] .map-menu-button[aria-expanded="true"] { color: var(--foreground); }
-.map-app[data-night="true"] .campus-search:not(:focus-within) .campus-search-input,
-.map-app[data-night="true"] .campus-search:not(:focus-within) .campus-search-input::placeholder,
-.map-app[data-night="true"] .campus-search:not(:focus-within) .search-icon { color: #fff; }
+.map-app[data-night="true"] .campus-search .campus-search-input,
+.map-app[data-night="true"] .campus-search .campus-search-input::placeholder,
+.map-app[data-night="true"] .campus-search .search-icon,
+.map-app[data-night="true"] .campus-search .icon-action,
+.map-app[data-night="true"] .dock-filter:not(.dock-filter-on),
+.map-app[data-night="true"] .map-locate { color: #fff; }
+.map-app[data-night="true"] .campus-search .campus-search-input::placeholder { color: rgba(255,255,255,0.8); }
+/* the rest of the glass (tab bar, bell, weather, account/notification dropdown) follows the chat box at night */
+.map-app[data-night="true"] .side:not(.side-open) .side-tab:not(.side-tab-on),
+.map-app[data-night="true"] .side:not(.side-open) .side-chevron,
+.map-app[data-night="true"] .map-bell,
+.map-app[data-night="true"] .weather-pill,
+.map-app[data-night="true"] .weather-condition,
+.map-app[data-night="true"] .account-panel { color: #fff; }
+.map-app[data-night="true"] .weather-range,
+.map-app[data-night="true"] .account-panel .text-muted { color: rgba(255,255,255,0.72); }
+.map-app[data-night="true"] .side:not(.side-open) .side-tab:not(.side-tab-on):hover,
+.map-app[data-night="true"] .side:not(.side-open) .side-chevron:hover,
+.map-app[data-night="true"] .account-panel .menu-item:hover { background: rgba(255,255,255,0.14); }
+.map-app[data-night="true"] .side:not(.side-open) .side-tab-on { background: #fff; color: var(--foreground); }
+.map-app[data-night="true"] .account-panel .menu-sep { background: rgba(255,255,255,0.2); }
+.map-app[data-night="true"] .account-panel .text-cardinal { color: #ff9b9b; }
+.map-app[data-night="true"] .account-tabs { border-bottom-color: rgba(255,255,255,0.2); }
+.map-app[data-night="true"] .account-tabs [role="tab"], .map-app[data-night="true"] .account-panel .icon-action { color: rgba(255,255,255,0.85); }
+.map-app[data-night="true"] .account-tabs button:hover, .map-app[data-night="true"] .account-panel .icon-action:hover { background: rgba(255,255,255,0.14); color: #fff; }
+.map-app[data-night="true"] .account-tabs [aria-selected="true"] { background: rgba(255,255,255,0.2); color: #fff; }
+.map-app[data-night="true"] .account-panel .unread-count { color: #ff9b9b; }
 
 .co-alertmini .co-foot { width: 6px; height: 6px; border-color: #dc2626; }
 
@@ -356,8 +407,13 @@ button:active:not(:disabled) { transform: scale(0.97); }
 @media (prefers-reduced-motion: reduce) { .side, button { transition: none; } }
 
 /* ---------- Apple-style map controls ---------- */
-.mapboxgl-ctrl-group { background: rgba(255, 255, 255, 0.72) !important; -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
-  border-radius: 14px !important; border: 0.5px solid rgba(255, 255, 255, 0.75); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.06) !important; overflow: hidden; }
+.mapboxgl-ctrl-group { background: var(--glass) !important; -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border-radius: 20px !important; border: 0; box-shadow: var(--glass-shadow) !important; overflow: hidden; }
+/* zoom / rotate column: same width and glass as the locate circle above it */
+.mapboxgl-ctrl-group button { width: 40px !important; height: 36px !important; }
+.mapboxgl-ctrl-group button:hover { background-color: rgba(255,255,255,0.25) !important; }
+.map-app[data-night="true"] .mapboxgl-ctrl-group .mapboxgl-ctrl-icon { filter: invert(1); }
+.map-app[data-night="true"] .mapboxgl-ctrl-group button + button { border-top-color: rgba(255,255,255,0.18) !important; }
 .mapboxgl-ctrl-group button + button { border-top: 0.5px solid rgba(0, 0, 0, 0.08) !important; }
 .co-card { border-radius: 14px; font-family: var(--font-apple); }
 
@@ -381,14 +437,15 @@ button:active:not(:disabled) { transform: scale(0.97); }
 /* Card: top-right, under the profile button. See-through: 55% white with a
    light 8px blur (heavier blurs slow the map), a thin white border and a soft shadow. Text is near-black with a faint
    white halo, which stays readable over the pale day map and the dark night map alike. */
-.weather-pill { position: absolute; top: calc(22px + var(--sat)); right: 124px; z-index: 10; display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px 0 12px; border-radius: 999px;
+.weather-pill { position: absolute; top: calc(70px + var(--sat)); right: 24px; z-index: 10; display: grid; grid-template-columns: auto auto; column-gap: 6px; justify-items: end; align-items: center; padding: 8px 12px; border-radius: 14px;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; }
+  box-shadow: var(--glass-shadow); color: #1d1d1f; white-space: nowrap; text-align: right; transition: background-color 180ms ease; }
+.weather-pill .weather-condition, .weather-pill .weather-range { grid-column: 1 / -1; }
 .weather-sun { color: #e8a200; }
 .weather-temperature { font-size: 16px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .weather-condition { font-size: 13px; font-weight: 500; color: #3a3a3f; }
 .weather-range { font-size: 12px; font-weight: 500; color: #6e6e73; font-variant-numeric: tabular-nums; }
-@media (max-width: 420px) { .weather-condition { display: none; } }
+
 .weather-credit:hover { text-decoration: underline; }
 /* Sun, cloud and rain canvas: above the map, below every bubble, popup and control. */
 .map-weather-effects { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
@@ -413,6 +470,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
   .map-app { --dock-lift: max(0px, var(--sab) - 12px); }
   .map-controls { bottom: calc(210px + var(--dock-lift)); }
   .map-app .mapboxgl-ctrl-bottom-right { bottom: calc(198px + var(--dock-lift)); }
+  .map-locate { bottom: calc(364px + var(--dock-lift)); }
   .map-app .satellite-credit { bottom: calc(212px + var(--dock-lift)); }
 }
 /* the 20px ⓘ sits 2px high next to the 23px Mapbox mark: center them */
