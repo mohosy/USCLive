@@ -91,6 +91,8 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
       const r = await api<Reply>("/api/chat", { json: { messages: history.map(({ role, content, eventIds }) => ({ role, content, eventIds })), lat: loc.lat, lng: loc.lng } });
       setMsgs((m) => [...m, { role: "assistant", content: r.reply, eventIds: r.eventIds, actions: r.actions }]);
       r.actions.forEach(onAction);
+      // a walk starts: fold the conversation away so it doesn't cover your Trojan and the route
+      if (r.actions.some((a) => a.type === "walk" || a.type === "walk_point")) setOpen(false);
       onAnswer(r.eventIds.length ? r.eventIds : null);
       onChanged();
     } catch (e) {
@@ -148,7 +150,7 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
                   </div>
                 )}
                 {m.actions?.map((a, k) => (a.type === "walk" || a.type === "walk_point") && (
-                  <button key={k} type="button" onClick={() => onAction(a)} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[12.5px] font-medium hover:bg-surface">
+                  <button key={k} type="button" onClick={() => { onAction(a); if (a.type === "walk" || a.type === "walk_point") setOpen(false); }} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[12.5px] font-medium hover:bg-surface">
                     <Navigation size={13} /> Walk to {a.type === "walk" ? BUILDING_BY_ID[a.buildingId]?.name : a.name}
                   </button>
                 ))}
