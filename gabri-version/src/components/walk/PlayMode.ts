@@ -12,6 +12,12 @@ import { buildTrojan } from "./trojanModel";
 type LL = { lng: number; lat: number };
 type Ring = { pts: [number, number][]; minX: number; minZ: number; maxX: number; maxZ: number };
 
+/** how close you can zoom while playing, and the map's normal limit */
+const PLAY_MAX_ZOOM = 21.5;
+const MAP_MAX_ZOOM = 19.5;
+/** our 3D building layers (campus and the neighborhood), faded when one hides the character */
+const XRAY_LAYERS = ["usc-buildings", "area-buildings"];
+const XRAY_BASE: Record<string, number> = { "usc-buildings": 0.97, "area-buildings": 0.92 }; // their normal opacity (MapView)
 const WALK_MPS = 9; // quick, so getting across campus doesn't drag
 const RUN_MPS = 20; // hold Shift
 const BODY_M = 1.8; // keeps the (drawn larger) character off the walls
@@ -107,6 +113,7 @@ export class PlayMode {
     this.layer.play("Wave", true);
     setTimeout(() => { if (!this.moving) this.layer?.play("Idle"); }, 1600); // unless you already started walking
     map.keyboard.disable(); // arrows drive the character, not the map
+    this.closeZoom(true);
     this.flyIn();
     window.addEventListener("keydown", this.down, true); // capture: the character hears its keys before the page's other shortcuts do
     window.addEventListener("keyup", this.up, true);
@@ -143,6 +150,8 @@ export class PlayMode {
   park() {
     if (!this.active || this.gone) return;
     this.active = false;
+    this.setXray(false);
+    this.closeZoom(false);
     this.setFollow(false);
     cancelAnimationFrame(this.raf);
     window.removeEventListener("keydown", this.down, true);
@@ -160,6 +169,7 @@ export class PlayMode {
   resume() {
     if (this.active || this.gone) return;
     this.active = true;
+    this.closeZoom(true);
     this.map.keyboard.disable();
     this.flyIn();
     window.addEventListener("keydown", this.down, true); // capture: the character hears its keys before the page's other shortcuts do
@@ -275,8 +285,46 @@ export class PlayMode {
       const bearing = Math.abs(diff) < 0.05 ? this.hdg : b + diff * Math.min(1, dt * 6);
       this.map.jumpTo({ center: [p.lng, p.lat], bearing });
     } else this.map.triggerRepaint();
+    this.checkXray(now);
     this.raf = requestAnimationFrame(this.tick);
   };
+
+  /** Playing: allow zooming right in on the character (the map normally stops at 19.5). */
+  private closeZoom(on: boolean) {
+    try { this.map.setMaxZoom(on ? PLAY_MAX_ZOOM : MAP_MAX_ZOOM); } catch { /* map gone */ }
+  }
+
+  /**
+   * See-through buildings: when a building is drawn over the character (between you and it), the
+   * building layers fade so the Trojan stays visible; they come back once the view is clear.
+   * Checked a few times a second against what is actually on screen.
+   */
+  private xrayAt = 0;
+  private xray = false;
+  private checkXray(now: number) {
+    if (now < this.xrayAt) return;
+    this.xrayAt = now + 180;
+    const layers = XRAY_LAYERS.filter((id) => this.map.getLayer(id));
+    if (!layers.length) return;
+    const p = this.position();
+    const s = this.map.project([p.lng, p.lat]);
+    const mpp = (78_271.517 * Math.cos((p.lat * Math.PI) / 180)) / 2 ** this.map.getZoom();
+    const tall = Math.max(24, (2 * DRAW_SCALE) / mpp);
+    // the character's chest and head: if a building is drawn there, it is in front of it
+    const hidden = [0.45, 0.8].some((f) => this.map.queryRenderedFeatures([s.x, s.y - tall * f], { layers }).length > 0);
+    this.setXray(hidden);
+  }
+  private setXray(on: boolean) {
+    if (on === this.xray) return;
+    this.xray = on;
+    for (const id of XRAY_LAYERS) {
+      if (!this.map.getLayer(id)) continue;
+      try {
+        this.map.setPaintProperty(id, "fill-extrusion-opacity-transition", { duration: 280, delay: 0 });
+        this.map.setPaintProperty(id, "fill-extrusion-opacity", on ? 0.28 : XRAY_BASE[id] ?? 1);
+      } catch { /* style reloading */ }
+    }
+  }
 
   /** lock the camera behind the character, or let the map go free */
   setFollow(on: boolean) {
@@ -324,6 +372,8 @@ export class PlayMode {
   position(): LL { return this.walls.toLL(this.x, this.z); }
 
   destroy() {
+    this.setXray(false);
+    this.closeZoom(false);
     this.gone = true;
     cancelAnimationFrame(this.raf);
     window.removeEventListener("keydown", this.down, true);

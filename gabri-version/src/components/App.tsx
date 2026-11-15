@@ -613,8 +613,11 @@ export default function App() {
                   setToasts((t) => t.filter((x) => x.id !== n.id));
                   void api("/api/notifications", { json: { ids: [n.id] } }).then(() => pollNotifs(), () => {}); // read, so the bell's dot updates
                 }}>
-                <div className="text-sm font-semibold">{n.title}</div>
-                {n.body && <div className="toast-body">{n.body}</div>}
+                <span className="toast-ic" aria-hidden="true"><Bell size={16} strokeWidth={2.2} /></span>
+                <span className="toast-text">
+                  <span className="block text-sm font-semibold">{n.title}</span>
+                  {n.body && <span className="toast-body block">{n.body}</span>}
+                </span>
               </button>
             ))}
           </div>

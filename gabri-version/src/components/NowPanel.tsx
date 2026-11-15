@@ -2,10 +2,10 @@
 
 import { Navigation, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { BUILDING_BY_ID } from "@/lib/campus";
+import { BUILDING_BY_ID, CATEGORY_META, walkMinutes } from "@/lib/campus";
 import { api, fmtTime, type AppState, type EventView, type Loc } from "@/lib/client-types";
 import type { NowPlanT } from "@/lib/ai";
-import { Button, CatLabel, cx } from "./ui";
+import { cx } from "./ui";
 
 interface NowRes {
   plan: NowPlanT;
@@ -91,30 +91,34 @@ export default function NowPanel({ state, loc, onOpenEvent, onOpenBuilding, onRs
                 </div>
               );
             })()}
-            <ol className="divide-y divide-line rounded-lg border border-line">
+            {/* the picks: whole row opens it; one clean meta line (type · place · walk) */}
+            <ul className="now-picks">
               {res.plan.suggestions.map((s, i) => {
                 const ev = s.eventId ? eventsById[s.eventId] : undefined;
                 const bId = ev?.buildingId ?? (s.buildingId !== "none" ? s.buildingId : undefined);
+                const b = bId ? BUILDING_BY_ID[bId] : undefined;
+                const cat = ev ? CATEGORY_META[ev.category] : undefined;
+                const walk = b ? walkMinutes(loc, b) : null;
+                const open = () => (ev ? onOpenEvent(ev.id) : bId && onOpenBuilding(bId));
                 return (
-                  <li key={i} className="flex items-start gap-3 p-3">
-                    <span className="mt-0.5 w-4 shrink-0 text-xs font-semibold text-muted">{i + 1}</span>
-                    <div className="min-w-0 flex-1">
-                      <button className="text-left text-sm font-medium hover:underline" onClick={() => (ev ? onOpenEvent(ev.id) : bId && onOpenBuilding(bId))}>{s.title}</button>
-                      <p className="mt-0.5 text-xs leading-relaxed text-muted">{s.why}</p>
-                      <div className="mt-1.5 flex items-center gap-3">
-                        {ev && <CatLabel category={ev.category} />}
-                        {bId && <span className="text-xs text-muted">{BUILDING_BY_ID[bId]?.name}</span>}
-                      </div>
-                    </div>
+                  <li key={i} className="now-pick">
+                    <button type="button" className="now-pick-main" onClick={open}>
+                      <span className="now-pick-title">{s.title}</span>
+                      <span className="now-pick-why">{s.why}</span>
+                      <span className="now-pick-meta">
+                        {cat && <><i style={{ background: cat.color }} />{cat.short}</>}
+                        {[b?.name, walk != null ? `${walk} min walk` : null].filter(Boolean).map((x) => <span key={x as string}>{x}</span>)}
+                      </span>
+                    </button>
                     {ev && !ev.going && ev.visibility !== "invite" && (s.action === "join" || s.action === "eat" || s.action === "go") ? (
-                      <Button variant="secondary" className="!px-2.5 !py-1 text-xs" onClick={() => onRsvp(ev.id)}>{ACTION_LABEL[s.action]}</Button>
+                      <button type="button" className="now-pick-act" onClick={() => onRsvp(ev.id)}>{ACTION_LABEL[s.action]}</button>
                     ) : ev?.going ? (
-                      <span className="text-xs text-emerald-700">Going</span>
+                      <span className="now-pick-going">Going</span>
                     ) : null}
                   </li>
                 );
               })}
-            </ol>
+            </ul>
             {res.plan.headsUp && <p className="text-xs text-muted">{res.plan.headsUp}</p>}
           </div>
         ) : null}

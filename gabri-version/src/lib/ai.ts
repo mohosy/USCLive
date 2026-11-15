@@ -269,7 +269,7 @@ const NowPlan = z.object({
     why: z.string().describe("one sentence, specific: timing, walk, friends, food"),
     action: z.enum(["join", "go", "study", "eat", "rest", "prep"]),
   })).describe("exactly 3, best first"),
-  headsUp: z.string().nullable().describe("an optional reminder: deadline, class prep, invite to answer"),
+  headsUp: z.string().nullable().describe("an optional reminder about something else (a deadline, class prep, an invite to answer); null if there is none. Never restate the headline or how much time is left."),
 });
 export type NowPlanT = z.infer<typeof NowPlan>;
 

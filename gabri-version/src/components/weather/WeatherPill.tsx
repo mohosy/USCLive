@@ -63,7 +63,6 @@ export default function WeatherPill({ weather }: { weather: CampusWeather }) {
   return (
     <div ref={box} className={"weather-pill" + (open ? " weather-open" : "")}>
       <button type="button" className="weather-now" onClick={toggle} aria-expanded={open}
-        title={`Los Angeles: ${condition}, high ${weather.high}°, low ${weather.low}°${note}`}
         aria-label={`Los Angeles weather: ${weather.temperature} degrees Fahrenheit, ${condition}. High ${weather.high}, low ${weather.low}.${note} Show the next hours.`}>
         <WeatherIcon code={weather.code} isDay={weather.isDay} size={18} className={weather.isDay && weather.code <= 1 ? "weather-sun" : ""} />
         <span className="weather-temperature">{weather.temperature}°</span>
