@@ -270,3 +270,8 @@ button:active:not(:disabled) { transform: scale(0.97); }
 }
 /* phones: the chat sits above the side panel's peeking bar */
 @media (max-width: 900px) { .chat-dock { bottom: 88px; } }
+
+/* map credits on one row: the compact ⓘ just left of the Mapbox logo; zoom buttons above them */
+.mapboxgl-ctrl-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: center; column-gap: 6px; padding-right: 10px; }
+.mapboxgl-ctrl-bottom-right > .mapboxgl-ctrl { float: none; margin: 0 0 10px 0; clear: none; }
+.mapboxgl-ctrl-bottom-right > .mapboxgl-ctrl-group { grid-column: 1 / -1; }
