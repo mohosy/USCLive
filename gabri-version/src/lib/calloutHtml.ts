@@ -11,7 +11,9 @@ export function calloutHTML(c: Callout, now: Date) {
   if (c.kind === "webcam") {
     // a small live tile of what the camera sees; hover grows it, click opens the stream
     if (c.image) {
-      const src = `${c.image}${c.image.includes("?") ? "&" : "?"}t=${Math.floor(+now / 60_000)}`;
+      // the campus cameras also publish a 640px snapshot: 6x lighter than the 1920px one, and this tile is a thumbnail
+      const small = c.image.replace(/\/latest_1920x\.jpg$/, "/latest_640x.jpg");
+      const src = `${small}${small.includes("?") ? "&" : "?"}t=${Math.floor(+now / 60_000)}`;
       return `<div class="camt"><div class="camt-tile"><img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="camt-live" title="Live"><i></i></span></div><div class="camt-name">${esc(c.title)}</div><div class="camt-hint">${esc(c.eyebrow)} · Click to watch</div></div>`;
     }
     return `<div class="cam-tag"><i></i>Live<span>${esc(c.title)}</span></div>`;

@@ -33,9 +33,23 @@ export function safeExternalUrl(raw: string, allowHosts?: RegExp): URL | null {
   }
 }
 
-export async function fetchText(u: URL, maxBytes = 2_000_000) {
-  const res = await fetch(u, { headers: { "User-Agent": "USCLive/0.1 (student hackathon project)" }, signal: AbortSignal.timeout(12_000), redirect: "follow" });
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+/**
+ * Fetch a public page as text. Redirects are followed by hand, at most four, and every hop is checked again with
+ * safeExternalUrl (and the same host allow-list): a checked address must not be able to bounce the server to an
+ * internal one.
+ */
+export async function fetchText(u: URL, maxBytes = 2_000_000, allowHosts?: RegExp) {
+  let res: Response | null = null;
+  let here = u;
+  for (let hop = 0; hop < 5; hop++) {
+    res = await fetch(here, { headers: { "User-Agent": "USCLive/0.1 (student hackathon project)" }, signal: AbortSignal.timeout(12_000), redirect: "manual" });
+    if (res.status < 300 || res.status >= 400) break;
+    const next = safeExternalUrl(new URL(res.headers.get("location") ?? "", here).toString(), allowHosts);
+    void res.body?.cancel();
+    if (!next || hop === 4) throw new Error("That address redirects somewhere this app will not fetch.");
+    here = next;
+  }
+  if (!res || !res.ok) throw new Error(`Fetch failed: ${res?.status ?? "no response"}`);
   if (Number(res.headers.get("content-length") ?? 0) > maxBytes) { void res.body?.cancel(); throw new Error("Response too large"); }
   // read in chunks and stop the moment it's over the limit (the header can be missing or wrong)
   const reader = res.body?.getReader();

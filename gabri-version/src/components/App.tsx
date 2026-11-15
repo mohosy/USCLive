@@ -546,7 +546,7 @@ export default function App() {
             {([["menu", "Home", House], ["events", "Events", CalendarDays], ["study", "Study spots", BookOpen]] as const).map(([t, l, Icon]) => {
               const on = tab === t && menuOpen && !detailOpen;
               return (
-                <button key={t} aria-pressed={on} onClick={() => { closeDetail(); if (on) setMenuOpen(false); else { setTab(t); setMenuOpen(true); } }}
+                <button key={t} aria-pressed={on} aria-label={l} onClick={() => { closeDetail(); if (on) setMenuOpen(false); else { setTab(t); setMenuOpen(true); } }}
                   className={cx("side-tab", on && "side-tab-on")}>
                   <Icon size={15} aria-hidden="true" /> <span>{l}</span>
                 </button>

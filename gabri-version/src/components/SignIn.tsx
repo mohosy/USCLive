@@ -183,7 +183,7 @@ export default function SignIn({ onDone, google }: { onDone: () => void; google?
             <button type="button" className="w-full text-center text-xs text-muted hover:text-foreground" onClick={() => { setStep("email"); setErr(null); }}>Back</button>
           </form>
         )}
-        <p className="mt-4 text-center text-[11px] text-muted">Not an official USC service.</p>
+        <p className="mt-4 text-center text-[11px] text-muted">Not an official USC service. Events and people shown are demo data. <a href="/credits" className="underline underline-offset-2">About and privacy</a></p>
       </div>
     </div>
   );
