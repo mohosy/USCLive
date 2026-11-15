@@ -474,7 +474,8 @@ export default function App() {
               <OrgDetail host={selHost.host} state={state} loc={loc} onOpenEvent={openEvent}
                 onClose={() => { const from = selHost.from; setSelHost(null); if (from) openEvent(from); }} />
             ) : event ? (
-              <EventDetail ev={event} state={state} loc={loc} onOpenHost={openHost} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
+              <EventDetail ev={event} state={state} loc={loc} onOpenHost={openHost} onClose={closeDetail}
+                onCancel={async (id) => { try { await api(`/api/events/${id}`, { method: "DELETE" }); closeDetail(); refresh(); } catch (e) { window.alert((e as Error).message); } }} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} />
             ) : tab === "menu" ? (

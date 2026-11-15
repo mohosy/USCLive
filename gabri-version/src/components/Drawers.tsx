@@ -98,11 +98,13 @@ export function OrgDetail({ host, state, loc, onClose, onOpenEvent }: { host: Ho
   );
 }
 
-export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindFriends, onOpenBuilding, onDirections, onOpenHost }: {
+export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindFriends, onOpenBuilding, onDirections, onOpenHost, onCancel }: {
   ev: EventView; state: AppState; loc: Loc; onClose: () => void; onRsvp: (id: string) => Promise<void>; onInvite: (id: string, userIds: string[]) => Promise<void>; onFindFriends: () => void; onOpenBuilding: (id: string) => void;
   onDirections: (buildingId: string) => void;
   /** open the host's page (their other events) */
   onOpenHost?: (host: HostRef) => void;
+  /** the host cancels their own event */
+  onCancel?: (id: string) => Promise<void>;
 }) {
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -169,6 +171,13 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onInvite, onFindF
       </div>
       {action.kind === "link" && ev.category !== "sports_watch" && (
         <button onClick={toggle} disabled={busy} className="mt-2 text-xs text-muted hover:text-foreground">{ev.going ? "Saved to your schedule · remove" : "Also save to my schedule"}</button>
+      )}
+      {/* hosts can call it off: it leaves the map and everyone going or invited is told */}
+      {onCancel && (ev.host.id === state.me.id || (ev.host.kind === "org" && !!ev.host.id && ev.host.id === state.me.creatorOrgId)) && (
+        <button type="button" disabled={busy} className="mt-3 w-full rounded-full py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          onClick={async () => { if (!window.confirm("Cancel this event? Everyone going or invited will be told.")) return; setBusy(true); await onCancel(ev.id); setBusy(false); }}>
+          Cancel event
+        </button>
       )}
       {picking && <SendSheet key={ev.id} ev={ev} friends={state.me.friends} onSend={(ids) => onInvite(ev.id, ids)} onFindFriends={onFindFriends} onClose={() => setPicking(false)} />}
 

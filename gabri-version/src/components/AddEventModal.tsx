@@ -41,6 +41,47 @@ async function fileToJpegBase64(file: File): Promise<{ data: string; mediaType: 
 }
 
 const VIS = [["public", "Everyone"], ["school", "My school"], ["open", "Open invite"], ["invite", "Invite only"]] as const;
+const VIS_HINT: Record<string, string> = {
+  public: "Everyone at USC sees it on the map.",
+  school: "Only students in the schools you pick see it.",
+  open: "Anyone can see it and join. Friends you pick get a heads-up.",
+  invite: "Only the people you invite can see it.",
+};
+/** quick starts for the time fields */
+const atHour = (addDays: number, h: number) => { const d = new Date(); d.setDate(d.getDate() + addDays); d.setHours(h, 0, 0, 0); return d; };
+const QUICK_STARTS: [string, () => Date][] = [
+  ["Now", () => { const d = new Date(); d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0); return d; }],
+  ["In 1 hour", () => { const d = new Date(Date.now() + 3600_000); d.setMinutes(0, 0, 0); return d; }],
+  ["Tonight 7pm", () => atHour(new Date().getHours() >= 19 ? 1 : 0, 19)],
+  ["Tomorrow noon", () => atHour(1, 12)],
+];
+const durationOf = (f: { start: string; end: string }) => Math.max(30 * 60_000, +new Date(f.end) - +new Date(f.start) || 90 * 60_000);
+
+/** Type a building or its code; pick from the matches (instead of scrolling a list of every building). */
+function PlacePicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const current = BUILDINGS.find((b) => b.id === value);
+  const [q, setQ] = useState<string | null>(null);
+  const text = q ?? (current ? `${current.name} (${current.code})` : "");
+  const words = (q ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = q === null || !words.length ? [] : BUILDINGS
+    .filter((b) => words.every((w) => `${b.name} ${b.code}`.toLowerCase().includes(w)))
+    .sort((a, b) => Number(!!a.minor) - Number(!!b.minor))
+    .slice(0, 6);
+  return (
+    <div className="relative">
+      <input className={inputCls} value={text} placeholder="Building, e.g. Leavey or THH" onFocus={() => setQ("")} onChange={(e) => setQ(e.target.value)}
+        onBlur={() => setTimeout(() => setQ(null), 150)} />
+      {matches.length > 0 && (
+        <ul className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-line bg-white shadow-lg">
+          {matches.map((b) => (
+            <li key={b.id}><button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-surface" onMouseDown={(e) => e.preventDefault()} onClick={() => { onChange(b.id); setQ(null); }}>
+              {b.name} <span className="text-muted">{b.code}</span></button></li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function AddEventModal({ open, onClose, state, onCreated, asOrg }: {
   open: boolean; onClose: () => void; state: AppState; onCreated: (e: EventView) => void; asOrg?: { id: string; name: string };
@@ -145,13 +186,19 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
                 {EVENT_TYPES.map((k) => <option key={k} value={k}>{CATEGORY_META[k].label}</option>)}
               </select>
             </Field>
-            <Field label="Building">
-              <select className={inputCls} value={form.buildingId} onChange={(e) => set("buildingId", e.target.value)}>
-                {BUILDINGS.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
-              </select>
-            </Field>
+            <Field label="Where"><PlacePicker value={form.buildingId} onChange={(id) => set("buildingId", id)} /></Field>
             <Field label="Starts"><input type="datetime-local" className={inputCls} value={form.start} onChange={(e) => set("start", e.target.value)} /></Field>
             <Field label="Ends"><input type="datetime-local" className={inputCls} value={form.end} onChange={(e) => set("end", e.target.value)} /></Field>
+            <div className="col-span-2 -mt-1 flex flex-wrap gap-1.5">
+              {QUICK_STARTS.map(([label, at]) => (
+                <button key={label} type="button" className="quick-chip" onClick={() => { const s0 = at(); setForm((f) => ({ ...f, start: local(s0), end: local(new Date(+s0 + durationOf(f))) })); }}>{label}</button>
+              ))}
+              <span className="mx-1 self-center text-xs text-muted">for</span>
+              {[1, 2, 3].map((h) => (
+                <button key={h} type="button" className={cx("quick-chip", durationOf(form) === h * 3600_000 && "quick-chip-on")}
+                  onClick={() => setForm((f) => ({ ...f, end: local(new Date(+new Date(f.start) + h * 3600_000)) }))}>{h}h</button>
+              ))}
+            </div>
             <Field label="Room"><input className={inputCls} value={form.room} onChange={(e) => set("room", e.target.value)} placeholder="Optional" /></Field>
             <Field label="Class"><input className={inputCls} value={form.course} onChange={(e) => set("course", e.target.value)} placeholder="Optional, e.g. FBE 403" /></Field>
             <div className="col-span-2">
@@ -162,6 +209,7 @@ export default function AddEventModal({ open, onClose, state, onCreated, asOrg }
                   ))}
                 </div>
               </Field>
+              <p className="mt-1.5 text-xs text-muted">{VIS_HINT[vis]}</p>
             </div>
             {vis === "school" && (
               <div className="col-span-2 flex flex-wrap gap-1.5">
