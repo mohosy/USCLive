@@ -52,3 +52,4 @@ Without an API key everything still works in **offline mode** (heuristics). With
 ## Demo data
 All people, orgs and events are fictional and generated relative to "now" (`src/lib/seed.ts`). Building coordinates are approximate.
 In-memory store — resets when the server restarts.
+Event photos on the map are freely licensed (Creative Commons / public domain) from Wikimedia Commons, matched to events by what they are (`src/lib/eventPhotos.ts`); credits at `/credits`.
