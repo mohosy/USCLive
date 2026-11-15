@@ -24,10 +24,12 @@ function alertPoints(alerts: SafetyAlert[]): FC {
   return { type: "FeatureCollection", features: alerts.map((a) => ({ type: "Feature", properties: { id: `al:${a.id}`, title: a.title }, geometry: { type: "Point", coordinates: [a.lng, a.lat] } })) };
 }
 import { LEVEL_COLOR } from "./ui";
-import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
+import type { WalkGuide, WalkProgress } from "./walk/WalkGuide";
 import WalkHUD from "./walk/WalkHUD";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+/** Phones get a lighter scene: fewer pixels, no 3D trees, campus buildings only, no shadows. */
+const PHONE = typeof window !== "undefined" && window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
 
 export type MapStyle = "map" | "satellite";
 const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }> = {
@@ -36,7 +38,7 @@ const STYLES: Record<MapStyle, { url: string; config: Record<string, unknown> }>
   map: {
     url: "mapbox://styles/mapbox/standard",
     // Mapbox's 3D buildings are off: we draw only USC's buildings (see installSpotlight). Trees/landmarks stay, clipped to campus.
-    config: { lightPreset: "day", show3dObjects: true, show3dBuildings: false, show3dLandmarks: true, show3dTrees: true, showTransitLabels: false, showRoadLabels: true },
+    config: { lightPreset: "day", show3dObjects: true, show3dBuildings: false, show3dLandmarks: true, show3dTrees: !PHONE, showTransitLabels: false, showRoadLabels: true },
   },
   // Aerial imagery: shown as the placeholder while the photoreal 3D view loads
   satellite: {
@@ -89,7 +91,7 @@ function installArea(m: mapboxgl.Map, fc: FeatureCollection, light: LightPreset)
       "fill-extrusion-color": ["interpolate", ["linear"], ["get", "h"], 0, "#ebe8e4", 20, "#e2ded9", 60, "#d8d3cd"],
       "fill-extrusion-height": ["get", "h"],
       "fill-extrusion-opacity": 0.92,
-      "fill-extrusion-ambient-occlusion-intensity": 0.25,
+      "fill-extrusion-ambient-occlusion-intensity": PHONE ? 0 : 0.25,
       "fill-extrusion-ambient-occlusion-radius": 3,
       // faint street-light glow at night (applyLight); campus stays the warm one
       "fill-extrusion-flood-light-color": "#ffc98f",
@@ -159,7 +161,7 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, light: L
       "fill-extrusion-height": ["get", "h"],
       "fill-extrusion-base": ["get", "mh"],
       "fill-extrusion-opacity": 0.97,
-      "fill-extrusion-ambient-occlusion-intensity": 0.3,
+      "fill-extrusion-ambient-occlusion-intensity": PHONE ? 0 : 0.3,
       "fill-extrusion-ambient-occlusion-radius": 3,
       // warm uplighting on the walls and a pool of light on the ground; only turned up at dusk/night (applyLight)
       "fill-extrusion-flood-light-color": "#ffb066",
@@ -453,7 +455,7 @@ export default function MapView(props: Props) {
         // each camera faces the way it actually looks (GeoJSON can't carry arrays, so match on the id)
         "model-rotation": ["match", ["get", "id"], ...WEBCAMS.flatMap((w) => [`cam:${w.id}`, ["literal", [0, 0, camYaw(w.heading)]]]), ["literal", [0, 0, 90]]],
         "model-type": "common-3d",
-        "model-cast-shadows": true,
+        "model-cast-shadows": !PHONE,
         "model-emissive-strength": 0.6,
       },
     } as mapboxgl.LayerSpecification);
@@ -464,7 +466,7 @@ export default function MapView(props: Props) {
       paint: {
         "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [60, 60, 60]], 19, ["literal", [5, 5, 5]]],
         "model-type": "common-3d",
-        "model-cast-shadows": true,
+        "model-cast-shadows": !PHONE,
         "model-emissive-strength": 1,
       },
     } as mapboxgl.LayerSpecification);
@@ -498,6 +500,9 @@ export default function MapView(props: Props) {
     // Satellite (initialCamera set) or when the user prefers reduced motion.
     const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const intro = !!props.intro && !props.initialCamera && !reduceMotion;
+    // iPhones are 3x: Mapbox sizes its canvas from devicePixelRatio, so on phones it sees 2x
+    // (looks the same on a moving map, ~45% fewer pixels to draw). Only JS readers are affected, not page text.
+    if (PHONE && window.devicePixelRatio > 2) Object.defineProperty(window, "devicePixelRatio", { configurable: true, get: () => 2 });
     const m = new mapboxgl.Map({
       container: el.current,
       accessToken: TOKEN,
@@ -511,7 +516,7 @@ export default function MapView(props: Props) {
       pitch: intro ? 0 : props.initialCamera?.pitch ?? 60,
       maxPitch: 72,
       bearing: intro ? 10 : props.initialCamera?.bearing ?? -20,
-      antialias: true, // smooth edges on 3D buildings and the walking character
+      antialias: !PHONE, // smooth edges on desktop; phones skip it (it's costly on their GPUs)
       performanceMetricsCollection: false,
       // required credits, kept small and together: the Mapbox logo (unaltered) next to a compact ⓘ attribution
       logoPosition: "bottom-right",
@@ -526,7 +531,7 @@ export default function MapView(props: Props) {
         campus.current = c;
         if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, cb.current.light ?? "day", "alert-fill");
         // the neighborhood's buildings come after campus (a bigger file; campus shows first)
-        loadArea().then((fc) => { area.current = fc; if (ready.current && map.current === m && styleRef.current !== "satellite") installArea(m, fc, cb.current.light ?? "day"); }, () => {});
+        if (!PHONE) loadArea().then((fc) => { area.current = fc; if (ready.current && map.current === m && styleRef.current !== "satellite") installArea(m, fc, cb.current.light ?? "day"); }, () => {});
       },
       () => { /* no campus data: fall back to the plain map */ },
     );
@@ -769,18 +774,26 @@ export default function MapView(props: Props) {
     const w = cb.current.walk;
     if (!m || !w) return;
     const me = cb.current.me;
-    const guide = new WalkGuide(m, {
-      from: { lng: me.lng, lat: me.lat, label: me.label },
-      to: { lng: w.to.lng, lat: w.to.lat, name: w.to.name, code: w.to.code, id: w.to.id },
-      token: TOKEN,
-      onProgress: setWalkP,
+    let guide: WalkGuide | null = null;
+    let cancelled = false;
+    // the walking character (three.js) is only downloaded when a walk actually starts
+    void import("./walk/WalkGuide").then(({ WalkGuide }) => {
+      if (cancelled) return;
+      const g = new WalkGuide(m, {
+        from: { lng: me.lng, lat: me.lat, label: me.label },
+        to: { lng: w.to.lng, lat: w.to.lat, name: w.to.name, code: w.to.code, id: w.to.id },
+        token: TOKEN,
+        onProgress: setWalkP,
+      });
+      guide = g;
+      walkRef.current = g;
+      const go = () => { if (walkRef.current === g) g.start(); };
+      if (m.isStyleLoaded()) go();
+      else m.once("idle", go);
     });
-    walkRef.current = guide;
-    const go = () => { if (walkRef.current === guide) guide.start(); };
-    if (m.isStyleLoaded()) go();
-    else m.once("idle", go);
     return () => {
-      guide.destroy();
+      cancelled = true;
+      guide?.destroy();
       if (walkRef.current === guide) walkRef.current = null;
       setWalkP(null);
       syncLayers(); // bring back pins/crowds the walk hid

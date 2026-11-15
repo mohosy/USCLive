@@ -44,6 +44,8 @@ function satelliteSession() {
     .catch(() => null);
   return sessionPromise;
 }
+/** Phones: coarser photoreal tiles and 1x pixels (Google's 3D tiles are heavy on mobile GPUs and memory). */
+const PHONE = typeof window !== "undefined" && window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
 const BOUNDS = { west: -118.3035, south: 34.0045, east: -118.2712, north: 34.0382 }; // same as the Explore map
 
 /** Same neighborhood as the Explore map: full detail inside, washed out beyond (draped on the 3D tiles). */
@@ -364,7 +366,7 @@ export default function Google3DView(props: Props) {
         pickable: true, // lets us measure the ground height under the bubbles
         data: TILESET,
         // maximumScreenSpaceError 24 (default 16): a bit less detail -> far fewer tiles, sharp much sooner
-        loadOptions: { fetch: { headers: { "X-GOOG-API-KEY": KEY } }, tileset: { maximumScreenSpaceError: 24, maximumMemoryUsage: 256, memoryAdjustedScreenSpaceError: true } },
+        loadOptions: { fetch: { headers: { "X-GOOG-API-KEY": KEY } }, tileset: { maximumScreenSpaceError: PHONE ? 40 : 24, maximumMemoryUsage: 256, memoryAdjustedScreenSpaceError: true } },
         operation: "terrain+draw",
         onTileLoad: () => { tileGen.current++; },
         onTileError: () => setError("Google 3D tiles failed to load. Check that the Map Tiles API is enabled for this key."),
@@ -634,7 +636,7 @@ export default function Google3DView(props: Props) {
     created = deck.current = new Deck({
       parent: host,
       // retina at 2-3x renders 4-9x the pixels; 1.5x looks the same on campus imagery and is much smoother
-      useDevicePixels: Math.min(typeof window !== "undefined" ? window.devicePixelRatio : 1, 1.5),
+      useDevicePixels: Math.min(typeof window !== "undefined" ? window.devicePixelRatio : 1, PHONE ? 1 : 1.5),
       viewState: viewState.current,
       controller: { touchRotate: true, inertia: 250 },
       onViewStateChange: ({ viewState: v }) => setView(v as MapViewState),
