@@ -17,7 +17,7 @@ const C = compile('src/lib/conflicts.ts');
 const at = (h, m = 0) => new Date(2026, 10, 17, h, m, 0).toISOString();
 const FBE = { kind: 'class', id: 'FBE 403', label: 'FBE 403', start: at(14), end: at(15, 20), buildingId: 'jkp', place: 'JKP 112' };
 const BUAD = { kind: 'class', id: 'BUAD 307', label: 'BUAD 307', start: at(10), end: at(11, 20), buildingId: 'hoh', place: 'HOH 1' };
-const JAZZ = { kind: 'event', id: 'ev_jazz', label: 'Thornton Jazz Night', start: at(19), end: at(21), buildingId: 'bov' };
+const JAZZ = { kind: 'event', id: 'ev_jazz', label: 'Thornton Jazz Showcase', start: at(19), end: at(21), buildingId: 'bov' };
 const busy = [FBE, BUAD, JAZZ];
 // walking minutes between buildings (same both ways); unknown pairs have no time
 const WALK = { 'hoh>gal': 12, 'jkp>hoh': 3, 'hoh>jkp': 3, 'bov>tcc': 2, 'tcc>bov': 2, 'gal>jkp': 14 };
@@ -36,7 +36,7 @@ assert.equal(C.timeRange(at(11, 30), at(13)), '11:30 AM-1:00 PM');
   assert.equal(c[0].short, 'Overlaps FBE 403');
   assert.equal(C.conflictMark(c), 'Overlaps FBE 403');
   // an event without a place leaves it out
-  assert.equal(C.findConflicts(ev(at(20), at(22)), busy, walk)[0].text, 'Conflicts with Thornton Jazz Night, 7:00-9:00 PM');
+  assert.equal(C.findConflicts(ev(at(20), at(22)), busy, walk)[0].text, 'Conflicts with Thornton Jazz Showcase, 7:00-9:00 PM');
   // touching is not overlapping: ends exactly when the class starts, in the same building
   assert.equal(C.findConflicts(ev(at(13), at(14), 'jkp'), busy, walk).length, 0);
   // a one minute overlap is an overlap

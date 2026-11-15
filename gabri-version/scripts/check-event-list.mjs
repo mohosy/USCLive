@@ -26,14 +26,14 @@ const kind = (title, category, more) => L.tileFor({ title, category, ...more }).
 // 1. tiles by type
 assert.equal(kind('Football: USC vs UCLA', 'sports_watch', { game: { sport: 'football' } }), 'sports');
 assert.equal(kind('Pickup soccer — need 4 more!', 'sports_play'), 'sports');
-assert.equal(kind('Startup Pitch Night', 'student'), 'club', 'free pizza does not make it a food event');
+assert.equal(kind('Startup Pitch Showcase', 'student'), 'club', 'free pizza does not make it a food event');
 assert.equal(kind('Club fair tabling on Trousdale', 'student'), 'club');
-assert.equal(kind('Thornton Jazz Night', 'usc'), 'club');
+assert.equal(kind('Thornton Jazz Showcase', 'usc'), 'club');
 assert.equal(kind('Boba study break', 'student'), 'food');
-assert.equal(kind('Food truck night at the Village', 'community', { tags: ['food'] }), 'food');
+assert.equal(kind('Food trucks at the Village', 'community', { tags: ['food'] }), 'food');
 assert.equal(kind('Sunday social', 'student', { tags: ['food'] }), 'food', 'a "food" tag is enough');
 assert.equal(kind('WRIT 340 peer review swap', 'academic'), 'academic');
-assert.equal(kind('Late study jam (free snacks)', 'academic'), 'academic', 'the event type wins over a food word');
+assert.equal(kind('Study jam (free snacks)', 'academic'), 'academic', 'the event type wins over a food word');
 assert.equal(kind('Goldman Sachs info session', 'career'), 'career');
 assert.equal(kind('Coffee chats with IB analysts', 'career'), 'career', 'career wins over "coffee"');
 

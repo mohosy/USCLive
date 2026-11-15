@@ -69,7 +69,7 @@ export function fresh(): DB {
   const now = new Date();
   const events = seedEvents(now);
   // the demo student is already registered for a couple of upcoming events (shows on their profile)
-  for (const e of events) if (/Thornton Jazz Night|Volleyball vs\. UCLA/.test(e.title) && !e.attendees.includes(ME)) e.attendees.push(ME);
+  for (const e of events) if (/Thornton Jazz Showcase|Volleyball vs\. UCLA/.test(e.title) && !e.attendees.includes(ME)) e.attendees.push(ME);
   return {
     seededAt: +now,
     users: demoPrefs(withFaces(seedUsers(now))),
