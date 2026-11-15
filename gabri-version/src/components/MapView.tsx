@@ -425,6 +425,7 @@ export default function MapView(props: Props) {
   // tick live game clocks every second; flash the bubble when the score changes
   useEffect(() => {
     const t = setInterval(() => {
+      if (document.hidden) return; // nothing to tick while the tab is hidden
       const now = new Date();
       for (const b of bubbles.current.values()) {
         if (!b.c.game) continue;

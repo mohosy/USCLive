@@ -285,6 +285,10 @@ export default function Google3DView(props: Props) {
   const lastReset = useRef(0);
   const groundDirty = useRef(true);
   const settled = useRef(new Set<string>()); // bubble ids whose ground height is known
+  const tries = useRef(new Map<string, number>()); // looks spent on each bubble since the last reset
+  const lastMove = useRef(0); // when the camera last moved (no measuring while it does)
+  const placedFor = useRef(""); // the camera the bubbles were last positioned for
+  const bubblesDirty = useRef(true); // a bubble was added, removed or got a new height
   const activeRef = useRef(props.active !== false); // false while pre-loading behind Explore
   useEffect(() => { activeRef.current = props.active !== false; }, [props.active]);
   function tileLayer() {
@@ -477,10 +481,13 @@ export default function Google3DView(props: Props) {
    * Measure the ground under bubbles. Every pick re-renders the whole 3D scene, so we only measure a spot
    * until its height settles, and again only after sharper tiles have streamed in. Idle = zero picks.
    */
+  /* eslint-disable react-hooks/purity -- these two run from a timer and after frames, never during render */
   function measureBubbles() {
     if (document.hidden || !activeRef.current) return;
+    if (performance.now() - lastMove.current < 600) return; // each pick re-renders the scene: never while the camera is moving
     if (tileGen.current !== measuredGen.current && performance.now() - lastReset.current > 3000) {
       settled.current.clear(); // new detail loaded: heights may have changed
+      tries.current.clear();
       measuredGen.current = tileGen.current;
       lastReset.current = performance.now();
       groundDirty.current = true;
@@ -494,15 +501,29 @@ export default function Google3DView(props: Props) {
       const z = surfaceZ(b.c.lng, b.c.lat, prev ?? groundZ.current ?? GROUND_Z);
       picks++;
       if (z == null) continue; // off screen: try again when it's in view
+      const n = (tries.current.get(b.c.id) ?? 0) + 1;
+      tries.current.set(b.c.id, n);
       zAt.current.set(b.c.id, z);
-      if (prev != null && Math.abs(prev - z) < 0.5) settled.current.add(b.c.id);
+      if (prev == null || Math.abs(prev - z) >= 0.5) bubblesDirty.current = true;
+      // done when two looks agree. A spot on a roof edge can flip forever, so three looks is the limit:
+      // without it this timer kept re-rendering the scene 8-12 times a second while nothing moved.
+      if ((prev != null && Math.abs(prev - z) < 0.5) || n >= 3) settled.current.add(b.c.id);
     }
+    if (bubblesDirty.current) positionBubbles(); // heights changed: move the bubbles now (DOM only, no redraw)
   }
 
-  /** Keep the HTML bubbles pinned to their spots on the 3D scene (runs after every frame). */
+  /**
+   * Keep the HTML bubbles pinned to their spots on the 3D scene. Called after every frame, but it only
+   * touches the page when the camera actually moved or a bubble changed.
+   */
   function positionBubbles() {
     const vp = viewport();
     if (!vp) return;
+    const cam = `${vp.viewProjectionMatrix.join()}|${vp.width}x${vp.height}|${groundZ.current}`; // changes exactly when the view does
+    if (cam !== placedFor.current) lastMove.current = performance.now();
+    else if (!bubblesDirty.current) return; // nothing moved
+    placedFor.current = cam;
+    bubblesDirty.current = false;
     const shown = [];
     for (const b of bubbles.current.values()) {
       const z = zAt.current.get(b.c.id) ?? groundZ.current ?? GROUND_Z;
@@ -514,6 +535,7 @@ export default function Google3DView(props: Props) {
     }
     declutter(shown); // no overlaps: the more important bubble wins
   }
+  /* eslint-enable react-hooks/purity */
 
   function markReady() {
     if (ready.current) return;
@@ -615,13 +637,15 @@ export default function Google3DView(props: Props) {
       if (c.intensity != null) b.el.style.setProperty("--intensity", String(c.intensity));
     }
     for (const [id, b] of bubbles.current) if (!keep.has(id)) { b.el.remove(); bubbles.current.delete(id); }
+    bubblesDirty.current = true;
     positionBubbles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.callouts, walkP?.phase]);
 
-  // live game clocks
+  // live game clocks: once a second, and not at all while the tab is hidden
   useEffect(() => {
     const t = setInterval(() => {
+      if (document.hidden) return;
       const now = new Date();
       for (const b of bubbles.current.values()) {
         if (!b.c.game) continue;
