@@ -729,6 +729,30 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"], .map-app[data-night="true"] .mapboxgl-ctrl-group .mapboxgl-ctrl-play[aria-pressed="true"] { background: var(--cardinal) !important; color: #fff; }
 /* a busy marker on a building that also has an event pin sits just above the pin instead of on it */
 .bz-up { position: relative; top: -38px; }
+/* Events panel: type and school as compact pill menus next to the quick toggles */
+.pill-select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 26px 0 10px; border-radius: 999px; font-size: 12px; font-weight: 500; color: #1d1d1f; cursor: pointer;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1); }
+.pill-select-on { background-color: var(--foreground); color: #fff; box-shadow: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+/* sign-in: a quiet frosted card over the live map */
+.signin-wrap { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 20px;
+  background: rgba(10, 10, 14, 0.35); -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%); }
+.signin-card { width: 100%; max-width: 360px; margin: auto; padding: 32px 28px 24px; border-radius: 28px; text-align: center;
+  background: rgba(255, 255, 255, 0.86); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.6) inset, 0 24px 60px rgba(0, 0, 0, 0.28); animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.signin-logo { display: block; margin: 0 auto 14px; width: 56px; height: 56px; border-radius: 14px; box-shadow: 0 6px 18px rgba(153, 0, 0, 0.3); }
+.signin-title { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+.signin-sub { margin-top: 4px; font-size: 14px; color: #6e6e73; }
+.signin-body { margin-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+.signin-body .signin-sub { margin: -18px 0 10px; }
+.signin-google { display: flex; align-items: center; justify-content: center; gap: 10px; height: 48px; border-radius: 14px; background: #1d1d1f; color: #fff; font-size: 15px; font-weight: 600; transition: transform 120ms ease, background-color 150ms ease; }
+.signin-google:hover { background: #000; }
+.signin-google:active { transform: scale(0.98); }
+.signin-google svg { background: #fff; border-radius: 50%; padding: 3px; box-sizing: content-box; }
+.signin-demo { height: 44px; border-radius: 14px; font-size: 15px; font-weight: 600; color: #1d1d1f; background: rgba(0, 0, 0, 0.05); transition: background-color 150ms ease; }
+.signin-demo:hover { background: rgba(0, 0, 0, 0.09); }
+.signin-demo:disabled { opacity: 0.6; }
 
 /* an event at a busy building: the event ticket shows, with the building's busyness as a small tag on its corner */
 .evt-crowd, .evb-crowd { --lv: #6e6e73; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font: 600 9.5px var(--font-apple); color: #3a3a3c; }

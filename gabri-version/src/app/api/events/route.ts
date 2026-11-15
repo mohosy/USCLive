@@ -35,8 +35,10 @@ async function POST_(req: Request) {
   if (!parsed.ok) return parsed.res;
   const input = parsed.data;
   const me = getMe();
-  if (me.accountType !== "creator")
-    return Response.json({ error: "Only Student Creator accounts can post events. You can switch your account type in Settings." }, { status: 403 });
+  // any student can make an event (pickup games, study sessions, parties) for their school, an open invite
+  // or invite-only; campus-wide "Everyone" posts and posting as an org are for creator accounts (clubs, departments)
+  if (me.accountType !== "creator" && (input.visibility === "public" || input.hostAs === "org"))
+    return Response.json({ error: "Campus-wide events come from clubs and departments. Share it with your school, as an open invite, or invite people." }, { status: 403 });
   const start = toIso(input.start);
   const end = toIso(input.end);
   if (!start || !end || +new Date(end) <= +new Date(start)) return Response.json({ error: "Invalid start/end time" }, { status: 400 });

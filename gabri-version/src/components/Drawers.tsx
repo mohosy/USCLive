@@ -177,9 +177,8 @@ export function EventDetail({ ev, state, loc, onClose, onRsvp, onUpdated, onInvi
       )}
       {picking && <SendSheet key={ev.id} ev={ev} friends={state.me.friends} onSend={(ids) => onInvite(ev.id, ids)} onFindFriends={onFindFriends} onClose={() => setPicking(false)} />}
 
-      <p className="mt-6 text-xs text-muted">
-        {SRC_LABEL[ev.source] ? `${SRC_LABEL[ev.source]}. ` : ""}Passed safety review.
-      </p>
+      {/* where it came from (flyer, usc.edu, email...), only when that's useful to know */}
+      {SRC_LABEL[ev.source] && <p className="mt-6 text-xs text-muted">{SRC_LABEL[ev.source]}.</p>}
     </div>
   );
 }
