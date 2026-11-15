@@ -175,6 +175,7 @@ export async function locate(loc: string): Promise<{ lat: number; lng: number; l
   const q = encodeURIComponent(toQuery(loc));
   try {
     const res = await fetch(`https://api.mapbox.com/search/searchbox/v1/forward?q=${q}&proximity=-118.2851,34.0208&bbox=${BBOX}&limit=1&access_token=${token}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null; // rate limit / outage: try again next sync instead of caching "not found"
     const d = (await res.json()) as { features?: { geometry: { coordinates: [number, number] } }[] };
     const f = d.features?.[0];
     const hit = f ? { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] } : null;

@@ -1,17 +1,20 @@
 "use client";
 
-import { Lock } from "lucide-react";
 import { useState } from "react";
 import { SCHOOLS } from "@/lib/campus";
 import { api } from "@/lib/client-types";
-import { INTERESTS, type DirectoryEntry } from "@/lib/directory";
-import { ORGS } from "@/lib/seed";
+import type { DirectoryEntry } from "@/lib/directory";
+import type { SchoolId } from "@/lib/types";
+import { ORGS } from "@/lib/orgs";
 import { Button, cx, inputCls } from "./ui";
 
 export type AccountType = "student" | "creator";
 export interface SavedProfile { name?: string; pronouns?: string; bio?: string; photo?: string | null }
+export interface Signup { firstName: string; lastName: string; school: SchoolId }
 export interface Session {
   email: string;
+  /** a new (non-directory) account: what the student entered when creating it */
+  signup?: Signup;
   interests: string[];
   accountType?: AccountType;
   creatorOrgId?: string | null;
@@ -76,85 +79,79 @@ export function AccountTypePicker({ type, orgId, onType, onOrg }: { type: Accoun
   );
 }
 
-/** A field the student cannot edit: it comes from the USC directory. */
-function Locked({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-xs font-medium text-muted">
-        <span>{label}</span>
-        <span className="inline-flex items-center gap-1 text-[11px] text-cardinal"><Lock size={11} /> Verified by USC</span>
-      </div>
-      <div className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground" aria-readonly="true">{value}</div>
-    </div>
-  );
-}
-
-/** Sign-in gate: usc.edu email only. School and major come from the (mock) USC directory; interests and account type are yours to pick. */
+/**
+ * Sign-in gate: usc.edu email only. Demo students (mock USC directory) sign straight in.
+ * Anyone else creates an account with their first and last name and school, and nothing else is filled in for them.
+ */
 export default function SignIn({ onDone }: { onDone: () => void }) {
+  const [step, setStep] = useState<"email" | "create">("email");
   const [email, setEmail] = useState("");
-  const [profile, setProfile] = useState<DirectoryEntry | null>(null);
-  const [interests, setInterests] = useState<string[]>([]);
-  const [accountType, setAccountType] = useState<AccountType>("student");
-  const [orgId, setOrgId] = useState("");
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  const [school, setSchool] = useState<SchoolId | "">("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function lookup(address: string) {
-    setBusy(true); setErr(null);
-    try { setProfile((await api<{ profile: DirectoryEntry }>("/api/session", { json: { action: "lookup", email: address } })).profile); }
-    catch (e) { setErr((e as Error).message); }
-    setBusy(false);
-  }
-  async function finish() {
-    if (!profile) return;
-    setBusy(true); setErr(null);
-    try { await signIn({ email: profile.email, interests, accountType, creatorOrgId: accountType === "creator" ? orgId || null : null }); onDone(); }
+  async function go(s: Session) {
+    try { await signIn(s); onDone(); }
     catch (e) { setErr((e as Error).message); setBusy(false); }
   }
-  const school = SCHOOLS.find((s) => s.id === profile?.school)?.name ?? "";
+  async function next(address: string) {
+    setBusy(true); setErr(null);
+    try {
+      const r = await api<{ profile: DirectoryEntry | null; isNew: boolean }>("/api/session", { json: { action: "lookup", email: address } });
+      if (r.profile) return go({ email: r.profile.email, interests: [] }); // demo student: straight in
+      setStep("create");
+      setBusy(false);
+    } catch (e) { setErr((e as Error).message); setBusy(false); }
+  }
+  function create() {
+    if (!first.trim() || !last.trim() || !school) return;
+    setBusy(true); setErr(null);
+    void go({ email: email.trim().toLowerCase(), interests: [], accountType: "student", signup: { firstName: first.trim(), lastName: last.trim(), school } });
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-white/70 p-5 backdrop-blur-md">
       <div className="fade-in my-auto w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-xl">
         <div className="text-[22px] font-semibold tracking-tight">USC<span className="text-cardinal">Live</span></div>
-        {!profile ? (
-          <form className="mt-1" onSubmit={(e) => { e.preventDefault(); lookup(email); }}>
+        {step === "email" ? (
+          <form className="mt-1" onSubmit={(e) => { e.preventDefault(); next(email); }}>
             <p className="text-sm text-muted">Sign in with your USC email to see what is happening on campus.</p>
             <label className="mt-4 block">
               <div className="mb-1 text-xs font-medium text-muted">USC email</div>
-              <input className={inputCls} type="email" inputMode="email" autoComplete="off" placeholder="ttrojan@usc.edu" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+              <input className={inputCls} type="email" inputMode="email" autoComplete="email" placeholder="ttrojan@usc.edu" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </label>
             {err && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{err}</p>}
             <Button type="submit" className="mt-4 w-full" disabled={busy || !email.trim()}>Continue</Button>
-            <Button variant="secondary" className="mt-2 w-full" disabled={busy} onClick={() => { setEmail("ttrojan@usc.edu"); lookup("ttrojan@usc.edu"); }}>Use the demo student</Button>
+            <Button variant="secondary" className="mt-2 w-full" disabled={busy} onClick={() => { setEmail("ttrojan@usc.edu"); next("ttrojan@usc.edu"); }}>Use the demo student</Button>
           </form>
         ) : (
-          <div className="mt-1 space-y-3">
-            <p className="text-sm text-muted">Welcome, {profile.name}. Your school and major come from the USC directory.</p>
-            <Locked label="School" value={school} />
-            <Locked label="Major" value={`${profile.major} · ${profile.year}`} />
-            <div>
-              <div className="mb-1.5 text-xs font-medium text-muted">Account type</div>
-              <AccountTypePicker type={accountType} orgId={orgId} onType={setAccountType} onOrg={setOrgId} />
+          <form className="mt-1 space-y-3" onSubmit={(e) => { e.preventDefault(); create(); }}>
+            <p className="text-sm text-muted">Create your account for <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <div className="mb-1 text-xs font-medium text-muted">First name</div>
+                <input className={inputCls} autoComplete="given-name" value={first} onChange={(e) => setFirst(e.target.value)} maxLength={40} autoFocus />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs font-medium text-muted">Last name</div>
+                <input className={inputCls} autoComplete="family-name" value={last} onChange={(e) => setLast(e.target.value)} maxLength={40} />
+              </label>
             </div>
-            <div>
-              <div className="mb-1.5 text-xs font-medium text-muted">Interests</div>
-              <div className="flex flex-wrap gap-1.5">
-                {INTERESTS.map((i) => {
-                  const on = interests.includes(i);
-                  return (
-                    <button key={i} type="button" aria-pressed={on} onClick={() => setInterests((x) => (on ? x.filter((v) => v !== i) : [...x, i]))}
-                      className={cx("rounded-full border px-3 py-1.5 text-xs font-medium transition-colors", on ? "border-cardinal bg-cardinal text-white" : "border-line bg-white text-foreground hover:bg-surface")}>{i}</button>
-                  );
-                })}
-              </div>
-            </div>
+            <label className="block">
+              <div className="mb-1 text-xs font-medium text-muted">School</div>
+              <select className={inputCls} value={school} onChange={(e) => setSchool(e.target.value as SchoolId)}>
+                <option value="" disabled>Select your school</option>
+                {SCHOOLS.filter((x) => x.id !== "all").map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
             {err && <p role="alert" className="text-sm font-medium text-red-700">{err}</p>}
-            <Button className="w-full" disabled={busy} onClick={finish}>Open the map</Button>
-            <button type="button" className="w-full text-center text-xs text-muted hover:text-foreground" onClick={() => { setProfile(null); setErr(null); }}>Use a different email</button>
-          </div>
+            <Button type="submit" className="w-full" disabled={busy || !first.trim() || !last.trim() || !school}>Create account</Button>
+            <button type="button" className="w-full text-center text-xs text-muted hover:text-foreground" onClick={() => { setStep("email"); setErr(null); }}>Use a different email</button>
+          </form>
         )}
-        <p className="mt-4 text-center text-[11px] text-muted">Demo sign-in with a mock USC directory. Not an official USC service.</p>
+        <p className="mt-4 text-center text-[11px] text-muted">Demo sign-in, not an official USC service. You can add interests and switch to a creator account in Settings.</p>
       </div>
     </div>
   );

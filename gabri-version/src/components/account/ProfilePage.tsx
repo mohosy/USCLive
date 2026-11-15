@@ -72,11 +72,9 @@ function Profile({ data, tab, setTab }: { data: NonNullable<ReturnType<typeof us
           <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground/80">
             <GraduationCap size={16} className="text-muted" />
             <span>{school}</span>
-            <span className="text-muted">·</span>
-            <span>{p.major}</span>
-            <span className="text-muted">·</span>
-            <span>{p.year}</span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-cardinal"><BadgeCheck size={13} /> Verified by USC</span>
+            {p.major && <><span className="text-muted">·</span><span>{p.major}</span></>}
+            {p.year && <><span className="text-muted">·</span><span>{p.year}</span></>}
+            {p.verified && <span className="inline-flex items-center gap-1 text-[11px] font-medium text-cardinal"><BadgeCheck size={13} /> Verified by USC</span>}
           </div>
           {p.bio ? (
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed">{p.bio}</p>

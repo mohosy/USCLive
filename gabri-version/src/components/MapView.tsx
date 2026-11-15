@@ -178,8 +178,15 @@ export default function MapView(props: Props) {
     declutter([...bubbles.current.values()].map((b) => { const p = m.project(b.m.getLngLat()); return { el: b.el, kind: b.c.kind, x: p.x, y: p.y }; }));
   }
 
+  /** Upload new data to the map only when it actually changed (a 20s refresh usually changes nothing). */
+  const sent = useRef<Record<string, string>>({});
   function setSource(id: string, fc: FC) {
-    (map.current?.getSource(id) as mapboxgl.GeoJSONSource | undefined)?.setData(fc);
+    const src = map.current?.getSource(id) as mapboxgl.GeoJSONSource | undefined;
+    if (!src) return;
+    const json = JSON.stringify(fc);
+    if (sent.current[id] === json) return;
+    sent.current[id] = json;
+    src.setData(fc);
   }
 
   function syncLayers() {
@@ -199,6 +206,7 @@ export default function MapView(props: Props) {
   /** (Re)create our sources and layers. Runs on first load and after every style switch. */
   function install() {
     const m = map.current!;
+    sent.current = {};
     const sat = styleRef.current === "satellite";
     m.addSource("events", { type: "geojson", data: data.current.events });
     m.addSource("hot-points", { type: "geojson", data: data.current.points });

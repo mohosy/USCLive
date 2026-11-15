@@ -32,7 +32,6 @@ export interface AppState {
   events: EventView[];
   hotspots: Hotspot[];
   alerts: SafetyAlert[];
-  buildings: Building[];
   orgs: Org[];
   unread: number;
 }

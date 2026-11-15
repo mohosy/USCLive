@@ -1,16 +1,17 @@
 "use client";
 
-import { Bell, Inbox, LayoutDashboard, LogOut, Menu, Navigation, Plus, Search, Settings, UserRound, X } from "lucide-react";
+import { Bell, Inbox, LayoutDashboard, LogOut, Menu, Navigation, Plus, Settings, UserRound, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BUILDING_BY_ID, BUILDINGS, distanceMeters } from "@/lib/campus";
+import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type EventView, type Filters, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
 import { parseNavQuery } from "@/lib/nav";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
 import AlertDetail from "./AlertDetail";
+import AskBar, { type AskRes } from "./AskBar";
 import WebcamViewer from "./WebcamViewer";
 import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
@@ -30,7 +31,14 @@ const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => 
 type Tab = "menu" | "events" | "study";
 const START_LOC: Loc = { lat: BUILDING_BY_ID.gin.lat, lng: BUILDING_BY_ID.gin.lng, label: "Ginsburg Hall", buildingId: "gin" };
 
-interface AskRes { answer: string; eventIds: string[]; buildingIds: string[]; focusBuildingId: string; ai: boolean }
+/** Keep the previous object for every part of the state that didn't change, so nothing downstream re-runs. */
+function mergeState(prev: AppState | null, next: AppState): AppState {
+  if (!prev) return next;
+  const out = { ...next } as Record<string, unknown>;
+  const old = prev as unknown as Record<string, unknown>;
+  for (const k of Object.keys(out)) if (k !== "now" && JSON.stringify(old[k]) === JSON.stringify(out[k])) out[k] = old[k];
+  return out as unknown as AppState;
+}
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null);
@@ -65,7 +73,7 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [toasts, setToasts] = useState<Notification[]>([]);
-  const [ask, setAsk] = useState("");
+  const [askKey, setAskKey] = useState(0); // bump to clear the search box
   const [askRes, setAskRes] = useState<AskRes | null>(null);
   const [askBusy, setAskBusy] = useState(false);
   const [tick, setTick] = useState(0);
@@ -88,15 +96,19 @@ export default function App() {
   };
 
   const refresh = useCallback(async () => {
-    try { setState(await api<AppState>("/api/state")); setTick((t) => t + 1); } catch { /* keep last state */ }
+    try { const next = await api<AppState>("/api/state"); setState((prev) => mergeState(prev, next)); setTick((t) => t + 1); } catch { /* keep last state */ }
   }, []);
 
+  const lastNotif = useRef<string | null>(null); // newest notification we have; the server only sends newer ones
   const pollNotifs = useCallback(async () => {
     try {
-      const r = await api<{ notifications: Notification[]; unread: number }>("/api/notifications");
-      setNotifs(r.notifications);
-      if (!seenNotifs.current) seenNotifs.current = new Set(r.notifications.map((n) => n.id));
+      const since = lastNotif.current;
+      const r = await api<{ notifications: Notification[]; unread: number }>(since ? `/api/notifications?since=${encodeURIComponent(since)}` : "/api/notifications");
+      if (!r.notifications.length) return; // nothing new: no re-render
+      lastNotif.current = r.notifications.reduce((m, n) => (n.createdAt > m ? n.createdAt : m), since ?? "");
+      if (!seenNotifs.current) { seenNotifs.current = new Set(r.notifications.map((n) => n.id)); setNotifs(r.notifications); }
       else {
+        setNotifs((prev) => [...r.notifications.filter((n) => !prev.some((p) => p.id === n.id)), ...prev].slice(0, 60));
         const fresh = r.notifications.filter((n) => !seenNotifs.current!.has(n.id));
         fresh.forEach((n) => seenNotifs.current!.add(n.id));
         if (fresh.length) {
@@ -111,7 +123,8 @@ export default function App() {
   // restore a saved sign-in (the demo store forgets it when the server restarts, so it is re-applied)
   useEffect(() => {
     const saved = loadSession();
-    const t = setTimeout(() => { if (!saved) setSignedIn(false); else signIn(saved).then(() => { setSignedIn(true); refresh(); }, () => setSignedIn(false)); }, 0);
+    // one data load at startup: after the saved sign-in is re-applied, or straight away for the sign-in screen
+    const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(() => { setSignedIn(true); refresh(); }, () => { setSignedIn(false); refresh(); }); }, 0);
     return () => clearTimeout(t);
   }, [refresh]);
   useEffect(() => {
@@ -121,12 +134,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const first = setTimeout(() => { refresh(); pollNotifs(); }, 0);
-    // no polling while the tab is in the background
+    const first = setTimeout(pollNotifs, 0);
+    // no polling while the tab is in the background; catch up the moment it's back
     const a = setInterval(() => { if (!document.hidden) refresh(); }, 20_000);
     const b = setInterval(() => { if (!document.hidden) pollNotifs(); }, 8_000);
-    return () => { clearTimeout(first); clearInterval(a); clearInterval(b); };
+    const back = () => { if (!document.hidden) { refresh(); pollNotifs(); } };
+    document.addEventListener("visibilitychange", back);
+    return () => { clearTimeout(first); clearInterval(a); clearInterval(b); document.removeEventListener("visibilitychange", back); };
   }, [refresh, pollNotifs]);
+  // start downloading the map code right away instead of after the first data load
+  useEffect(() => { void import("./MapView"); }, []);
 
   const now = useMemo(() => new Date(state?.now ?? 0), [state?.now]);
   const visible = useMemo(() => (state ? applyFilters(state.events, filters, now) : []), [state, filters, now]);
@@ -228,6 +245,7 @@ export default function App() {
       center(here);
     }, () => { setGps("off"); center(loc); }, { enableHighAccuracy: true, timeout: 8000 });
   }
+  const endWalk = useCallback(() => { setWalk(null); setAskKey((k) => k + 1); }, []);
   async function markAllRead() {
     await api("/api/notifications", { json: { all: true } });
     setNotifs((n) => n.map((x) => ({ ...x, read: true })));
@@ -246,25 +264,7 @@ export default function App() {
           USC<span className="text-cardinal">Live</span>
         </Link>
 
-        <form className="relative max-w-xl flex-1" onSubmit={(e) => { e.preventDefault(); runAsk(ask); }}>
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Ask about campus, e.g. how do I get to THH, free food near me" className="h-9 w-full rounded-full bg-surface pl-9 pr-16 text-[14px] outline-none transition-colors focus:bg-white focus:shadow-[0_0_0_3px_rgba(153,0,0,0.12)]" />
-          {askRes ? (
-            <button type="button" onClick={() => { setAskRes(null); setAsk(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted hover:text-foreground" aria-label="Clear"><X size={14} /></button>
-          ) : askBusy ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted">Searching</span> : null}
-          {askRes && (
-            <div className="menu absolute left-0 right-0 top-12 z-40 p-4" style={{ transformOrigin: "top center" }}>
-              <p className="text-sm leading-relaxed">{askRes.answer}</p>
-              {(askRes.eventIds.length > 0 || askRes.buildingIds.length > 0) && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {askRes.eventIds.length > 0
-                    ? askRes.eventIds.map((id) => { const e = state?.events.find((x) => x.id === id); return e ? <button type="button" key={id} onClick={() => openEvent(id)} className="rounded-md border border-line px-2 py-1 text-xs hover:bg-surface">{e.title}</button> : null; })
-                    : askRes.buildingIds.map((id) => <button type="button" key={id} onClick={() => openBuilding(id)} className="rounded-md border border-line px-2 py-1 text-xs hover:bg-surface">{BUILDING_BY_ID[id]?.name}</button>)}
-                </div>
-              )}
-            </div>
-          )}
-        </form>
+        <AskBar key={askKey} res={askRes} busy={askBusy} events={state?.events ?? []} onAsk={runAsk} onClear={() => setAskRes(null)} onOpenEvent={openEvent} onOpenBuilding={openBuilding} />
 
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" className="max-md:hidden" onClick={() => setInboxOpen(true)}><Inbox size={16} /> Inbox</Button>
@@ -300,14 +300,14 @@ export default function App() {
           </div>
           {state && (
             <div className="relative ml-2">
-              <button onClick={() => setAccountOpen((o) => !o)} title={`${state.me.name}, ${state.me.major}`} aria-label="Account" aria-expanded={accountOpen} className="rounded-full transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={30} /></button>
+              <button onClick={() => setAccountOpen((o) => !o)} title={state.me.name} aria-label="Account" aria-expanded={accountOpen} className="rounded-full transition-transform hover:scale-105"><Avatar initials={state.me.avatar} photo={state.me.photo} size={30} /></button>
               {accountOpen && (
                 <div className="menu absolute right-0 top-11 z-40 w-72 p-1.5 text-sm">
                   <div className="flex items-center gap-3 px-2.5 py-2">
                     <Avatar initials={state.me.avatar} photo={state.me.photo} size={44} />
                     <div className="min-w-0">
                       <div className="truncate text-[14px] font-semibold">{state.me.name}{state.me.pronouns && <span className="ml-1.5 text-xs font-normal text-muted">({state.me.pronouns})</span>}</div>
-                      <div className="truncate text-[12px] text-muted">{state.me.major}</div>
+                      <div className="truncate text-[12px] text-muted">{state.me.major || SCHOOLS.find((x) => x.id === state.me.school)?.name}</div>
                       <AccountBadge type={state.me.accountType} className="mt-1" />
                     </div>
                   </div>
@@ -350,8 +350,8 @@ export default function App() {
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (
               <>
-                <NowPanel compact state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
-                <div className="mt-4"><MenuPanel state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
+                <NowPanel compact active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
+                <div className="mt-4"><MenuPanel active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
               </>
             ) : tab === "events" ? (
               <EventsPanel events={visible} filters={filters} setFilters={setFilters} loc={loc} onOpen={openEvent} now={now} />
@@ -376,7 +376,7 @@ export default function App() {
             <MapView
               events={shownEvents}
               hotspots={state.hotspots}
-              buildings={state.buildings}
+              buildings={BUILDINGS}
               me={loc}
               layers={mapLayers}
               leftInset={menuOpen && typeof window !== "undefined" && window.innerWidth > 900 ? 384 : 0}
@@ -394,7 +394,7 @@ export default function App() {
               intro={intro}
               onIntroDone={() => setIntro(false)}
               walk={view === "map" && walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
-              onWalkEnd={() => { setWalk(null); setAsk(""); }}
+              onWalkEnd={endWalk}
             />
           )}
           {state && (view === "3d" || warmSat) && (
@@ -402,7 +402,7 @@ export default function App() {
               <Google3DView
                 active={view === "3d"}
                 events={shownEvents}
-                buildings={state.buildings}
+                buildings={BUILDINGS}
                 me={loc}
                 selectedEventId={selEvent}
                 highlightIds={highlight}
@@ -413,7 +413,7 @@ export default function App() {
                 onReady={() => { setSatLoaded(true); if (view === "3d") setTimeout(() => setFlatGone(true), 800); }}
                 onCamera={(c) => { camera.current = c; }}
                 walk={walk && BUILDING_BY_ID[walk.toId] ? { to: BUILDING_BY_ID[walk.toId], key: walk.key } : null}
-                onWalkEnd={() => { setWalk(null); setAsk(""); }}
+                onWalkEnd={endWalk}
                 callouts={walk ? noCallouts : callouts}
                 alerts={shownAlerts}
                 hotspots={state.hotspots}

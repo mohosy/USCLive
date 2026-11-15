@@ -31,11 +31,13 @@ function SportIcon({ sport }: { sport: string }) {
 }
 
 /** The menu's overview: what is live, how busy it is, what is next for you. Every row flies the map there. */
-export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onAddEvent, onStudy }: {
+export default function MenuPanel({ state, loc, onOpenEvent, onOpenBuilding, onAddEvent, onStudy, active = true }: {
   state: AppState; loc: Loc; onOpenEvent: (id: string) => void; onOpenBuilding: (id: string) => void; onAddEvent: () => void; onStudy: () => void;
+  /** the clock only ticks while the menu is open */
+  active?: boolean;
 }) {
   const [now, setNow] = useState(() => new Date(state.now));
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []); // game clocks tick
+  useEffect(() => { if (!active) return; const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, [active]); // game clocks tick
 
   const games = state.events.filter((e) => e.game && isLive(e, now));
   const busy = state.hotspots

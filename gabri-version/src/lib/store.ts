@@ -61,7 +61,18 @@ export function resetDb() {
 }
 
 /** DPS alerts still on the map: not resolved and not expired. */
-export const activeAlerts = (now = new Date()) => db().alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now);
+/**
+ * Alerts on the map now. Also forgets alerts that expired over a day ago, so the list stays small.
+ * (Cleared alerts are kept until they expire, so the next DPS sync can't bring them back.)
+ */
+export function activeAlerts(now = new Date()) {
+  const d = db();
+  const dayAgo = +now - 24 * 3600_000;
+  if (d.alerts.some((a) => +new Date(a.expiresAt) < dayAgo)) d.alerts = d.alerts.filter((a) => +new Date(a.expiresAt) >= dayAgo);
+  return d.alerts.filter((a) => !a.resolved && +new Date(a.expiresAt) > +now);
+}
+
+const MAX_NOTIFICATIONS = 200;
 
 /** Pull the DPS Daily Crime Log (at most every 30 min) and merge its incidents into the alerts. */
 export async function syncDps(force = false) {
@@ -72,7 +83,7 @@ export async function syncDps(force = false) {
     const { syncDpsLog } = await import("./dps");
     const r = await syncDpsLog();
     const have = new Set(d.alerts.map((a) => a.id));
-    for (const a of r.alerts) if (!have.has(a.id)) d.alerts.push(a);
+    for (const a of r.alerts) if (!have.has(a.id) && +new Date(a.expiresAt) > Date.now()) d.alerts.push(a); // already-expired entries never come back
     Object.assign(d.dps, { lastSync: Date.now(), lastUrl: r.url, error: null });
     console.log(`[dps] synced ${r.alerts.length} alerts from ${r.incidents} log entries (${r.url})`);
   } catch (e) {
@@ -133,6 +144,8 @@ export type PublicEvent = ReturnType<typeof publicEvent>;
 
 export function addNotification(n: Omit<Notification, "id" | "createdAt" | "read">) {
   const full: Notification = { ...n, id: newId("n"), createdAt: new Date().toISOString(), read: false };
-  db().notifications.unshift(full);
+  const d = db();
+  d.notifications.unshift(full);
+  if (d.notifications.length > MAX_NOTIFICATIONS) d.notifications.length = MAX_NOTIFICATIONS;
   return full;
 }

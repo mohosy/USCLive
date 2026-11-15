@@ -6,8 +6,11 @@ import { db } from "@/lib/store";
 
 export async function GET(req: Request) {
   if (new URL(req.url).searchParams.get("live") !== "0") tickLive();
+  // `since`: only what's newer than the client's latest, so the 8s poll is usually empty
+  const since = new URL(req.url).searchParams.get("since");
   const n = db().notifications;
-  return Response.json({ notifications: n.slice(0, 60), unread: n.filter((x) => !x.read).length });
+  const list = since ? n.filter((x) => x.createdAt > since) : n;
+  return Response.json({ notifications: list.slice(0, 60), unread: n.filter((x) => !x.read).length });
 }
 
 export async function POST(req: Request) {

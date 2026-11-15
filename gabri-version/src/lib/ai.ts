@@ -36,8 +36,8 @@ export const aiEnabled = () => provider() !== null;
 
 let _anthropic: Anthropic | null = null;
 let _openai: OpenAI | null = null;
-const anthropic = () => (_anthropic ??= new Anthropic());
-const openai = () => (_openai ??= new OpenAI());
+const anthropic = () => (_anthropic ??= new Anthropic({ timeout: 20_000, maxRetries: 1 })); // never hang a request for minutes
+const openai = () => (_openai ??= new OpenAI({ timeout: 20_000, maxRetries: 1 }));
 
 const BUILDING_IDS = BUILDINGS.map((b) => b.id) as [string, ...string[]];
 const CATEGORIES = ["sports_play", "sports_watch", "career", "academic", "usc", "student", "community"] as const;

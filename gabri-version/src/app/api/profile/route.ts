@@ -16,6 +16,7 @@ function profileOf(me: User) {
     school: me.school,
     major: me.major,
     year: me.year,
+    verified: !!me.verified,
     interests: me.interests,
     accountType: me.accountType ?? "student",
     creatorOrgId: me.creatorOrgId ?? null,
