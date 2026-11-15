@@ -8,6 +8,11 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 export function calloutHTML(c: Callout, now: Date) {
   // webcams: the 3D film camera is drawn by the map; this is just its name tag at the camera's feet
   if (c.kind === "webcam") {
+    // a small live tile of what the camera sees; hover grows it, click opens the stream
+    if (c.image) {
+      const src = `${c.image}${c.image.includes("?") ? "&" : "?"}t=${Math.floor(+now / 60_000)}`;
+      return `<div class="camt"><div class="camt-tile"><img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="camt-live"><i></i>LIVE</span></div><div class="camt-name">${esc(c.title)}</div><div class="camt-hint">${esc(c.eyebrow)} · Click to watch</div></div>`;
+    }
     return `<div class="cam-tag"><i></i>Live<span>${esc(c.title)}</span></div>`;
   }
   // DPS alerts: the 3D beacon is drawn by the map; this is its small tag (what happened shows on hover)
@@ -51,8 +56,8 @@ function friendsLine(f: { name: string }[]) {
   if (f.length === 1) return `${esc(f[0].name)} is going`;
   return `${esc(f[0].name)} and ${f.length - 1} friend${f.length > 2 ? "s" : ""}`;
 }
-function faces(f: { initials: string }[], max: number) {
-  return f.slice(0, max).map((x) => `<i>${esc(x.initials)}</i>`).join("") + (f.length > max ? `<i class="more">+${f.length - max}</i>` : "");
+function faces(f: { initials: string; photo?: string }[], max: number) {
+  return f.slice(0, max).map((x) => (x.photo ? `<i class="ph" style="background-image:url('${esc(x.photo)}')"></i>` : `<i>${esc(x.initials)}</i>`)).join("") + (f.length > max ? `<i class="more">+${f.length - max}</i>` : "");
 }
 
 /** Events: a small photo ring on the map (friends' faces on its corner) that grows into a full card on hover. */

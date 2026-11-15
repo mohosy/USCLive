@@ -8,7 +8,7 @@ import { withState } from "@/lib/state";
 function personView(u: User, me: User) {
   const mutual = u.friends.filter((f) => f !== me.id && me.friends.includes(f));
   return {
-    id: u.id, name: u.name, avatar: u.avatar, username: u.username ?? "",
+    id: u.id, name: u.name, avatar: u.avatar, photo: u.photo?.startsWith("/") ? u.photo : undefined, username: u.username ?? "",
     school: u.school, major: u.major, year: u.year,
     isFriend: me.friends.includes(u.id),
     mutualCount: mutual.length,

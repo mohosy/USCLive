@@ -7,6 +7,7 @@ process.env.TZ = "America/Los_Angeles";
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { BUILDING_BY_ID } from "./campus";
+import { withFaces } from "./faces";
 import { ME, ORGS, seedAlerts, seedEvents, seedHistory, seedInbox, seedNotifications, seedUsers } from "./seed";
 import type { CampusEvent, InboxItem, Notification, SafetyAlert, User } from "./types";
 import type { GoogleSession } from "./google";
@@ -44,7 +45,7 @@ export function fresh(): DB {
   for (const e of events) if (/Thornton Jazz Night|Volleyball vs\. UCLA/.test(e.title) && !e.attendees.includes(ME)) e.attendees.push(ME);
   return {
     seededAt: +now,
-    users: seedUsers(now),
+    users: withFaces(seedUsers(now)),
     events,
     history: seedHistory(now),
     inbox: seedInbox(now),
@@ -74,6 +75,7 @@ export function db(): DB {
   d.reminded ??= [];
   d.lastReminder ??= 0;
   d.google ??= {};
+  withFaces(d.users); // demo students' photos (also for state saved before they existed)
   return d;
 }
 
@@ -206,7 +208,7 @@ export function publicEvent(e: CampusEvent, viewer: User) {
     attendeeCount: e.attendees.length,
     friendsGoing: friendsGoing.map((id) => {
       const u = getUser(id);
-      return { id, name: u?.name ?? id, avatar: u?.avatar ?? "?" };
+      return { id, name: u?.name ?? id, avatar: u?.avatar ?? "?", photo: u?.photo?.startsWith("/") ? u.photo : undefined };
     }),
     going: e.attendees.includes(viewer.id),
     invited: e.invitees.includes(viewer.id),

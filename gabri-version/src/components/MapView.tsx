@@ -28,6 +28,36 @@ function alertPoints(alerts: SafetyAlert[]): FC {
 import { LEVEL_COLOR } from "./ui";
 import type { WalkGuide, WalkProgress } from "./walk/WalkGuide";
 import { CROWD_MIN_ZOOM, CrowdLayer, type CrowdSpot } from "./walk/CrowdLayer";
+import { CampusCrowd, type CrowdSpot as WalkerSpot, type PathGraph } from "./crowd/CampusCrowd";
+
+// campus walkways (OpenStreetMap footways + crosswalks): the paths people walk to events
+let pathsPromise: Promise<PathGraph> | null = null;
+const loadPaths = () =>
+  (pathsPromise ??= fetch("/data/usc-paths.json")
+    .then((r) => { if (!r.ok) throw new Error(`paths ${r.status}`); return r.json() as Promise<PathGraph>; })
+    .catch((e) => { pathsPromise = null; throw e; }));
+
+/** How many walkers: driven by how many people are going to things right now (a little fewer late at night). */
+function walkerCount(events: EventView[], light: LightPreset) {
+  const now = Date.now();
+  const going = events.filter((e) => !e.game && +new Date(e.end) > now && +new Date(e.start) - now < 2 * 3600_000).reduce((a, e) => a + e.attendeeCount, 0);
+  const base = Math.max(30, Math.min(150, Math.round(going / 6)));
+  return Math.round(base * (light === "night" ? 0.7 : 1) * (PHONE ? 0.5 : 1));
+}
+
+/** Where the walkers go: events now or soon (more people going = more people walking there), plus a few hangouts. */
+function walkerSpots(events: EventView[], now: number): WalkerSpot[] {
+  const out: WalkerSpot[] = [];
+  for (const e of events) {
+    if (e.lat == null || e.lng == null || e.game) continue;
+    const start = +new Date(e.start), end = +new Date(e.end);
+    if (end < now || start - now > 2 * 3600_000) continue;
+    out.push({ id: e.id, lng: e.lng, lat: e.lat, kind: "event", weight: Math.max(3, Math.min(160, e.attendeeCount)) });
+  }
+  out.push({ lng: -118.285465, lat: 34.020536, kind: "photo", weight: 6 }); // Tommy Trojan
+  out.push({ lng: -118.28497, lat: 34.02003, kind: "sit", weight: 5 }); // McCarthy Quad
+  return out;
+}
 import WalkHUD from "./walk/WalkHUD";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
@@ -334,6 +364,8 @@ export default function MapView(props: Props) {
   const [rotateHint, setRotateHint] = useState(false);
   const needle = useRef<SVGSVGElement>(null); // the compass needle in the control column
   const crowd = useRef<CrowdLayer | null>(null);
+  const walkers = useRef<CampusCrowd | null>(null); // people walking the campus paths to events
+  const onArrive = useRef<(eventId: string) => void>(() => {}); // set below, once popArrival exists
 
   /** Zoomed into a busy area: let little Trojans hang out at the crowded spots on screen. */
   function updateCrowd() {
@@ -383,6 +415,7 @@ export default function MapView(props: Props) {
     m.setLayoutProperty("hot-heat", "visibility", vis(hotspots));
     m.setLayoutProperty("hot-hit", "visibility", vis(hotspots));
     m.setLayoutProperty("hot-columns", "visibility", vis(columns));
+    walkers.current?.setVisible(events);
     for (const [k, v] of Object.entries(placeConfig(styleRef.current, cb.current.layers.places))) {
       if (m.getConfigProperty("basemap", k) !== v) m.setConfigProperty("basemap", k, v);
     }
@@ -481,10 +514,10 @@ export default function MapView(props: Props) {
       },
       paint: { "icon-opacity": dimmed, "icon-emissive-strength": 1 },
     });
-    // live webcams: a 3D film camera standing on the spot (GPU model layer; click opens the stream)
+    // live webcams: a small live preview tile (HTML callout) replaces the big 3D film camera; the model layer stays, hidden
     m.addLayer({
       id: "cams-3d", type: "model", source: "cams", slot: "top",
-      layout: { "model-id": "film-cam" },
+      layout: { "model-id": "film-cam", visibility: "none" },
       paint: {
         // Snap Map style: oversized, about the same size on screen at every zoom (halves per zoom level)
         "model-scale": ["interpolate", ["exponential", 2], ["zoom"], 15, ["literal", [58, 58, 58]], 19, ["literal", [4.5, 4.5, 4.5]]],
@@ -534,6 +567,7 @@ export default function MapView(props: Props) {
     }
     if (!m.getLayer(crowd.current.id)) m.addLayer(crowd.current);
     updateCrowd();
+    if (!sat) walkers.current?.install(m, cb.current.light ?? "day");
     walkRef.current?.install(); // keep an active walk alive across Map/Satellite switches
   }
 
@@ -571,6 +605,7 @@ export default function MapView(props: Props) {
       touchPitch: true,
     });
     map.current = m;
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __uscMap?: mapboxgl.Map }).__uscMap = m; // dev-only debugging handle
     m.touchZoomRotate.enableRotation();
     // weather on the map comes from Open-Meteo (CC BY 4.0): credited here with the map's own credits
     m.addControl(new mapboxgl.AttributionControl({ compact: true, customAttribution: '<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a>' }), "bottom-right");
@@ -580,6 +615,19 @@ export default function MapView(props: Props) {
     m.on("rotate", turnNeedle);
     turnNeedle();
     m.on("style.load", install);
+    loadPaths().then(
+      (g) => {
+        if (map.current !== m) return;
+        const w = new CampusCrowd(g);
+        walkers.current = w;
+        w.setTarget(walkerCount(cb.current.events, cb.current.light ?? "day"));
+        w.setSpots(walkerSpots(cb.current.events, Date.now()));
+        w.setVisible(cb.current.layers.events);
+        w.onArrive = (id) => onArrive.current(id);
+        if (ready.current && styleRef.current !== "satellite") w.install(m, cb.current.light ?? "day");
+      },
+      () => { /* no walkway data: no walkers */ },
+    );
     loadCampus().then(
       (c) => {
         campus.current = c;
@@ -718,7 +766,46 @@ export default function MapView(props: Props) {
   useEffect(() => {
     const m = map.current;
     if (m && ready.current) applyLight(m, props.light ?? "day");
+    walkers.current?.setLight(props.light ?? "day");
+    walkers.current?.setTarget(walkerCount(cb.current.events, props.light ?? "day"));
   }, [props.light]);
+
+  // events change: walkers re-aim at what's on now
+  useEffect(() => {
+    walkers.current?.setSpots(walkerSpots(props.events, Date.now()));
+    walkers.current?.setTarget(walkerCount(props.events, cb.current.light ?? "day"));
+  }, [props.events]);
+
+  /** Someone just walked into an event: pop a +1 on its banner (at most every ~0.8 s per event). */
+  const lastPop = useRef(new Map<string, number>());
+  function popArrival(eventId: string) {
+    const b = bubbles.current.get(`ev:${eventId}`);
+    const t = performance.now();
+    if (!b || t - (lastPop.current.get(eventId) ?? 0) < 800) return;
+    lastPop.current.set(eventId, t);
+    const ring = b.el.querySelector(".evb-ring");
+    if (!ring) return;
+    const plus = document.createElement("span");
+    plus.className = "evb-plus";
+    plus.textContent = "+1";
+    ring.appendChild(plus);
+    ring.classList.remove("evb-bump"); void (ring as HTMLElement).offsetWidth; ring.classList.add("evb-bump");
+    setTimeout(() => plus.remove(), 1300);
+    // now and then, a friend's moment: their face pops off the banner ("Maya just got here")
+    const friends = b.c.ev?.friends ?? [];
+    if (friends.length && t - lastMoment.current > 7000 && Math.random() < 0.35) {
+      lastMoment.current = t;
+      const f = friends[Math.floor(Math.random() * friends.length)];
+      const card = document.createElement("div");
+      card.className = "evb-moment";
+      const face = f.photo ? `<i style="background-image:url('${f.photo}')"></i>` : `<i class="ini">${f.initials}</i>`;
+      card.innerHTML = `${face}<span><b>${f.name}</b> just got here</span>`;
+      b.el.appendChild(card);
+      setTimeout(() => card.remove(), 3400);
+    }
+  }
+  const lastMoment = useRef(0);
+  useEffect(() => { onArrive.current = popArrival; });
 
   // data -> sources (only touch the GPU when something actually changed)
   useEffect(() => {

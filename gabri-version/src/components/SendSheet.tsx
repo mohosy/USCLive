@@ -70,7 +70,7 @@ export default function SendSheet({ ev, friends, onSend, onFindFriends, onClose 
                 onClick={() => setSel((s) => (on ? s.filter((x) => x !== f.id) : [...s, f.id]))}
                 className="group flex flex-col items-center gap-1 rounded-xl py-1.5 hover:bg-surface disabled:hover:bg-transparent">
                 <span className={cx("relative rounded-full transition-shadow", on && "shadow-[0_0_0_2px_#fff,0_0_0_4px_var(--color-cardinal,#990000)]")}>
-                  <Avatar initials={f.avatar} size={40} />
+                  <Avatar initials={f.avatar} photo={f.photo} size={40} />
                   {(on || done) && (
                     <span className={cx("absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full text-white ring-2 ring-white", done ? "bg-[#34c759]" : "bg-cardinal")}>
                       <Check size={10} strokeWidth={3} />
