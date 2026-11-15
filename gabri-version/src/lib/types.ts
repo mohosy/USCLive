@@ -163,7 +163,21 @@ export interface User {
   bio?: string;
   /** small square JPEG/PNG/WebP data URL */
   photo?: string;
+  /** Settings: your Trojan's look, privacy, notifications, map (see lib/prefs.ts; unset = the defaults) */
+  prefs?: UserPrefs;
 }
+
+/** How your Trojan looks: on your profile and on the map. */
+export interface TrojanLook { plume: "cardinal" | "gold" | "white" | "black"; cape: "cardinal" | "gold"; jersey: number }
+/** Everything in Settings that is yours to change. Privacy is all off until you turn it on. */
+export interface UserPrefs {
+  trojan: TrojanLook;
+  privacy: { shareLocation: boolean; showGoing: boolean; schedule: "nobody" | "friends" | "all" };
+  notify: { registered: boolean; deadlines: boolean; food: boolean; safety: boolean };
+  map: { openIn: "explore" | "satellite" };
+}
+/** A friend request that has not been answered yet (accepted, declined and cancelled ones are removed). */
+export interface FriendRequest { id: string; from: string; to: string; createdAt: string }
 
 export interface InboxItem {
   id: string;
@@ -185,6 +199,8 @@ export interface Notification {
   buildingId?: string;
   alertId?: string;
   source?: InboxItem["source"] | "live";
+  /** a friend request waiting for your answer: who sent it (the notification shows Accept and Decline) */
+  fromUserId?: string;
   /** personal notifications (your calendar, your invites); unset = for everyone (campus-wide) */
   userId?: string;
   /** campus-wide notifications: who has read them (personal ones use `read`) */

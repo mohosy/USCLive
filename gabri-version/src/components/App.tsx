@@ -2,7 +2,7 @@
 
 import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, SlidersHorizontal, UserPlus, UserRound, X } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
-import { loadMapLighting, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
+import { loadMapLighting, loadOpenIn, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -42,6 +42,9 @@ const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => 
 const NO_HOTSPOTS: Hotspot[] = [];
 
 type Tab = "menu" | "events" | "study";
+/** Settings > Your Trojan, as colours on the 3D model */
+const TROJAN_PLUME = { cardinal: "#b0102a", gold: "#ffcc00", white: "#f4f4f4", black: "#1d1d1f" } as const;
+const TROJAN_CAPE = { cardinal: "#a3001b", gold: "#f2b705" } as const;
 // Until you share your location you stand at the Tommy Trojan statue, the center of campus, so walk times are realistic.
 const START_LOC: Loc = { lat: BUILDING_BY_ID.tommy.lat, lng: BUILDING_BY_ID.tommy.lng, label: "Tommy Trojan", buildingId: "tommy" };
 
@@ -65,6 +68,7 @@ export default function App() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null); // null while the saved session is being checked
   const [accountOpen, setAccountOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false); // Find friends sheet
+  const [findQuery, setFindQuery] = useState<string | undefined>(undefined); // /?add=username (a scanned QR code or a shared link)
   const grip = useRef<number | null>(null); // where a drag on the phone sheet's handle started
   const menuButton = useRef<HTMLButtonElement>(null);
   const [accountTab, setAccountTab] = useState<"account" | "inbox" | "notifications">("account");
@@ -306,10 +310,21 @@ export default function App() {
 
   // "/?event=<id>" (from the profile page) opens that event once the data is in
   const pendingEvent = useRef<string | null>(null);
+  const pendingAdd = useRef<string | null>(null);
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("event");
     if (id) { pendingEvent.current = id; window.history.replaceState(null, "", "/"); }
+    // "/?add=<username>" (a scanned QR code or a shared link) opens Find friends on that person once you are signed in
+    const add = (new URLSearchParams(window.location.search).get("add") ?? "").toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 40);
+    if (add) { pendingAdd.current = add; window.history.replaceState(null, "", "/"); }
   }, []);
+  useEffect(() => {
+    if (!signedIn || !pendingAdd.current) return;
+    const who = pendingAdd.current;
+    pendingAdd.current = null;
+    const t = setTimeout(() => { setFindQuery(who); setFindOpen(true); }, 0);
+    return () => clearTimeout(t);
+  }, [signedIn]);
   useEffect(() => {
     const id = pendingEvent.current;
     if (!state || !id || !state.events.some((e) => e.id === id)) return;
@@ -394,9 +409,21 @@ export default function App() {
     }, () => { setGps("off"); center(loc); }, { enableHighAccuracy: true, timeout: 8000 });
   }
   const endWalk = useCallback(() => setWalk(null), []);
+  // Settings > Your Trojan: the plume and cape colours of your Trojan on the map
+  const look = state?.me.prefs?.trojan;
+  const trojanColors = useMemo(() => (look ? { plume: TROJAN_PLUME[look.plume], cape: TROJAN_CAPE[look.cape] } : undefined), [look]);
+  // Settings > Map > Open in: start in Satellite when that is your choice
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the app opens
+  useEffect(() => { if (loadOpenIn() === "satellite") { const t = setTimeout(() => switchView("3d"), 0); return () => clearTimeout(t); } }, []);
   const openMe = useCallback(() => setMeCard({ accuracyM: meLive.current.accuracyM }), []);
   const closeMe = useCallback(() => setMeCard(null), []);
   const playAsked = useCallback(() => setPlayAsk(false), []);
+  /** Accept or decline a friend request from the Notifications list. */
+  async function answerFriend(n: Notification, accept: boolean) {
+    try { await api("/api/friends", { json: { userId: n.fromUserId, action: accept ? "accept" : "decline" } }); } catch { /* already answered somewhere else */ }
+    setNotifs((list) => list.filter((x) => x.id !== n.id));
+    refresh();
+  }
   async function markAllRead() {
     await api("/api/notifications", { json: { all: true } });
     setNotifs((n) => n.map((x) => ({ ...x, read: true })));
@@ -463,7 +490,20 @@ export default function App() {
               {accountTab === "notifications" && <div className="p-2">
                 {unread > 0 && <div className="flex justify-end px-2 pb-2"><button onClick={markAllRead} className="min-h-10 text-sm font-medium text-cardinal">Mark all read</button></div>}
                 {!notifs.length && <p className="px-3 py-8 text-center text-sm text-muted">You&apos;re all caught up.</p>}
-                {notifs.map((n) => (
+                {notifs.map((n) => n.fromUserId ? (
+                  // a friend request: answer it right here
+                  <div key={n.id} className="menu-item !items-start !cursor-default">
+                    <span className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-cardinal" />
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block text-sm font-semibold">{n.title}</span>
+                      <span className="mt-1 block text-[13px] leading-relaxed text-muted">{n.body}</span>
+                      <span className="mt-2 flex gap-2">
+                        <Button className="!rounded-full !px-4 !py-1.5" onClick={() => answerFriend(n, true)}>Accept</Button>
+                        <Button variant="secondary" className="!rounded-full !px-4 !py-1.5" onClick={() => answerFriend(n, false)}>Decline</Button>
+                      </span>
+                    </span>
+                  </div>
+                ) : (
                   <button key={n.id} onClick={() => { if (n.eventId) openEvent(n.eventId); else if (n.buildingId) openBuilding(n.buildingId); setAccountOpen(false); }} className="menu-item !items-start">
                     <span className={cx("mt-[7px] h-2 w-2 shrink-0 rounded-full", n.read ? "bg-transparent" : "bg-cardinal")} />
                     <span className="min-w-0 flex-1 text-left">
@@ -478,7 +518,7 @@ export default function App() {
           </section>
         )}
       </div>
-      {findOpen && <FindFriends me={state?.me.username} onClose={() => setFindOpen(false)} onChanged={refresh} />}
+      {findOpen && <FindFriends me={state?.me.username} initialQuery={findQuery} onClose={() => { setFindOpen(false); setFindQuery(undefined); }} onChanged={() => { refresh(); pollNotifs(); }} />}
 
       <div className="absolute inset-0">
         {/* Sidebar */}
@@ -574,6 +614,7 @@ export default function App() {
               onWalkEnd={endWalk}
               meLive={meLive}
               onMe={openMe}
+              trojanColors={trojanColors}
               playAsk={playAsk}
               onPlayAsked={playAsked}
             />

@@ -5,6 +5,8 @@ export type EventView = PublicEvent;
 
 export interface MeView {
   id: string;
+  /** Settings (your Trojan's look, privacy, notifications, map); unset = the defaults */
+  prefs?: import("./types").UserPrefs;
   /** demo-directory account (school/major from the mock USC directory) */
   verified?: boolean;
   name: string;

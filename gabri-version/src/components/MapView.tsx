@@ -306,6 +306,8 @@ interface Props {
   meLive?: { current: MeLive };
   /** your Trojan was tapped */
   onMe?: () => void;
+  /** your Trojan's plume and cape colours (Settings > Your Trojan); unset = the mascot's */
+  trojanColors?: { plume: string; cape: string };
   /** play mode was asked for from outside the map (the "you" card); onPlayAsked tells the app it has started */
   playAsk?: boolean;
   onPlayAsked?: () => void;
@@ -951,7 +953,7 @@ export default function MapView(props: Props) {
       // the 3D character engine loads on demand (same as tours), so the page stays light until you play
       void import("./walk/PlayMode").then(({ PlayMode }) => {
         if (map.current !== m || play.current) return;
-        play.current = new PlayMode(m, meMotion.current?.pos ?? cb.current.me, [campus.current?.buildings, area.current], stopPlay, () => {});
+        play.current = new PlayMode(m, meMotion.current?.pos ?? cb.current.me, [campus.current?.buildings, area.current], stopPlay, () => {}, cb.current.trojanColors);
         placeMe.current(); // the play Trojan is you now: no second one standing at your location
         play.current.setLight(cb.current.light);
         // while playing, tap anywhere on the map (not on a pin or a bubble) to jump your Trojan there
@@ -1090,14 +1092,19 @@ export default function MapView(props: Props) {
     };
   });
   useEffect(() => {
-    // the 3D engine loads a moment after the map, so the first paint stays light
+    // the 3D engine loads a moment after the map, so the first paint stays light; it also waits (up to 5 s) for your
+    // account, so your Trojan appears in your own plume and cape colours
     let gone = false;
-    const t = setTimeout(() => {
-      void Promise.all([import("./walk/WalkGuide"), import("./walk/trojanModel")]).then(([{ CharacterLayer }, { buildTrojan }]) => {
+    const began = Date.now();
+    const t = setInterval(() => {
+      if (Date.now() - began < 1500 || (!cb.current.trojanColors && Date.now() - began < 5000)) return;
+      clearInterval(t);
+      void Promise.all([import("./walk/WalkGuide"), import("./walk/trojanModel")]).then(([{ CharacterLayer }, { buildTrojan, buildMyTrojan }]) => {
         if (gone || meChar.current) return;
         const start = { lat: cb.current.me.lat, lng: cb.current.me.lng };
         const mo = meMotion.current = new MeMotion(start);
-        const c = new CharacterLayer(buildTrojan(), start);
+        const mine = cb.current.trojanColors;
+        const c = new CharacterLayer(mine ? buildMyTrojan(mine) : buildTrojan(), start);
         c.id = "me-character";
         c.alwaysOnTop = true; // it marks where you are: never hidden by the building you're in
         c.play("Idle"); // standing: the gentle breathing loop
@@ -1120,8 +1127,8 @@ export default function MapView(props: Props) {
         meChar.current = c;
         placeMe.current();
       });
-    }, 1500);
-    return () => { gone = true; clearTimeout(t); };
+    }, 250);
+    return () => { gone = true; clearInterval(t); };
   }, []);
   useEffect(() => { placeMe.current(); }, [props.me, props.light, props.walk?.key]);
 

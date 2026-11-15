@@ -9,7 +9,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { BUILDING_BY_ID } from "./campus";
 import { withFaces } from "./faces";
 import { ME, ORGS, seedAlerts, seedEvents, seedHistory, seedInbox, seedNotifications, seedUsers } from "./seed";
-import type { CampusEvent, InboxItem, Notification, Registration, SafetyAlert, User } from "./types";
+import type { CampusEvent, FriendRequest, InboxItem, Notification, Registration, SafetyAlert, User } from "./types";
+import { DEFAULT_PREFS, notifySwitch, prefsOf } from "./prefs";
+import { settleDemoRequests } from "./friends";
 import { backfill, closesSoon, counts, findRegistration, isClosed, reapply } from "./registration";
 import type { GoogleSession } from "./google";
 
@@ -35,6 +37,23 @@ export interface DB {
   aiUsage?: { day: string; total: number; byUser: Record<string, number> };
   /** event registrations: one per person per event (see lib/registration.ts) */
   registrations: Registration[];
+  /** friend requests waiting for an answer (see lib/friends.ts) */
+  friendRequests: FriendRequest[];
+}
+
+/** The demo students (not real people). The demo account itself is used by a real person, so it is not in here. */
+const DEMO_STUDENTS = new Set(seedUsers(new Date()).map((u) => u.id).filter((id) => id !== ME));
+/** Demo students share what they are going to, so "Maya is going" shows; real accounts start with everything off. */
+function demoPrefs(users: User[]) {
+  for (const u of users) if (!u.prefs && DEMO_STUDENTS.has(u.id)) u.prefs = { ...DEFAULT_PREFS, privacy: { ...DEFAULT_PREFS.privacy, showGoing: true } };
+  return users;
+}
+/** Two demo students have asked the demo student to be friends, so Accept and Decline can be tried. */
+const demoRequests = (now: number): FriendRequest[] => ["u_kai", "u_leah"].map((from, i) => ({ id: `fr_seed_${i}`, from, to: ME, createdAt: new Date(now - (9 + i * 14) * 60_000).toISOString() }));
+/** Friend requests to demo students are accepted after a short wait (nobody is there to tap Accept). */
+export function settleFriendRequests() {
+  const d = db();
+  settleDemoRequests(d.users, d.friendRequests, new Set(d.users.filter((u) => !DEMO_STUDENTS.has(u.id)).map((u) => u.id)), Date.now());
 }
 
 /** The current request: its copy of the state and who is signed in. */
@@ -50,7 +69,7 @@ export function fresh(): DB {
   for (const e of events) if (/Thornton Jazz Night|Volleyball vs\. UCLA/.test(e.title) && !e.attendees.includes(ME)) e.attendees.push(ME);
   return {
     seededAt: +now,
-    users: withFaces(seedUsers(now)),
+    users: demoPrefs(withFaces(seedUsers(now))),
     events,
     history: seedHistory(now),
     inbox: seedInbox(now),
@@ -64,6 +83,8 @@ export function fresh(): DB {
     lastReminder: 0,
     google: {},
     registrations: [],
+    // two demo students have asked the demo student to be friends, so Accept and Decline can be tried
+    friendRequests: demoRequests(+now),
   };
 }
 
@@ -83,6 +104,8 @@ export function db(): DB {
   d.google ??= {};
   withFaces(d.users); // demo students' photos (also for state saved before they existed)
   d.registrations ??= [];
+  d.friendRequests ??= demoRequests(Date.now()).filter((r) => !d.users.find((u) => u.id === ME)?.friends.includes(r.from)); // state saved before requests existed
+  demoPrefs(d.users);
   return d;
 }
 
@@ -132,11 +155,22 @@ function campusMidnight(now: Date) {
 const MAX_NOTIFICATIONS = 300;
 
 /** Notifications this person should see: campus-wide ones plus their own, with their own read state. */
-export function myNotifications() {
+export function myNotifications(): Notification[] {
   const uid = currentUserId();
-  return db().notifications
+  const d = db();
+  const me = d.users.find((u) => u.id === uid);
+  const on = me ? prefsOf(me).notify : DEFAULT_PREFS.notify;
+  // friend requests waiting for your answer come first, each with who sent it (the app shows Accept and Decline)
+  const asks: Notification[] = d.friendRequests.filter((r) => r.to === uid).flatMap((r) => {
+    const from = d.users.find((u) => u.id === r.from);
+    return from ? [{ id: `fr:${r.id}`, kind: "friend" as const, title: `${from.name} wants to be friends`, body: `@${from.username ?? ""}${from.major ? ` · ${from.major}` : ""}`, createdAt: r.createdAt, read: false, fromUserId: from.id, userId: uid }] : [];
+  });
+  const rest = d.notifications
     .filter((n) => !n.userId || n.userId === uid)
+    // Settings > Notifications: a switch that is off hides that kind
+    .filter((n) => { const k = notifySwitch(n); return !k || on[k]; })
     .map((n) => (n.userId ? n : { ...n, read: (n.readBy ?? []).includes(uid) }));
+  return [...asks.sort((a, b) => b.createdAt.localeCompare(a.createdAt)), ...rest];
 }
 /** Mark notifications read for the signed-in person only. */
 export function markRead(ids: string[] | "all") {
@@ -214,7 +248,8 @@ export function canSee(e: CampusEvent, viewer: User) {
 
 /** Strip attendee identities: viewers only see friends by name, everyone else as a count. */
 export function publicEvent(e: CampusEvent, viewer: User) {
-  const friendsGoing = e.attendees.filter((a) => viewer.friends.includes(a));
+  // friends who are going, and only those who turned on "Show events I'm going to"
+  const friendsGoing = e.attendees.filter((a) => { if (!viewer.friends.includes(a)) return false; const f = getUser(a); return !!f && prefsOf(f).privacy.showGoing; });
   const b = BUILDING_BY_ID[e.buildingId];
   const org = e.host.id ? ORGS.find((o) => o.id === e.host.id) : undefined;
   return {

@@ -15,6 +15,15 @@ export function saveMapLighting(v: MapLighting) {
   try { localStorage.setItem(KEY, v); } catch { /* storage blocked: the choice lasts until the page reloads */ }
 }
 
+/** "Open in" from Settings: which map view the app starts in. Kept in this browser too, so the map knows before the account loads. */
+const OPEN_KEY = "usclive.openIn";
+export function loadOpenIn(): "explore" | "satellite" {
+  try { return localStorage.getItem(OPEN_KEY) === "satellite" ? "satellite" : "explore"; } catch { return "explore"; }
+}
+export function saveOpenIn(v: "explore" | "satellite") {
+  try { localStorage.setItem(OPEN_KEY, v); } catch { /* storage blocked */ }
+}
+
 /** "Show people on the map" from Settings: the little Trojans standing at busy spots. On unless turned off. */
 const PEOPLE_KEY = "usclive.people";
 export function loadShowPeople(): boolean {
