@@ -113,6 +113,7 @@ What is real, what only opens another site, and what would need USC.
 - All flyer/email/web text is passed to Claude as delimited untrusted data; system prompts forbid following instructions inside it.
 - Structured outputs + zod re-validation; building ids constrained to an enum; hallucinated event ids dropped.
 - Privacy: attendee lists never leave the server (only friends by name + counts); invite-only events filtered server-side; crowd data is aggregated with a k=5 threshold.
+- Google sign-in accepts only the school's own Google accounts: the ID token's `hd` claim must equal the allowed domain, which is `usc.edu` unless `GOOGLE_ALLOWED_DOMAIN` names another (unset never means "anyone"), and the email must be verified. Checked by `node scripts/check-signin.mjs`.
 - Scraper only fetches `https://*.usc.edu`; iCal import blocks localhost/IPs (SSRF guard).
 
 ## Demo data

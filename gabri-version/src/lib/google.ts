@@ -3,6 +3,7 @@
  * Tokens never reach the browser: they are stored server-side on each person's account (in the app state,
  * Supabase when configured). Needs GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (see .env.example).
  */
+import { allowedDomain, checkGoogleClaims } from "./googleClaims";
 import { randomUUID } from "node:crypto";
 import type { CalItem } from "./calendarImport";
 import type { InboxItem } from "./types";
@@ -21,7 +22,8 @@ export interface GoogleSession {
   gmail?: boolean;
 }
 
-const cfg = () => ({ id: process.env.GOOGLE_CLIENT_ID ?? "", secret: process.env.GOOGLE_CLIENT_SECRET ?? "", domain: process.env.GOOGLE_ALLOWED_DOMAIN ?? "" });
+// the allowed domain is usc.edu unless GOOGLE_ALLOWED_DOMAIN names another: leaving it unset never opens sign-in to everyone
+const cfg = () => ({ id: process.env.GOOGLE_CLIENT_ID ?? "", secret: process.env.GOOGLE_CLIENT_SECRET ?? "", domain: allowedDomain(process.env.GOOGLE_ALLOWED_DOMAIN) });
 export const googleConfigured = () => !!(cfg().id && cfg().secret);
 /** where Google sends people back; must match the redirect URI registered in Google Cloud */
 export const redirectUri = (req: Request) => `${new URL(req.url).origin}/api/auth/google/callback`;
@@ -45,7 +47,7 @@ export function authUrl(req: Request, state: string, gmail = false) {
     client_id: cfg().id, redirect_uri: redirectUri(req), response_type: "code", scope: gmail ? `${SCOPES} ${GMAIL_SCOPE}` : SCOPES, state,
     access_type: "offline", prompt: "consent", include_granted_scopes: "true",
   });
-  if (cfg().domain) p.set("hd", cfg().domain); // pre-selects the school account; still checked on the way back
+  p.set("hd", cfg().domain); // pre-selects the school account; it is only a hint, so the claims are checked on the way back
   return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
 }
 
@@ -64,10 +66,10 @@ export async function finishSignIn(req: Request, code: string) {
   const t = await tokenRequest({ code, grant_type: "authorization_code", redirect_uri: redirectUri(req) });
   // the ID token came straight from Google's token endpoint over TLS, so its claims can be read without re-verifying
   const claims = t.id_token ? JSON.parse(Buffer.from(t.id_token.split(".")[1], "base64url").toString()) : {};
-  const email = String(claims.email ?? "").toLowerCase();
-  const domain = cfg().domain;
-  if (domain && !(claims.hd === domain || email.endsWith(`@${domain}`))) throw new Error(`Use your @${domain} Google account.`);
-  if (!claims.email_verified) throw new Error("Your Google email isn't verified.");
+  // only the school's own Google accounts: Google's `hd` claim must be the allowed domain (the email's ending is not enough)
+  const who = checkGoogleClaims(claims, cfg().domain);
+  if (!who.ok) throw new Error(who.error);
+  const email = who.email;
   const s: GoogleSession = {
     accessToken: t.access_token, refreshToken: t.refresh_token, expiresAt: Date.now() + (t.expires_in - 60) * 1000,
     email, firstName: claims.given_name ?? "", lastName: claims.family_name ?? "", picture: claims.picture,
