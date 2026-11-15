@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILDING_BY_ID, BUILDINGS, distanceMeters, SCHOOLS } from "@/lib/campus";
 import { api, applyFilters, DEFAULT_FILTERS, type AppState, type Building, type EventView, type Filters, type Hotspot, type Loc, type Notification } from "@/lib/client-types";
 import { buildCallouts, type Callout, type ChipState } from "@/lib/callouts";
+import { DINING_HALLS } from "@/lib/dining";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
 import AlertDetail from "./AlertDetail";
 import type { AskRes } from "./AskBar";
@@ -19,6 +20,7 @@ import CalendarSync, { syncCalendar } from "./CalendarSync";
 import WebcamViewer from "./WebcamViewer";
 import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
+import { DiningDetail } from "./DiningDetail";
 import EventsPanel from "./EventsPanel";
 import InboxModal from "./InboxModal";
 import type { Camera, MapLayers } from "./MapView";
@@ -254,6 +256,7 @@ export default function App() {
   const shownAlerts = useMemo(() => (chipState.safety && state ? state.alerts : []), [chipState.safety, state]);
   const event = state?.events.find((e) => e.id === selEvent) ?? null;
   const openAlert = state?.alerts.find((a) => a.id === selAlert) ?? null;
+  const selHall = selBuilding ? Object.values(DINING_HALLS).find((d) => d.buildingId === selBuilding) ?? null : null;
   const chips = chipState;
   const callouts = useMemo(() => (state ? buildCallouts(state, chips, now) : []), [state, chips, now]);
   const mapLayers = useMemo(() => ({ ...layers, hotspots: chips.crowds, places: false }), [layers, chips.crowds]);
@@ -457,6 +460,8 @@ export default function App() {
               <AlertDetail alert={openAlert} now={now} onClose={closeDetail} />
             ) : event ? (
               <EventDetail ev={event} state={state} loc={loc} onClose={closeDetail} onRsvp={rsvp} onInvite={invite} onFindFriends={() => setFindOpen(true)} onOpenBuilding={openBuilding} onDirections={(bid) => { if (bid !== loc.buildingId) setWalk({ toId: bid, key: ++focusSeq.current }); }} />
+            ) : selHall ? (
+              <DiningDetail key={selHall.id} hall={selHall.id} loc={loc} now={now} hotspot={state.hotspots.find((h) => h.buildingId === selHall.buildingId)} onClose={closeDetail} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} />
             ) : selBuilding ? (
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} onWalk={(bId) => chatAction({ type: "walk", buildingId: bId })} />
             ) : tab === "menu" ? (

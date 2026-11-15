@@ -8,7 +8,7 @@ export type DietTag = "vegan" | "vegetarian" | "gluten-free" | "halal";
 export interface MenuItem { name: string; tags: DietTag[]; /** allergen names as the site lists them, lower case: "dairy", "eggs", "soy" … */ allergens: string[]; /** a notice line ("MADE TO ORDER OMELETTES UNTIL 1PM"), not a dish */ note: boolean }
 export interface MenuStation { name: string; subtitle?: string; items: MenuItem[] }
 export interface MenuMeal { id: MealId; name: string; stations: MenuStation[] }
-export interface HallHours { /** ISO times for that day, or null when unknown or closed all day */ open: string | null; close: string | null; openNow: boolean; /** "Open now · closes 10 PM" | "Closed · opens 7 AM" | "Closed today" | "Hours unavailable" */ label: string; source: "usc" | "usual" }
+export interface HallHours { /** ISO times for that day, or null when unknown or closed all day */ open: string | null; close: string | null; openNow: boolean; /** "Open now · closes 10 PM" | "Closed · opens 7 AM" | "Closed · opens 8:30 AM tomorrow" | "Closed today" | "Hours unavailable" */ label: string; source: "usc" | "usual" }
 export interface HallMenu {
   hall: HallId; name: string; short: string; buildingId: string; lat: number; lng: number;
   /** the day this menu is for, YYYY-MM-DD in Los Angeles time */
@@ -200,7 +200,12 @@ export function hoursFor(hall: HallId, dateISO: string, now: number, todayShifts
   if (isToday) {
     if (current) return { ...base, openNow: true, label: `Open now · closes ${fmtTime(current.close)}` };
     const next = shifts.find((s) => s.open > now);
-    return next ? { ...base, openNow: false, label: `Closed · opens ${fmtTime(next.open)}` } : { ...base, openNow: false, label: "Closed today" };
+    if (next) return { ...base, openNow: false, label: `Closed · opens ${fmtTime(next.open)}` };
+    // already closed for the day: say when it opens tomorrow (usual hours)
+    const [y, m, d] = dateISO.split("-").map(Number);
+    const tomorrow = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+    const usual = USUAL_HOURS[hall]?.[dayOfWeek(tomorrow)];
+    return { ...base, openNow: false, label: usual ? `Closed · opens ${fmtTime(laEpoch(tomorrow, usual[0]))} tomorrow` : "Closed today" };
   }
   // a day that has not started yet is closed right now; a past day is not worth a label
   if (dateISO > laDate(now)) return { ...base, openNow: false, label: `Closed · opens ${fmtTime(shifts[0].open)}` };

@@ -93,7 +93,11 @@ ok(() => {
   h = d.hoursFor('evk', '2026-11-14', at('06:00'), shift);
   assert.equal(h.label, 'Closed · opens 8:30 AM'); assert.equal(h.openNow, false);
   h = d.hoursFor('evk', '2026-11-14', at('23:00'), shift);
-  assert.equal(h.label, 'Closed today'); assert.equal(h.openNow, false);
+  assert.equal(h.label, 'Closed · opens 8:30 AM tomorrow', 'after closing: Sunday usual opening'); assert.equal(h.openNow, false);
+  h = d.hoursFor('evk', '2026-11-16', LA('2026-11-16T23:00:00-08:00'), null); // Monday night
+  assert.equal(h.label, 'Closed · opens 7 AM tomorrow');
+  h = d.hoursFor('village', '2026-11-14', at('23:00'), null); // Saturday night, Village opens 11 on Sunday
+  assert.equal(h.label, 'Closed · opens 11 AM tomorrow');
   h = d.hoursFor('evk', '2026-11-14', at('12:00'), []);
   assert.equal(h.label, 'Closed today'); assert.equal(h.open, null); assert.equal(h.close, null);
   h = d.hoursFor('evk', '2026-11-14', at('12:00'), null);
