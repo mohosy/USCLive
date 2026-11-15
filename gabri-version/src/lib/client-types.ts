@@ -5,6 +5,8 @@ export type EventView = PublicEvent;
 
 export interface MeView {
   id: string;
+  /** demo-directory account (school/major from the mock USC directory) */
+  verified?: boolean;
   name: string;
   avatar: string;
   school: SchoolId;

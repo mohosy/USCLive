@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Navigation, Plus, Settings, UserRound } from "lucide-react";
+import { Bell, BookOpen, CalendarDays, ChevronDown, House, LayoutDashboard, LogOut, Navigation, Plus, Settings, UserRound } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ import { parseNavQuery } from "@/lib/nav";
 import { WEBCAMS, type Webcam } from "@/lib/webcams";
 import AlertDetail from "./AlertDetail";
 import AskBar, { type AskRes } from "./AskBar";
+import CalendarSync, { syncCalendar } from "./CalendarSync";
 import WebcamViewer from "./WebcamViewer";
 import AddEventModal from "./AddEventModal";
 import { BuildingDetail, EventDetail } from "./Drawers";
@@ -124,7 +125,11 @@ export default function App() {
   useEffect(() => {
     const saved = loadSession();
     // one data load at startup: after the saved sign-in is re-applied, or straight away for the sign-in screen
-    const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(() => { setSignedIn(true); refresh(); }, () => { setSignedIn(false); refresh(); }); }, 0);
+    const t = setTimeout(() => { if (!saved) { setSignedIn(false); refresh(); } else signIn(saved).then(async () => {
+      setSignedIn(true);
+      if (saved.calendarUrl) await syncCalendar(saved.calendarUrl).catch(() => null); // the demo store forgets imports on restart (duplicates are skipped)
+      refresh();
+    }, () => { setSignedIn(false); refresh(); }); }, 0);
     return () => clearTimeout(t);
   }, [refresh]);
   useEffect(() => {
@@ -267,7 +272,6 @@ export default function App() {
         <AskBar key={askKey} res={askRes} busy={askBusy} events={state?.events ?? []} onAsk={runAsk} onClear={() => setAskRes(null)} onOpenEvent={openEvent} onOpenBuilding={openBuilding} />
 
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" className="max-md:hidden" onClick={() => setInboxOpen(true)}><Inbox size={16} /> Inbox</Button>
           {isCreator && <Link href="/dashboard" className="rounded-full px-3 py-2 text-sm font-medium hover:bg-surface max-md:hidden">Organizers</Link>}
           <div className="relative">
             <button onClick={() => { setAccountOpen(false); setNotifOpen((o) => !o); }} className="relative rounded-full p-2 hover:bg-surface" aria-label="Notifications" aria-expanded={notifOpen}>
@@ -357,6 +361,7 @@ export default function App() {
               <BuildingDetail id={selBuilding} loc={loc} now={now} tick={tick} onClose={closeDetail} onOpenEvent={openEvent} />
             ) : tab === "menu" ? (
               <>
+                <div className="mb-4"><CalendarSync demo={!!state.me.verified} onSynced={() => { refresh(); pollNotifs(); }} onOpenInbox={() => setInboxOpen(true)} /></div>
                 <NowPanel compact active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onRsvp={rsvp} />
                 <div className="mt-4"><MenuPanel active={menuOpen} state={state} loc={loc} onOpenEvent={openEvent} onOpenBuilding={openBuilding} onAddEvent={requestAddEvent} onStudy={() => setTab("study")} /></div>
               </>

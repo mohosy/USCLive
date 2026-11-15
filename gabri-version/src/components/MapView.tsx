@@ -58,6 +58,39 @@ const loadCampus = () =>
     .then((r) => { if (!r.ok) throw new Error(`campus data ${r.status}`); return r.json() as Promise<CampusData>; })
     .catch((e) => { campusPromise = null; throw e; }));
 
+/** The neighborhood drawn in 3D around campus: north to the I-10, east past the I-110, south past Expo Park, west to Normandie. */
+const AREA = { south: 34.0065, west: -118.3012, north: 34.0362, east: -118.2735 };
+/** Everything outside AREA (a world polygon with the area cut out): washed out and flat. */
+const AREA_MASK: Feature = {
+  type: "Feature", properties: {},
+  geometry: { type: "Polygon", coordinates: [
+    [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]],
+    [[AREA.west, AREA.south], [AREA.west, AREA.north], [AREA.east, AREA.north], [AREA.east, AREA.south], [AREA.west, AREA.south]],
+  ] },
+};
+/** OpenStreetMap footprints for the area outside campus (scripts/build-area-buildings.mjs), loaded after the map is up. */
+let areaPromise: Promise<FeatureCollection> | null = null;
+const loadArea = () =>
+  (areaPromise ??= fetch("/data/area-buildings.json")
+    .then((r) => { if (!r.ok) throw new Error(`area data ${r.status}`); return r.json() as Promise<FeatureCollection>; })
+    .catch((e) => { areaPromise = null; throw e; }));
+
+/** Neighborhood buildings in 3D, a shade grayer than USC's so campus still stands out (idempotent). */
+function installArea(m: mapboxgl.Map, fc: FeatureCollection) {
+  if (m.getSource("area-buildings")) return;
+  m.addSource("area-buildings", { type: "geojson", data: fc });
+  m.addLayer({
+    id: "area-buildings", type: "fill-extrusion", source: "area-buildings", slot: "middle", minzoom: 14,
+    paint: {
+      "fill-extrusion-color": ["interpolate", ["linear"], ["get", "h"], 0, "#ebe8e4", 20, "#e2ded9", 60, "#d8d3cd"],
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-opacity": 0.92,
+      "fill-extrusion-ambient-occlusion-intensity": 0.25,
+      "fill-extrusion-ambient-occlusion-radius": 3,
+    },
+  }, m.getLayer("usc-buildings") ? "usc-buildings" : undefined);
+}
+
 const CONTEXT_LABELS: FeatureCollection = {
   type: "FeatureCollection",
   features: ([
@@ -72,7 +105,7 @@ const CONTEXT_LABELS: FeatureCollection = {
 function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, before?: string) {
   if (m.getSource("usc-mask")) return;
   const at = before && m.getLayer(before) ? before : undefined;
-  m.addSource("usc-mask", { type: "geojson", data: c.mask });
+  m.addSource("usc-mask", { type: "geojson", data: AREA_MASK }); // fade beyond the 3D neighborhood (campus keeps its outline)
   m.addSource("usc-campus", { type: "geojson", data: c.campus });
   m.addSource("usc-buildings", { type: "geojson", data: c.buildings });
   m.addSource("usc-context", { type: "geojson", data: CONTEXT_LABELS });
@@ -104,7 +137,7 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, before?:
 }
 
 // Keep the camera on USC University Park Campus (plus a little margin).
-const USC_BOUNDS: [[number, number], [number, number]] = [[-118.2995, 34.0115], [-118.2715, 34.0305]];
+const USC_BOUNDS: [[number, number], [number, number]] = [[-118.3035, 34.0045], [-118.2712, 34.0382]]; // the 3D neighborhood plus a little margin
 
 export interface Camera { longitude: number; latitude: number; zoom: number; pitch: number; bearing: number }
 
@@ -237,6 +270,7 @@ export default function MapView(props: Props) {
   const walkRef = useRef<WalkGuide | null>(null);
   const [walkP, setWalkP] = useState<WalkProgress | null>(null);
   const campus = useRef<CampusData | null>(null);
+  const area = useRef<FeatureCollection | null>(null);
 
   /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
   function tidyBubbles() {
@@ -292,6 +326,7 @@ export default function MapView(props: Props) {
     if (!m.hasModel("dps-beacon")) m.addModel("dps-beacon", BEACON_MODEL);
     // USC spotlight first, so alerts, crowds and pins draw above it
     if (campus.current) installSpotlight(m, sat, campus.current);
+    if (area.current && !sat) installArea(m, area.current);
     // DPS alert zones
     m.addLayer({ id: "alert-fill", type: "fill", source: "alerts", slot: "middle", paint: { "fill-color": ["get", "color"], "fill-opacity": ["get", "fill"], "fill-emissive-strength": 1 } });
     m.addLayer({ id: "alert-line", type: "line", source: "alerts", slot: "middle", paint: { "line-color": ["get", "color"], "line-width": 1.5, "line-opacity": ["get", "line"], "line-emissive-strength": 1 } });
@@ -439,6 +474,8 @@ export default function MapView(props: Props) {
       (c) => {
         campus.current = c;
         if (ready.current && map.current === m) installSpotlight(m, styleRef.current === "satellite", c, "alert-fill");
+        // the neighborhood's buildings come after campus (a bigger file; campus shows first)
+        loadArea().then((fc) => { area.current = fc; if (ready.current && map.current === m && styleRef.current !== "satellite") installArea(m, fc); }, () => {});
       },
       () => { /* no campus data: fall back to the plain map */ },
     );
