@@ -45,20 +45,23 @@ export function baselineAt(b: Building, d: Date) {
   return Math.max(1, Math.round(b.capacity * interp(CURVES[b.kind], d) * factor));
 }
 
-function liveEventBoost(b: Building, d: Date, events: CampusEvent[]) {
+/** What a live event adds to a building: server events carry the attendee list, the browser's public copies carry a count. */
+export interface BoostEvent { id: string; buildingId: string; start: string; end: string; attendees?: string[]; attendeeCount?: number; moderation?: { status: string } }
+
+function liveEventBoost(b: Building, d: Date, events: BoostEvent[]) {
   let boost = 0;
   for (const e of events) {
-    if (e.buildingId !== b.id || e.moderation.status !== "approved") continue;
+    if (e.buildingId !== b.id || (e.moderation && e.moderation.status !== "approved")) continue;
     const s = +new Date(e.start), en = +new Date(e.end), t = +d;
     if (t < s - 15 * 60_000 || t > en) continue;
     // ramp up in the 15 min before start
     const ramp = t < s ? 1 - (s - t) / (15 * 60_000) : 1;
-    boost += e.attendees.length * (0.55 + hash(e.id) * 0.45) * ramp; // not every RSVP shows up
+    boost += (e.attendees?.length ?? e.attendeeCount ?? 0) * (0.55 + hash(e.id) * 0.45) * ramp; // not every RSVP shows up
   }
   return boost;
 }
 
-export function countAt(b: Building, d: Date, events: CampusEvent[]) {
+export function countAt(b: Building, d: Date, events: BoostEvent[]) {
   const base = baselineAt(b, d);
   const bucket = Math.floor(+d / (5 * 60_000));
   const noise = 0.85 + hash(`${b.id}:${bucket}`) * 0.3; // ±15%
@@ -75,28 +78,36 @@ function levelFor(ratio: number, count: number, capacity: number): Hotspot["leve
   return "normal";
 }
 
+/** How busy one building is right now. Works for every building (the map and the detail panel use this same math). */
+export function hotspotFor(b: Building, events: BoostEvent[], now = new Date()): Hotspot {
+  const count = countAt(b, now, events);
+  const prev = countAt(b, new Date(+now - 15 * 60_000), events);
+  const baseline = baselineAt(b, now);
+  const ratio = +(count / baseline).toFixed(2);
+  const delta = count - prev;
+  return {
+    buildingId: b.id,
+    count,
+    baseline,
+    ratio,
+    level: levelFor(ratio, count, b.capacity),
+    trend: delta > b.capacity * 0.04 ? "rising" : delta < -b.capacity * 0.04 ? "falling" : "steady",
+    suppressed: count < K_ANON,
+  };
+}
+
+/** The main buildings, tracked continuously (crowds, heat, callouts). Smaller buildings use hotspotFor on demand. */
 export function computeHotspots(events: CampusEvent[], now = new Date()): Hotspot[] {
-  const before = new Date(+now - 15 * 60_000);
-  return CORE_BUILDINGS.map((b) => {
-    const count = countAt(b, now, events);
-    const prev = countAt(b, before, events);
-    const baseline = baselineAt(b, now);
-    const ratio = +(count / baseline).toFixed(2);
-    const delta = count - prev;
-    return {
-      buildingId: b.id,
-      count,
-      baseline,
-      ratio,
-      level: levelFor(ratio, count, b.capacity),
-      trend: delta > b.capacity * 0.04 ? "rising" : delta < -b.capacity * 0.04 ? "falling" : "steady",
-      suppressed: count < K_ANON,
-    } satisfies Hotspot;
-  });
+  return CORE_BUILDINGS.map((b) => hotspotFor(b, events, now));
+}
+
+/** One line for a hover: "About 120 people · busy · 1.4x usual". */
+export function busyLine(h: Hotspot): string {
+  return h.suppressed ? "Very quiet · fewer than 5 people" : `About ${h.count} people · ${h.level} · ${h.ratio.toFixed(1)}x usual`;
 }
 
 /** 24-hour "popular times" curve for a building: typical vs today. */
-export function dayCurve(b: Building, events: CampusEvent[], now = new Date()) {
+export function dayCurve(b: Building, events: BoostEvent[], now = new Date()) {
   return Array.from({ length: 24 }, (_, h) => {
     const d = new Date(now);
     d.setHours(h, 0, 0, 0);
