@@ -47,7 +47,7 @@ export default function WalkHUD({
           </span>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold">
-              {fromLabel} → {toName} <span className="text-muted">({toCode})</span>
+              {fromLabel} → {toName}{toCode && <span className="text-muted"> ({toCode})</span>}
             </div>
             <div className="text-xs text-muted">
               {p.phase === "loading"

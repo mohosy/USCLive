@@ -327,7 +327,7 @@ export class WalkGuide {
     if (!this.destMarker) {
       const el = document.createElement("div");
       el.className = "walk-dest";
-      el.innerHTML = `<span class="walk-dest-ring"></span><span class="walk-dest-label">${escapeHtml(this.opts.to.name)} · ${escapeHtml(this.opts.to.code)}</span>`;
+      el.innerHTML = `<span class="walk-dest-ring"></span><span class="walk-dest-label">${escapeHtml(this.opts.to.name)}${this.opts.to.code ? ` · ${escapeHtml(this.opts.to.code)}` : ""}</span>`;
       this.destMarker = new mapboxgl.Marker({ element: el, anchor: "bottom" }).setLngLat([this.opts.to.lng, this.opts.to.lat]).addTo(m);
     }
   }
