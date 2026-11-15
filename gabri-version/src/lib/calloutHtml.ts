@@ -38,6 +38,10 @@ export function calloutHTML(c: Callout, now: Date) {
   if (c.kind === "busy" || c.kind === "quiet") {
     return `<div class="bz bz-${c.kind}"><span class="bz-ic">${USERS}</span><span class="bz-t"><b>${esc(c.eyebrow)}</b>${esc(c.title)}${c.meta ? ` · ${esc(c.meta)}` : ""}</span></div><div class="co-foot"></div>`;
   }
+  // dining halls: fork-and-knife marker with the short name, and how busy it is when known
+  if (c.kind === "dining") {
+    return `<div class="bz bz-dining${c.level ? ` bz-${c.level}` : ""}"><span class="bz-ic">${UTENSILS}</span><span class="dn-t"><b>${esc(c.title)}</b>${c.meta ? `<span>${esc(c.meta)}</span>` : ""}</span></div><div class="co-foot"></div>`;
+  }
   const title = esc(c.title);
   const meta = c.meta ? esc(c.meta) : "";
   return `<div class="co-card">
@@ -51,6 +55,8 @@ export function calloutHTML(c: Callout, now: Date) {
 
 // lucide "Users" (two people) and a fork, as inline SVG so the banner needs no React
 const USERS = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+// lucide "Utensils" (fork and knife)
+const UTENSILS = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>';
 const FORK = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>';
 const SPARK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
 
