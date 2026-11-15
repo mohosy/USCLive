@@ -128,6 +128,8 @@ export interface User {
   email?: string;
   /** school/major come from the (demo) USC directory rather than what the student typed */
   verified?: boolean;
+  /** signed up with Google: only Google sign-in can open this account (typing the email can't) */
+  googleAccount?: boolean;
   accountType?: AccountType;
   /** org a creator posts for (one of ORGS), or undefined = posts as themselves */
   creatorOrgId?: string;
@@ -157,6 +159,10 @@ export interface Notification {
   buildingId?: string;
   alertId?: string;
   source?: InboxItem["source"] | "live";
+  /** personal notifications (your calendar, your invites); unset = for everyone (campus-wide) */
+  userId?: string;
+  /** campus-wide notifications: who has read them (personal ones use `read`) */
+  readBy?: string[];
   dueAt?: string;
 }
 

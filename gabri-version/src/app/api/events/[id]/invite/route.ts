@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { body } from "@/lib/http";
 import { canSee, db, getMe, getUser, publicEvent } from "@/lib/store";
+import { withState } from "@/lib/state";
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function POST_(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const parsed = await body(req, z.object({ userIds: z.array(z.string()).min(1).max(50) }));
   if (!parsed.ok) return parsed.res;
@@ -15,3 +16,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   ev.invitees = Array.from(new Set([...ev.invitees, ...valid]));
   return Response.json({ invited: valid.length, event: publicEvent(ev, me) });
 }
+
+export const POST = withState(POST_);

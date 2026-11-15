@@ -98,18 +98,19 @@ export function remindSignups(now = Date.now()) {
   const d = db();
   if (now - d.lastReminder < 2 * 60_000) return; // at most one heads-up every 2 minutes
   const me = getMe();
-  const done = new Set(d.reminded);
+  const done = new Set(d.reminded.filter((k) => k.startsWith(`${me.id}:`)).map((k) => k.slice(me.id.length + 1)));
   const e = d.events
     .filter((x) => !done.has(x.id) && !x.game && canSee(x, me) && x.visibility !== "invite" && !x.attendees.includes(me.id))
     .filter((x) => { const t = +new Date(x.start); return t > now + 60 * MIN && t < now + 72 * 60 * MIN; })
     .find((x) => !!x.link || (x.capacity != null && x.capacity - x.attendees.length <= Math.max(5, x.capacity * 0.25)));
   if (!e) return;
-  d.reminded.push(e.id);
+  d.reminded.push(`${me.id}:${e.id}`);
   d.lastReminder = now;
   const when = new Date(e.start).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
   const where = BUILDING_BY_ID[e.buildingId]?.name ?? "";
   const left = e.capacity != null ? e.capacity - e.attendees.length : null;
   addNotification({
+    userId: me.id,
     kind: "event",
     title: e.link ? `${e.link.label}: ${e.title}` : `Filling up: ${e.title}`,
     body: `${left != null && !e.link ? `${left} spots left · ` : ""}${when} · ${where}`,

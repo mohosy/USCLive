@@ -42,6 +42,10 @@ export function clearSession() {
 function saveSession(s: Session) {
   try { sessionStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private mode or photo too large */ }
 }
+/** Remember a returning Google account in this browser (the server already signed it in). */
+export function saveGoogleSession(email: string) {
+  saveSession({ email, interests: [], google: true });
+}
 /** Apply a session on the server (also used on reload, because the demo store resets when the server restarts). */
 export async function signIn(s: Session) {
   const r = await api<{ username: string; friendIds: string[] }>("/api/session", { json: { action: "signin", ...s } });

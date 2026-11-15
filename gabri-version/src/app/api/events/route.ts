@@ -4,6 +4,7 @@ import { BUILDING_BY_ID } from "@/lib/campus";
 import { body, toIso } from "@/lib/http";
 import { addNotification, db, getMe, newId, orgs, publicEvent } from "@/lib/store";
 import type { CampusEvent } from "@/lib/types";
+import { withState } from "@/lib/state";
 
 const CreateEvent = z.object({
   title: z.string().trim().min(3).max(100),
@@ -25,7 +26,7 @@ const CreateEvent = z.object({
   source: z.enum(["user", "flyer"]).default("user"),
 });
 
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   const parsed = await body(req, CreateEvent);
   if (!parsed.ok) return parsed.res;
   const input = parsed.data;
@@ -76,3 +77,5 @@ export async function POST(req: Request) {
 
   return Response.json({ event: publicEvent(ev, me), moderation: ev.moderation, ai: mod.ai });
 }
+
+export const POST = withState(POST_);

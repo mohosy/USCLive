@@ -3,6 +3,7 @@ import { extractEventsFromPage, ruleModeration } from "@/lib/ai";
 import { body, fetchText, safeExternalUrl, toIso } from "@/lib/http";
 import { addNotification, db, newId } from "@/lib/store";
 import type { CampusEvent } from "@/lib/types";
+import { withState } from "@/lib/state";
 
 // Only scrape USC-owned public pages.
 const ALLOW = /(^|\.)usc\.edu$/i;
@@ -20,7 +21,7 @@ function htmlToText(html: string) {
     .trim();
 }
 
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   const parsed = await body(req, z.object({ url: z.string().max(500).optional() }));
   if (!parsed.ok) return parsed.res;
   const urls = parsed.data.url ? [parsed.data.url] : DEFAULT_SOURCES;
@@ -62,3 +63,5 @@ export async function POST(req: Request) {
   if (total) addNotification({ kind: "system", title: `Scraped ${total} new USC events`, body: report.map((r) => new URL(r.url).hostname).join(", "), source: "live" });
   return Response.json({ report, ai: anyAi });
 }
+
+export const POST = withState(POST_);

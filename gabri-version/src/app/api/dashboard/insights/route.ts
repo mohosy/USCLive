@@ -2,8 +2,9 @@ import { z } from "zod";
 import { orgInsights, type InsightsT } from "@/lib/ai";
 import { orgStats } from "@/lib/dashboard";
 import { body } from "@/lib/http";
+import { withState } from "@/lib/state";
 
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   const parsed = await body(req, z.object({ orgId: z.string() }));
   if (!parsed.ok) return parsed.res;
   const s = orgStats(parsed.data.orgId);
@@ -36,3 +37,5 @@ Moderation queue: ${s.queue.length} item(s).`;
   const res = await orgInsights(text, fallback);
   return Response.json({ insights: res.data, ai: res.ai, error: res.error });
 }
+
+export const POST = withState(POST_);

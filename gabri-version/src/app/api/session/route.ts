@@ -5,11 +5,14 @@ import { directoryLookup, initialsOf, INTERESTS, isUscEmail } from "@/lib/direct
 import { seedUsers } from "@/lib/seed";
 import { body } from "@/lib/http";
 import { getSession } from "@/lib/google";
-import { getMe, getUser, setFriends, uniqueUsername, usernameFree } from "@/lib/store";
+import { randomUUID } from "node:crypto";
+import { currentUserId, db, DEMO_ID, getUser, setFriends, signInAs, signOutCookie, uniqueUsername, usernameFree } from "@/lib/store";
+import type { User } from "@/lib/types";
 import { normalizeUsername, suggestUsername, usernameProblem } from "@/lib/username";
+import { withState } from "@/lib/state";
 
 const Input = z.object({
-  action: z.enum(["lookup", "signin"]),
+  action: z.enum(["lookup", "signin", "signout"]),
   /** signed in with Google: the email must be the one Google verified for this server's Google session */
   google: z.boolean().optional(),
   // new account: what the student tells us (nothing else is filled in for them)
@@ -18,7 +21,7 @@ const Input = z.object({
     lastName: z.string().trim().min(1).max(40),
     school: z.enum(SCHOOLS.filter((x) => x.id !== "all").map((x) => x.id) as [string, ...string[]]),
   }).optional(),
-  email: z.string().max(120),
+  email: z.string().max(120).optional().default(""),
   interests: z.array(z.string().max(40)).max(20).optional(),
   accountType: z.enum(["student", "creator"]).optional(),
   creatorOrgId: z.string().max(40).nullable().optional(),
@@ -36,15 +39,30 @@ const Input = z.object({
  * demo schedule; a new account gets only the name and school they entered, and starts with no classes,
  * friends, clubs or interests.
  */
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   const b = await body(req, Input);
   if (!b.ok) return b.res;
+  if (b.data.action === "signout") { signOutCookie(); return Response.json({ ok: true }); }
   const viaGoogle = !!b.data.google && getSession()?.email === b.data.email.trim().toLowerCase();
   if (!viaGoogle && !isUscEmail(b.data.email)) return Response.json({ error: "Use your @usc.edu email." }, { status: 403 });
   const entry = directoryLookup(b.data.email);
   if (b.data.action === "lookup") return Response.json({ profile: entry, isNew: !entry });
 
-  const me = getMe();
+  // each person has their own account (kept in a session cookie); the demo students share the demo account
+  const email = b.data.email.trim().toLowerCase();
+  let me: User | undefined = entry ? getUser(DEMO_ID) : db().users.find((u) => u.email?.toLowerCase() === email);
+  if (me && !entry) {
+    const already = currentUserId() === me.id; // this browser is already signed in as them
+    // Google accounts open only through Google sign-in, never by typing the email
+    if (me.googleAccount && !already) return Response.json({ error: "This account uses Google sign-in. Use Continue with Google." }, { status: 403 });
+    // returning to your own account (page reload): nothing to change
+    if (already && !b.data.signup) return Response.json({ ok: true, username: me.username, friendIds: me.friends });
+  }
+  if (!me) {
+    me = { id: `u_${randomUUID().replace(/-/g, "").slice(0, 16)}`, name: email, avatar: "?", school: "all", year: "", major: "", friends: [], classes: [], interests: [], orgs: [] };
+    db().users.push(me);
+  }
+  signInAs(me.id);
   const wanted = b.data.username !== undefined ? normalizeUsername(b.data.username) : undefined;
   if (wanted !== undefined) {
     const problem = usernameProblem(wanted);
@@ -55,7 +73,7 @@ export async function POST(req: Request) {
   }
   const base = { creatorOrgId: undefined, pronouns: undefined, bio: undefined, photo: undefined, accountType: b.data.accountType ?? "student" };
   if (entry) {
-    const demo = seedUsers(new Date()).find((u) => u.id === me.id)!; // the demo student's schedule, friends and clubs
+    const demo = seedUsers(new Date()).find((u) => u.id === DEMO_ID)!; // the demo student's schedule, friends and clubs
     Object.assign(me, {
       ...base, name: entry.name, avatar: initialsOf(entry.name), school: entry.school, major: entry.major, year: entry.year, email: entry.email, verified: true,
       interests: (b.data.interests ?? demo.interests).filter((i) => INTERESTS.includes(i)), classes: demo.classes, friends: demo.friends, orgs: demo.orgs,
@@ -80,3 +98,5 @@ export async function POST(req: Request) {
   }
   return Response.json({ ok: true, username: me.username, friendIds: me.friends });
 }
+
+export const POST = withState(POST_);

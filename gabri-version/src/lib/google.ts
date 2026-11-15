@@ -1,14 +1,14 @@
 /**
  * Sign in with Google + read-only Google Calendar access (OAuth 2.0 authorization-code flow, server side).
- * Tokens never reach the browser: they live in server memory and in .google-session.json (git-ignored) so a
- * restart keeps you connected. Needs GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (see .env.example).
+ * Tokens never reach the browser: they are stored server-side on each person's account (in the app state,
+ * Supabase when configured). Needs GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (see .env.example).
  */
-import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type { CalItem } from "./calendarImport";
+import { initialsOf } from "./directory";
+import { currentUserId, db, signInAs } from "./store";
 
 const SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.readonly";
-const FILE = join(process.cwd(), ".google-session.json");
 
 export interface GoogleSession {
   accessToken: string; refreshToken?: string; expiresAt: number;
@@ -21,16 +21,13 @@ export const googleConfigured = () => !!(cfg().id && cfg().secret);
 /** where Google sends people back; must match the redirect URI registered in Google Cloud */
 export const redirectUri = (req: Request) => `${new URL(req.url).origin}/api/auth/google/callback`;
 
-const g = globalThis as unknown as { __gsession?: GoogleSession | null };
+/** The signed-in person's Google connection, if any. */
 export function getSession(): GoogleSession | null {
-  if (g.__gsession === undefined) {
-    try { g.__gsession = JSON.parse(readFileSync(FILE, "utf8")) as GoogleSession; } catch { g.__gsession = null; }
-  }
-  return g.__gsession;
+  return db().google[currentUserId()] ?? null;
 }
 function save(s: GoogleSession | null) {
-  g.__gsession = s;
-  try { if (s) writeFileSync(FILE, JSON.stringify(s), { mode: 0o600 }); else unlinkSync(FILE); } catch { /* memory only */ }
+  const d = db(), uid = currentUserId();
+  if (s) d.google[uid] = s; else delete d.google[uid];
 }
 export function disconnect() {
   const s = getSession();
@@ -70,6 +67,16 @@ export async function finishSignIn(req: Request, code: string) {
     accessToken: t.access_token, refreshToken: t.refresh_token, expiresAt: Date.now() + (t.expires_in - 60) * 1000,
     email, firstName: claims.given_name ?? "", lastName: claims.family_name ?? "", picture: claims.picture,
   };
+  // the Google account is the person: sign this browser into the account with that email (new one if needed)
+  const d = db();
+  let u = d.users.find((x) => x.email?.toLowerCase() === email);
+  if (!u) {
+    const name = `${s.firstName} ${s.lastName}`.trim() || email;
+    u = { id: `u_${randomUUID().replace(/-/g, "").slice(0, 16)}`, name, avatar: initialsOf(name), school: "all", year: "", major: "", friends: [], classes: [], interests: [], orgs: [], email, verified: false };
+    d.users.push(u);
+  }
+  u.googleAccount = true;
+  signInAs(u.id);
   save(s);
   return s;
 }

@@ -29,7 +29,7 @@ export function importCalendarItems(items: CalItem[], source: Extract<EventSourc
   // live sync: the calendar is the truth, so moved or deleted entries disappear too
   if (opts.replace) d.events = d.events.filter((e) => !mine(e));
   const haveEvent = new Set(d.events.filter(mine).map((e) => `${e.title}|${e.start}`));
-  const haveDeadline = new Set(d.notifications.filter((n) => n.kind === "deadline").map((n) => `${n.title}|${n.dueAt}`));
+  const haveDeadline = new Set(d.notifications.filter((n) => n.kind === "deadline" && n.userId === me.id).map((n) => `${n.title}|${n.dueAt}`));
   const unplaced = new Map<string, ImportResult["unplaced"][number]>();
   let added = 0, deadlines = 0, skipped = 0;
 
@@ -41,7 +41,7 @@ export function importCalendarItems(items: CalItem[], source: Extract<EventSourc
     if (isDue) {
       if (haveDeadline.has(key)) { skipped++; continue; }
       haveDeadline.add(key);
-      addNotification({ kind: "deadline", title: summary, body: course ? `${course[1]} ${course[2]}` : "From your calendar", dueAt: it.start.toISOString(), source: source === "calendar" ? "gcal" : "brightspace" });
+      addNotification({ userId: me.id, kind: "deadline", title: summary, body: course ? `${course[1]} ${course[2]}` : "From your calendar", dueAt: it.start.toISOString(), source: source === "calendar" ? "gcal" : "brightspace" });
       deadlines++;
       continue;
     }
@@ -62,6 +62,6 @@ export function importCalendarItems(items: CalItem[], source: Extract<EventSourc
     });
     added++;
   }
-  if (opts.notify !== false && (added || deadlines)) addNotification({ kind: "system", title: "Calendar synced", body: `${added} events on your map · ${deadlines} deadlines tracked`, source: source === "calendar" ? "gcal" : "brightspace" });
+  if (opts.notify !== false && (added || deadlines)) addNotification({ userId: me.id, kind: "system", title: "Calendar synced", body: `${added} events on your map · ${deadlines} deadlines tracked`, source: source === "calendar" ? "gcal" : "brightspace" });
   return { added, deadlines, skipped, unplaced: [...unplaced.values()].slice(0, 12) };
 }

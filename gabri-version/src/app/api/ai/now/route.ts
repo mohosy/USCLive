@@ -3,11 +3,12 @@ import { nowContext, planNow, type NowPlanT } from "@/lib/ai";
 import { BUILDING_BY_ID, walkMinutes } from "@/lib/campus";
 import { body } from "@/lib/http";
 import { candidateEvents, freeWindow, heuristicRank, hotspotLabel, studySpots, todaysClasses } from "@/lib/planner";
-import { db, getMe } from "@/lib/store";
+import { db, getMe, myNotifications } from "@/lib/store";
+import { withState } from "@/lib/state";
 
 const Input = z.object({ lat: z.number(), lng: z.number(), label: z.string().max(80).default("current location") });
 
-export async function POST(req: Request) {
+async function POST_(req: Request) {
   const parsed = await body(req, Input);
   if (!parsed.ok) return parsed.res;
   const loc = parsed.data;
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
   const usable = next ? Math.max(0, fw.minutes - walkToNext - 5) : 240;
   const ranked = heuristicRank(me, candidateEvents(me, loc, now), usable).slice(0, 12);
   const spots = studySpots(loc, now).slice(0, 4);
-  const deadlines = db().notifications.filter((n) => n.kind === "deadline").slice(0, 3);
+  const deadlines = myNotifications().filter((n) => n.kind === "deadline").slice(0, 3);
   const fmt = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   const prompt = `${nowContext(now)}
@@ -68,3 +69,5 @@ What should ${me.name.split(" ")[0]} do right now? Give exactly 3 options, best 
     leaveBy: next ? new Date(+next.start - (walkToNext + 3) * 60_000).toISOString() : null,
   });
 }
+
+export const POST = withState(POST_);
