@@ -9,4 +9,5 @@ export const ORGS: Org[] = [
   { id: "org_jazz", name: "Thornton Jazz Collective", school: "thornton", kind: "club", members: 45 },
   { id: "org_dt", name: "Student Newsroom Collective", school: "annenberg", kind: "club", members: 90 },
   { id: "org_career", name: "Career Center", school: "all", kind: "department", members: 0 },
+  { id: "org_hacksc", name: "HackSC", school: "all", kind: "club", members: 320 },
 ];

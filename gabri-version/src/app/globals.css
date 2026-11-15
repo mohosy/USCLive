@@ -276,7 +276,7 @@ html, body {
 .dock-options > .chip-row { min-height: 0; overflow-y: hidden; }
 .dock-options-open { grid-template-rows: 1fr; opacity: 1; transform: none; }
 /* locate: a glass circle right above the zoom / rotate column (centered on its 33px width) */
-.map-locate { position: absolute; right: 46px; bottom: 166px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
+.map-locate { position: absolute; right: 24px; bottom: 166px; z-index: 12; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease; }
 .map-locate:hover { background: rgba(255,255,255,0.5); }
 .dock-search-row > * { pointer-events: auto; }
@@ -479,7 +479,7 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .map-controls button:active:not(:disabled) { transform: none; background: #e6e6ea; }
 .map-app .map-controls button:focus-visible { outline-offset: -2px; }
 .map-compass { transition: transform 0.12s linear; }
-.map-app .mapboxgl-ctrl-bottom-right { right: 46px; padding-right: 0; }
+.map-app .mapboxgl-ctrl-bottom-right { right: 24px; padding-right: 0; } /* same right edge as the profile circle */
 .map-app .mapboxgl-ctrl-bottom-right > .mapboxgl-ctrl { margin-bottom: 14px; }
 /* phones: the dock fills the bottom, so the column and the credits move above it
    (--dock-lift: how far the iPhone home bar pushes the dock up) */
@@ -487,7 +487,8 @@ button:active:not(:disabled) { transform: scale(0.97); }
   .map-app { --dock-lift: max(0px, var(--sab) - 12px); }
   .map-controls { bottom: calc(210px + var(--dock-lift)); }
   .map-app .mapboxgl-ctrl-bottom-right { bottom: calc(198px + var(--dock-lift)); }
-  .map-locate { bottom: calc(364px + var(--dock-lift)); }
+  .map-locate { bottom: calc(364px + var(--dock-lift)); right: 16px; }
+  .map-app .mapboxgl-ctrl-bottom-right { right: 16px; }
   .map-app .satellite-credit { bottom: calc(212px + var(--dock-lift)); }
 }
 /* the 20px ⓘ sits 2px high next to the 23px Mapbox mark: center them */
