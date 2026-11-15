@@ -25,6 +25,7 @@ function alertPoints(alerts: SafetyAlert[]): FC {
 }
 import { LEVEL_COLOR } from "./ui";
 import { WalkGuide, type WalkProgress } from "./walk/WalkGuide";
+import { CROWD_MIN_ZOOM, CrowdLayer, type CrowdSpot } from "./walk/CrowdLayer";
 import WalkHUD from "./walk/WalkHUD";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
@@ -180,6 +181,13 @@ function installSpotlight(m: mapboxgl.Map, sat: boolean, c: CampusData, light: L
 }
 
 // Keep the camera on USC University Park Campus (plus a little margin).
+const byIdCache = new WeakMap<Building[], Record<string, Building>>();
+function BYID(list: Building[]) {
+  let m = byIdCache.get(list);
+  if (!m) { m = Object.fromEntries(list.map((b) => [b.id, b])); byIdCache.set(list, m); }
+  return m;
+}
+
 const USC_BOUNDS: [[number, number], [number, number]] = [[-118.3035, 34.0045], [-118.2712, 34.0382]]; // the 3D neighborhood plus a little margin
 
 export interface Camera { longitude: number; latitude: number; zoom: number; pitch: number; bearing: number }
@@ -317,6 +325,29 @@ export default function MapView(props: Props) {
   const campus = useRef<CampusData | null>(null);
   const area = useRef<FeatureCollection | null>(null);
   const [rotateHint, setRotateHint] = useState(false);
+  const crowd = useRef<CrowdLayer | null>(null);
+
+  /** Zoomed into a busy area: let little Trojans hang out at the crowded spots on screen. */
+  function updateCrowd() {
+    const m = map.current;
+    const layer = crowd.current;
+    if (!m || !layer || !ready.current) return;
+    const p = cb.current;
+    if (!p.layers.hotspots || p.walk || m.getZoom() < CROWD_MIN_ZOOM) return layer.setSpots([]);
+    const b = m.getBounds();
+    if (!b) return;
+    const byId = BYID(p.buildings);
+    const spots: CrowdSpot[] = [];
+    for (const h of p.hotspots) {
+      const bd = byId[h.buildingId];
+      if (h.suppressed || !bd) continue;
+      // a little margin so people are already there as you pan in
+      const pad = 0.0006;
+      if (bd.lng < b.getWest() - pad || bd.lng > b.getEast() + pad || bd.lat < b.getSouth() - pad || bd.lat > b.getNorth() + pad) continue;
+      spots.push({ id: bd.id, lng: bd.lng, lat: bd.lat, count: h.count, level: h.level });
+    }
+    layer.setSpots(spots);
+  }
 
   /** Hide bubbles that would overlap a more important one (runs when the camera or the bubbles change). */
   function tidyBubbles() {
@@ -488,6 +519,9 @@ export default function MapView(props: Props) {
     });
     ready.current = true;
     syncLayers();
+    crowd.current ??= new CrowdLayer();
+    if (!m.getLayer(crowd.current.id)) m.addLayer(crowd.current);
+    updateCrowd();
     walkRef.current?.install(); // keep an active walk alive across Map/Satellite switches
   }
 
@@ -513,8 +547,12 @@ export default function MapView(props: Props) {
       bearing: intro ? 10 : props.initialCamera?.bearing ?? -20,
       antialias: true, // smooth edges on 3D buildings and the walking character
       performanceMetricsCollection: false,
+      // required credits, kept small and together: the Mapbox logo (unaltered) next to a compact ⓘ attribution
+      logoPosition: "bottom-right",
+      attributionControl: false,
     });
     map.current = m;
+    m.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
     m.on("style.load", install);
     loadCampus().then(
@@ -590,6 +628,7 @@ export default function MapView(props: Props) {
     };
     m.on("move", emit);
     m.on("move", tidyBubbles);
+    m.on("moveend", updateCrowd);
     emit();
 
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
@@ -660,6 +699,7 @@ export default function MapView(props: Props) {
     data.current.points = g.points;
     data.current.columns = g.columns;
     if (ready.current) { setSource("hot-points", g.points); setSource("hot-columns", g.columns); }
+    updateCrowd();
   }, [props.hotspots, props.buildings]);
 
   useEffect(() => {
@@ -670,6 +710,7 @@ export default function MapView(props: Props) {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(syncLayers, [props.layers]);
+  useEffect(updateCrowd, [props.layers, props.walk?.key]);
 
   useEffect(() => {
     const fc = alertGeo(props.alerts);
