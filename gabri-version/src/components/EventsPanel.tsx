@@ -97,7 +97,7 @@ export default function EventsPanel({ events, filters, setFilters, loc, onOpen, 
         ))}
       </div>
       {/* one row: two quick toggles, then type and school as compact menus */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-nowrap items-center gap-1.5 [&>select]:min-w-0 [&>select]:shrink">
         <Chip active={filters.freeFood} onClick={() => setFilters({ ...filters, freeFood: !filters.freeFood })}>Free food</Chip>
         <Chip active={filters.friends} onClick={() => setFilters({ ...filters, friends: !filters.friends })}>Friends</Chip>
         <select aria-label="Event type" className={cx("pill-select", (filters.myClasses || filters.categories.length > 0) && "pill-select-on")}

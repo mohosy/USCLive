@@ -456,10 +456,13 @@ export default function App() {
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
       <WeatherPill weather={weather} />
       <div ref={accountArea} className="account-area">
-        {/* one button for your account: notifications live inside its menu, and a gold dot on it says there are unread ones */}
-        <button ref={accountButton} onClick={() => { setAccountOpen((o) => !o); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label={unread ? `Account, ${unread} unread notifications` : "Account"} aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
+        {/* notifications, beside your profile; opens the same panel on its Notifications view */}
+        <button onClick={() => { setAccountOpen((o) => !(o && accountTab === "notifications")); setAccountTab("notifications"); }} className="map-bell" aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}>
+          <Bell size={18} strokeWidth={2} />
+          {unread > 0 && <span className="bell-unread" />}
+        </button>
+        <button ref={accountButton} onClick={() => { setAccountOpen((o) => !(o && accountTab !== "notifications")); setAccountTab("account"); }} title={state?.me.name ?? "Account"} aria-label="Account" aria-expanded={accountOpen} aria-controls="account-panel" className="map-profile">
           {state?.me.avatar ?? <UserRound size={16} />}
-          {unread > 0 && <span className="avatar-unread" aria-hidden="true" />}
         </button>
         {accountOpen && state && (
           <section id="account-panel" className="account-panel" aria-label="Your account">
@@ -482,10 +485,10 @@ export default function App() {
               e.preventDefault(); setAccountTab(tabs[index]);
               e.currentTarget.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
             }}>
-              {([["account", "Profile", UserRound], ["inbox", "Inbox", Inbox], ["notifications", "Notifications", Bell]] as const).map(([key, label, Icon]) => (
+              {([["account", "Profile", UserRound], ["inbox", "Inbox", Inbox]] as const).map(([key, label, Icon]) => (
                 <button key={key} role="tab" id={`account-tab-${key}`} aria-selected={accountTab === key} aria-controls={`account-content-${key}`} tabIndex={accountTab === key ? 0 : -1}
                   onClick={() => { if (key === "account") { setAccountOpen(false); router.push("/profile"); } else setAccountTab(key); }}>
-                  <Icon size={15} /><span>{label}</span>{key === "notifications" && unread > 0 && <span className="unread-count">{unread}</span>}
+                  <Icon size={15} /><span>{label}</span>
                 </button>
               ))}
             </div>
