@@ -59,9 +59,8 @@ function placeMatches(raw: string) {
  * invite friends, walk somewhere) goes to the assistant. Replies can act on the map right away; events it
  * mentions show up as cards you can open.
  */
-export default function ChatDock({ events, loc, now, onAction, onAnswer, onChanged, onOpenBuilding, tray }: {
+export default function ChatDock({ events, loc, now, onAction, onAnswer, onChanged, onOpenBuilding }: {
   /** the map-layer banner attached to the top of the bar (hidden while you're typing or chatting) */
-  tray?: React.ReactNode;
   events: EventView[]; loc: { lat: number; lng: number }; now: Date;
   onAction: (a: ChatAction) => void;
   /** a place picked from the instant results */
@@ -108,7 +107,6 @@ export default function ChatDock({ events, loc, now, onAction, onAnswer, onChang
   return (
     // compact until you use it: focusing, typing or an open conversation widens it to the full dock
     <div className={"campus-chat" + (focused || text || showThread || busy ? " campus-chat-open" : "")}>
-      {tray}
       {showPlaces && (
         <div className="search-results scroll-thin" role="listbox" aria-label="Places and assistant">
           {places.map((b, i) => (

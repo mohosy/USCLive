@@ -639,31 +639,26 @@ button:active:not(:disabled) { transform: scale(0.97); }
 
 
 /* ---------- What's on the map: a slim banner attached to the top of the prompt bar ---------- */
-.filter-tray { position: absolute; left: 14px; right: 14px; bottom: 100%; z-index: 0; border-radius: 14px 14px 0 0; overflow: hidden; pointer-events: auto;
-  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 -4px 14px rgba(30, 20, 20, 0.06);
-  transition: opacity 0.2s ease, transform 0.25s ease; }
-.campus-chat-open .filter-tray { opacity: 0; transform: translateY(8px); pointer-events: none; }
-.filter-tab { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 12px 0 14px; color: #1d1d1f; font-size: 12px; cursor: pointer; }
-.filter-tab:hover { background: rgba(255, 255, 255, 0.25); }
-.filter-tab-label { flex: 1; text-align: left; font-weight: 650; }
-.filter-tab-count { flex-shrink: 0; padding: 1px 7px; border-radius: 99px; background: rgba(0, 0, 0, 0.06); color: #55555a; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.filter-tab-chev { flex-shrink: 0; transform: rotate(180deg); transition: transform 0.25s ease; color: #55555a; }
-.filter-tray-open .filter-tab-chev { transform: none; }
-.filter-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.filter-tray-open .filter-body { grid-template-rows: 1fr; }
-.filter-grid { min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 2px 8px; padding: 0 12px; transition: padding 0.3s ease; }
-.filter-tray-open .filter-grid { padding: 2px 12px 10px; }
-.filter-check { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px; border-radius: 8px; font-size: 12.5px; font-weight: 550; color: #1d1d1f; cursor: pointer; user-select: none; }
-.filter-check:hover { background: rgba(255, 255, 255, 0.3); }
-.filter-check input { position: absolute; opacity: 0; pointer-events: none; }
-.filter-box { display: grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0; border-radius: 5px; color: transparent; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.22); transition: background-color 0.15s ease, box-shadow 0.15s ease; }
-.filter-check input:checked + .filter-box { background: var(--cardinal); color: #fff; box-shadow: none; }
-.filter-check input:focus-visible + .filter-box { outline: 2px solid var(--cardinal); outline-offset: 2px; }
-.map-app[data-night="true"] .filter-tab, .map-app[data-night="true"] .filter-check { color: #fff; }
-.map-app[data-night="true"] .filter-tab-count, .map-app[data-night="true"] .filter-tab-chev { color: rgba(255, 255, 255, 0.75); }
-.map-app[data-night="true"] .filter-tab-count { background: rgba(255, 255, 255, 0.14); }
-.map-app[data-night="true"] .filter-box { background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.45); }
-.map-app[data-night="true"] .filter-check input:checked + .filter-box { background: #fff; color: var(--cardinal); box-shadow: none; }
+/* map layers: a small glass button left of the search; it opens a glass popup of pills you tap on or off */
+.filter-wrap { position: relative; flex-shrink: 0; }
+.dock-filter { position: relative; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; color: #1d1d1f; cursor: pointer;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); transition: background-color 180ms ease, color 180ms ease; }
+.dock-filter:hover { background: rgba(255,255,255,0.5); }
+.dock-filter-on, .dock-filter-on:hover { background: var(--cardinal); color: #fff; }
+.dock-filter-dot { position: absolute; top: 11px; right: 11px; width: 8px; height: 8px; border-radius: 50%; background: var(--cardinal); box-shadow: 0 0 0 2px rgba(255,255,255,0.85); }
+.dock-filter-on .dock-filter-dot { background: #fff; box-shadow: none; }
+.filter-pop { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 40; width: max-content; max-width: min(340px, calc(100vw - 32px)); display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-radius: 20px;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 8px 26px rgba(30,20,20,0.16);
+  transform-origin: bottom left; animation: filter-pop-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes filter-pop-in { from { opacity: 0; transform: translateY(8px) scale(0.94); } to { opacity: 1; transform: none; } }
+.filter-pill { padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #1d1d1f; cursor: pointer;
+  background: rgba(255,255,255,0.35); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5); transition: background-color 160ms ease, color 160ms ease, transform 120ms ease; }
+.filter-pill:hover { background: rgba(255,255,255,0.55); }
+.filter-pill:active { transform: scale(0.96); }
+.filter-pill[aria-pressed="true"] { background: var(--cardinal); color: #fff; box-shadow: none; }
+.filter-pill[aria-pressed="true"]:hover { background: var(--cardinal-hover); }
+.map-app[data-night="true"] .dock-filter:not(.dock-filter-on), .map-app[data-night="true"] .filter-pill:not([aria-pressed="true"]) { color: #fff; }
+.map-app[data-night="true"] .filter-pill:not([aria-pressed="true"]) { background: rgba(255,255,255,0.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); }
 .play-hud .play-follow { background: rgba(255, 255, 255, 0.16); color: #fff; }
 .play-hud .play-follow:hover { background: rgba(255, 255, 255, 0.26); }
 .play-hud .play-follow-on, .play-hud .play-follow-on:hover { background: #990000; color: #fff; }

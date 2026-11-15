@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpen, Check, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, UserPlus, UserRound, X } from "lucide-react";
+import { Bell, BookOpen, CalendarDays, ChevronDown, House, Inbox, LayoutDashboard, LogOut, Map as MapIcon, Menu, Navigation, Plus, Satellite, Settings, SlidersHorizontal, UserPlus, UserRound, X } from "lucide-react";
 import { lightFor, type LightPreset } from "@/lib/sun";
 import { loadMapLighting, loadShowPeople, type MapLighting } from "@/lib/mapLighting";
 import dynamic from "next/dynamic";
@@ -72,7 +72,16 @@ export default function App() {
   const [gps, setGps] = useState<"off" | "asking" | "on">("off"); // "on" once we have a real fix
   const [layers, setLayers] = useState<MapLayers>({ events: true, hotspots: true, columns: false, places: false });
   const [view, setView] = useState<"map" | "3d">("map");
-  const [filtersOpen, setFiltersOpen] = useState(false); // the layer chips stay tucked away until the filter button opens them
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const away = (e: PointerEvent) => { if (!filterBox.current?.contains(e.target as Node)) setFiltersOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setFiltersOpen(false); };
+    window.addEventListener("pointerdown", away);
+    window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("pointerdown", away); window.removeEventListener("keydown", esc); };
+  }, [filtersOpen]); // the layer chips stay tucked away until the filter button opens them
   const [chipState, setChips] = useState<ChipState>({ games: true, events: true, food: true, crowds: true, safety: true, schedule: true, webcams: true });
   const [selAlert, setSelAlert] = useState<string | null>(null);
   const [cam, setCam] = useState<Webcam | null>(null);
@@ -362,7 +371,7 @@ export default function App() {
   const detailOpen = !!(event || selBuilding || openAlert || selHost);
 
   return (
-    <div className={cx("map-app relative h-dvh w-full overflow-hidden bg-background", filtersOpen && "filters-open")} data-night={light === "night"}>
+    <div className="map-app relative h-dvh w-full overflow-hidden bg-background" data-night={light === "night"}>
       {/* Header */}
       {/* Floating glass header over the full-screen map */}
       {/* No header: the menu button sits top-left; your profile (with inbox and notifications inside it) floats top-right */}
@@ -571,29 +580,23 @@ export default function App() {
           <div className="map-dock">
             <div className="dock-inner">
               <div className="dock-search-row">
+                {/* map layers: a small glass button; it opens a glass popup where each layer is a pill you tap on or off */}
+                <div ref={filterBox} className="filter-wrap">
+                  {filtersOpen && (
+                    <div id="map-layer-chips" className="filter-pop" role="group" aria-label="Map layers">
+                      {LAYERS.map(([k, l]) => (
+                        <button key={k} type="button" aria-pressed={chips[k]} className="filter-pill" onClick={() => setChips((c) => ({ ...c, [k]: !c[k] }))}>{l}</button>
+                      ))}
+                    </div>
+                  )}
+                  <button type="button" onClick={() => setFiltersOpen((o) => !o)} aria-expanded={filtersOpen} aria-controls="map-layer-chips"
+                    aria-label={filtersOpen ? "Hide map layers" : "Show map layers"} title="Map layers" className={cx("dock-filter", filtersOpen && "dock-filter-on")}>
+                    <SlidersHorizontal size={19} aria-hidden="true" />
+                    {LAYERS.some(([k]) => !chips[k]) && <span className="dock-filter-dot" aria-hidden="true" />}
+                  </button>
+                </div>
                 {state && (
                   <ChatDock events={state.events} loc={loc} now={now} onAction={chatAction} onOpenBuilding={openBuilding}
-                    tray={
-                      // what's on the map: a slim banner on top of the bar; click it for the checkboxes
-                      <div className={cx("filter-tray", filtersOpen && "filter-tray-open")}>
-                        <button type="button" className="filter-tab" onClick={() => setFiltersOpen((o) => !o)} aria-expanded={filtersOpen} aria-controls="map-layer-chips">
-                          <span className="filter-tab-label">Filters</span>
-                          <span className="filter-tab-count">{LAYERS.filter(([k]) => chips[k]).length} of {LAYERS.length}</span>
-                          <ChevronDown size={14} className="filter-tab-chev" aria-hidden="true" />
-                        </button>
-                        <div id="map-layer-chips" className="filter-body" inert={!filtersOpen}>
-                          <div className="filter-grid" role="group" aria-label="Map layers">
-                            {LAYERS.map(([k, l]) => (
-                              <label key={k} className="filter-check">
-                                <input type="checkbox" checked={chips[k]} onChange={() => setChips((c) => ({ ...c, [k]: !c[k] }))} />
-                                <span className="filter-box" aria-hidden="true"><Check size={11} strokeWidth={3.2} /></span>
-                                {l}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    }
                     onAnswer={(ids) => setAskRes(ids ? { answer: "", eventIds: ids, buildingIds: [], focusBuildingId: "none", ai: true } : null)}
                     onChanged={() => { refresh(); pollNotifs(); }} />
                 )}
