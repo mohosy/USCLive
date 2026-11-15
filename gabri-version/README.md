@@ -93,5 +93,6 @@ What is real, what only opens another site, and what would need USC.
 
 ## Demo data
 The orgs are real USC orgs and offices, taken from the EngageSC directory and each org's own site (`src/lib/orgs.ts`). The people, the events they appear to host and all headcounts are fictional demo data, generated relative to "now" (`src/lib/seed.ts`); no org listed here is hosting these events or has endorsed USCLive. Building coordinates are approximate.
+Demo events follow the clock, not the moment the server started: the set is regenerated when it is 30 minutes old, and straight away when someone opens the app after nobody had it open for 3 minutes, so "in 15 min" is true whenever you present. Who is going, invites, registrations and people's own posts carry over (`refreshDemo` in `src/lib/state.ts`, checked by `node scripts/check-demo-time.mjs`).
 In-memory store — resets when the server restarts.
 Event photos on the map are freely licensed (Creative Commons / public domain) from Wikimedia Commons, matched to events by what they are (`src/lib/eventPhotos.ts`); credits at `/credits`.
