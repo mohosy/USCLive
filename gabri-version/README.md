@@ -42,6 +42,45 @@ Without an API key everything still works in **offline mode** (heuristics). With
 | Scraper for public `*.usc.edu` event pages → Claude extracts events | `src/app/api/scrape` |
 | Live notifications + toasts (simulated live campus every ~35s) | `src/lib/live.ts` |
 | Organizer / USG dashboard: RSVPs vs expected vs **measured turnout**, AI insight brief, moderation queue, post-by-flyer | `/dashboard`, `src/lib/dashboard.ts` |
+| **Event registration**: one-tap sign-up with capacity, waitlist and deadline; organizer list + CSV; import an Engage or Handshake listing | `src/lib/registration.ts`, `src/app/api/events/[id]/register`, `RegisterBox.tsx` |
+
+## Registration: real vs demo
+
+What is real, what only opens another site, and what would need USC.
+
+**Real (native registration, built into USCLive)**
+- Events marked "One tap in USCLive" register you here: `POST /api/events/:id/register`. The server enforces the
+  capacity (a full event puts you on the waitlist), the deadline, and one record per person per event. Asking twice
+  changes nothing. `DELETE` cancels, and the first person on the waitlist moves up and is notified.
+- Who you are always comes from the signed-in session cookie, never from the request. The routes are rate-limited.
+- Registering puts the event on your in-app schedule and friends see you as going (the same rule as the rest of the
+  app: friends by name, everyone else as a count). You get a notification 20 minutes before it starts.
+- Organizers (the person hosting, or a Student Creator account posting for the hosting org) see counts, the list and
+  a CSV export on `/dashboard`. Nobody else can read the list.
+
+**Opens the official page (Handshake, Engage, other sites)**
+- For events that register on Handshake, Engage or another website, USCLive only opens that page in a new tab.
+  **USCLive never registers anyone on Handshake or Engage.**
+- When you come back, the app asks "Did you register?". Yes records a *self-reported* registration and adds the event
+  to your schedule. USCLive cannot check it; organizers see these counted separately as "Said they registered".
+- "Import from Engage or Handshake" reads a public event page's title, date, time and location to pre-fill the
+  new-event form. It only reads what the page shows to everyone, it never signs in, and many Handshake pages need a
+  sign-in, in which case the organizer fills the form in by hand.
+
+**Would need USC's approval and the official APIs**
+- Registering students on Handshake or Engage directly, or reading the real attendee lists back from them. That means
+  an agreement with USC and those platforms' official APIs. It is not built and not faked.
+- Adding a registered event to your Google Calendar. The Google connection here is read-only.
+
+**Demo data and limits**
+- People, orgs and events are fictional seed data. Six seed events take registrations (four native, one Handshake,
+  one Engage); the seeded "going" lists count as registered so the numbers add up.
+- Storage follows the rest of the app: memory locally, the single Supabase state row when Supabase is configured.
+  `supabase/migrations/20261114_event_registrations.sql` defines proper tables for registrations, but **the app does
+  not read those tables yet**.
+- Sign-in is still the demo sign-in (a usc.edu email, no password), so "signed-in user only" is as strong as that.
+- The rate limit is kept in one server's memory; on a host running several copies each copy counts separately.
+- Run the rule checks with `node scripts/check-registration.mjs`.
 
 ## Security notes (for the "securely" part of the rubric)
 - All flyer/email/web text is passed to Claude as delimited untrusted data; system prompts forbid following instructions inside it.
